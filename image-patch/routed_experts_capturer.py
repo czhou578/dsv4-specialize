@@ -114,30 +114,40 @@ class RoutedExpertsCapturer:
         # difference around one request. Cached prefix tokens are not computed, so they do not count again.
         self.sums_file = os.environ.get("ROUTING_SUMS_FILE", "")
         num_layers, num_experts = hf_config.num_hidden_layers, get_num_experts(hf_config)
-        self.sum_count = torch.zeros((num_layers, num_experts), dtype=torch.float64, device=self.device_buffer.device)
+        self.num_experts = num_experts
+        # One spare column: an id outside 0..E-1 (padding) lands there with a zero weight. Every shape stays
+        # static, so the hook also runs under CUDA graph capture (a boolean index would need a sync).
+        dev = self.device_buffer.device
+        self.sum_count = torch.zeros((num_layers, num_experts + 1), dtype=torch.float64, device=dev)
         self.sum_weight = torch.zeros_like(self.sum_count)
-        self.sum_tokens = torch.zeros((num_layers,), dtype=torch.float64, device=self.device_buffer.device)
+        self.sum_tokens = torch.zeros((num_layers,), dtype=torch.float64, device=dev)
         self.last_layer = num_layers - 1
         self.steps = 0
 
     def capture_weights(self, layer_id: int, topk_ids: torch.Tensor, topk_weights: torch.Tensor) -> None:
-        """Add this layer's choices to the running sums; after the last layer, write the file."""
+        """Add this layer's choices to the running sums; after the last layer of an eager step, write the file."""
         if not self.sums_file or layer_id > self.last_layer:
             return
         ids = topk_ids.reshape(-1).to(torch.int64)
-        valid = (ids >= 0) & (ids < self.sum_count.shape[1])
-        ids = ids[valid]
-        self.sum_count[layer_id].index_add_(0, ids, torch.ones_like(ids, dtype=torch.float64))
-        self.sum_weight[layer_id].index_add_(0, ids, topk_weights.reshape(-1).to(torch.float64)[valid])
+        valid = (ids >= 0) & (ids < self.num_experts)
+        ids = torch.where(valid, ids, torch.full_like(ids, self.num_experts))
+        w = torch.where(valid, topk_weights.reshape(-1).to(torch.float64), torch.zeros((), dtype=torch.float64, device=ids.device))
+        w = torch.nan_to_num(w, nan=0.0, posinf=0.0, neginf=0.0)  # a padded row can carry a NaN weight (2026-11-07)
+        self.sum_count[layer_id].index_add_(0, ids, valid.to(torch.float64))
+        self.sum_weight[layer_id].index_add_(0, ids, w)
         self.sum_tokens[layer_id] += topk_ids.shape[0]
         if layer_id == self.last_layer:
             self.steps += 1
             self.flush_sums()
 
     def flush_sums(self) -> None:
-        """Write the sums atomically: a temporary ``.npz`` next to the file, then a rename."""
+        """Write the sums atomically: a temporary ``.npz`` next to the file, then a rename. Not while a CUDA graph
+        is being captured (the copy to the host would sync); ``clear_buffer`` flushes at the next step start."""
+        if not self.sums_file or torch.cuda.is_current_stream_capturing():
+            return
         tmp = self.sums_file + ".tmp.npz"  # np.savez keeps a name that ends with .npz
-        np.savez(tmp, count=self.sum_count.cpu().numpy(), weight=self.sum_weight.cpu().numpy(),
+        np.savez(tmp, count=self.sum_count[:, : self.num_experts].cpu().numpy(),
+                 weight=self.sum_weight[:, : self.num_experts].cpu().numpy(),
                  tokens=self.sum_tokens.cpu().numpy(), steps=np.array(self.steps))
         os.replace(tmp, self.sums_file)
 
@@ -244,6 +254,7 @@ class RoutedExpertsCapturer:
         the next step.
         """
         self.device_buffer.zero_()
+        self.flush_sums()  # dsv4-specialize patch: the sums of a graph-replayed step reach the file here
 
     def get_device_buffer(self) -> torch.Tensor:
         """Return the underlying device buffer so the model runner can
