@@ -33,6 +33,7 @@ The tools in the order of the work:
 | `compose-mem073.yml` | Override for `compose-mask.yml`: `GPU_MEMORY_UTILIZATION` 0.73 and 128k context, the DeepSeek footprint for two models (`PLAN_MODEL_ROUTER.md` §3) |
 | `mem_boot.sh` | The memory test boot with that override: the boot lines, the free memory at idle and during one bot decode run, then the restore |
 | `image-patch/` | `base_router.py` and `routed_experts_capturer.py` for the capture container (`PLAN_BETTER_RANK.md` §4): the router hands the weights to the capturer, which sums the counts and router weights per layer and expert and writes `capture-out/routing_sums.npz` after each step. `orig/` holds the unpatched files of the image; `diff -u orig/X X` shows the change |
+| `capture_run.sh` | The capture boot of `PLAN_BETTER_RANK.md` §4: the stock model on port 8890 with the weights patch, a smoke test of the sums file, the capture of `model_eval/data/rank`, the three rank files, then the restore. Needs the deadlines set, like `prune_boot.sh` |
 
 Run the Python files with the stock-research venv: `~/.hermes/stock-research/.venv/bin/python`.
 
