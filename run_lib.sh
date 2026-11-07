@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# The test night of PLAN_BETTER_RANK.md §6: three masks on the replay screen, then the restore of the live server.
-#   wmask5-k160: the weighted rank, K 160, top-k 5   (does the new rank beat +2.27% at the same size?)
-#   wmask5-k144: the weighted rank, K 144, top-k 5   (does K 144 pass, and at what cost?)
-#   botmask5-k144: the count rank, K 144, top-k 5    (the control)
-# The folders must exist (built by rank_masks.sh). The functions and the safety rules are those of topk_run.sh.
-# CAUTION: this stops the bot's model server. Start it only with the user's go:
-#   tmux new -d -s rank-night "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/rank_night.sh"
+# The shared functions and safety rules of the test-boot scripts (topk_run.sh, prune_boot.sh, mem_boot.sh,
+# capture_run.sh, rank_night.sh, draft_test.sh). A script sets its own values, then sources this file:
+#   LOG=...  RESTORE_TAG=...  [TEST_COMPOSE=...]  [TEST_PROJECT=...]  [MASK=...]
+#   source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
+# The deadlines START_AFTER, BOOT_BY, SPEED_BY and RESTORE_AT come from the environment and have no defaults.
+#
+# Safety (PLAN_OVERNIGHT_MASK_GRID.md §2):
+# - never two models in memory: before each boot, no server container and at least 100 GiB available;
 # - a boot that is not healthy in 15 min: down, record, go on; two failed boots in a row: restore;
 # - free memory every 30 s during each client run; below 1 GiB, stop the client;
 # - deadlines: no boot with a replay after BOOT_BY, no speed test after SPEED_BY, and every client stops
 #   at RESTORE_AT, when the restore starts. Any other failure: the safe action (restore).
+# The live server is compose-k160t5.yml in the server folder (the pruned model, since 2026-11-06).
 set -u
-START_AFTER=${START_AFTER:?set START_AFTER}
+TEST_COMPOSE=${TEST_COMPOSE:--f compose-mask.yml}   # the compose files of the test server (word-split on purpose)
+TEST_PROJECT=${TEST_PROJECT:-dsv4-mask}             # the compose project name of the test server
+RESTORE_TAG=${RESTORE_TAG:?set RESTORE_TAG}          # names the main-restore-<tag>-<try>.log files
+START_AFTER=${START_AFTER:?set START_AFTER, e.g. "2026-11-07 22:30"}
 BOOT_BY=${BOOT_BY:?set BOOT_BY}
 SPEED_BY=${SPEED_BY:?set SPEED_BY}
 RESTORE_AT=${RESTORE_AT:?set RESTORE_AT}
@@ -22,9 +27,8 @@ PY=/home/colin-spark/.hermes/stock-research/.venv/bin/python
 R=$W/model_eval/results
 URL=http://127.0.0.1:8890
 MAIN=deepseek-v4-flash-k160t5-deepseek-v4-flash-1   # the live server since 2026-11-06 (compose-k160t5.yml)
-MASK=dsv4-mask-deepseek-v4-flash-mask-1
-LOG=${LOG:-/home/colin-spark/.hermes-e2e/rank-night2.log}
-SPEEDF=/home/colin-spark/.hermes-e2e/stepf-speed.log
+MASK=${MASK:-dsv4-mask-deepseek-v4-flash-mask-1}
+LOG=${LOG:?set LOG before you source run_lib.sh}
 BOOT_BY_S=$(date -d "$BOOT_BY" +%s); SPEED_BY_S=$(date -d "$SPEED_BY" +%s); RESTORE_S=$(date -d "$RESTORE_AT" +%s)
 
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
@@ -50,8 +54,8 @@ memwatch_stop() { kill "$MW" 2>/dev/null; wait "$MW" 2>/dev/null; }
 
 down() {  # stop the test server; true when no test container is left
   log "stop the test server ($MASK_NAME-k$MASK_K)"
-  (cd $S && docker compose -f compose-mask.yml down) >> "$LOG" 2>&1
-  if docker ps -a --format '{{.Names}}' | grep -q dsv4-mask; then log "ERROR: a test container is left"; return 1; fi
+  (cd $S && docker compose $TEST_COMPOSE down) >> "$LOG" 2>&1
+  if docker ps -a --format '{{.Names}}' | grep -q "$TEST_PROJECT"; then log "ERROR: a test container is left"; return 1; fi
 }
 
 stop_main() {  # stop the main server when the bot is idle (up to 30 min); 9 on a safety failure
@@ -72,7 +76,7 @@ boot() {  # $1: label; 0 healthy, 1 boot failed (down done), 9 safety failure
   if servers > /dev/null; then log "ERROR: a server container runs: $(servers | tr '\n' ' ')"; return 9; fi
   wait_mem 300 || { log "ERROR: less than 100 GiB available ($(avail_gib))"; return 9; }
   log "boot $label ($(avail_gib) GiB available)"
-  (cd $S && docker compose -f compose-mask.yml up -d) >> "$LOG" 2>&1
+  (cd $S && docker compose $TEST_COMPOSE up -d) >> "$LOG" 2>&1
   t0=$(now)
   while [ $(( $(now) - t0 )) -lt 900 ]; do
     curl -fsS --max-time 5 $URL/health > /dev/null 2>&1 && { ok=1; break; }
@@ -137,8 +141,8 @@ speed() {  # $1: label
 
 restore() {  # §6 = PLAN_OVERNIGHT_MASK_GRID.md §5
   log "restore: stop every test"
-  (cd $S && MASK_K=${MASK_K:-160} docker compose -f compose-mask.yml down) >> "$LOG" 2>&1
-  if docker ps -a --format '{{.Names}}' | grep -q dsv4-mask; then log "RESTORE FAIL: a test container is left; the guard restores at 04:15"; exit 3; fi
+  (cd $S && MASK_K=${MASK_K:-160} docker compose $TEST_COMPOSE down) >> "$LOG" 2>&1
+  if docker ps -a --format '{{.Names}}' | grep -q "$TEST_PROJECT"; then log "RESTORE FAIL: a test container is left; the guard restores at 04:15"; exit 3; fi
   if ! main_running; then
     wait_mem 600 || { log "RESTORE FAIL: less than 100 GiB available ($(avail_gib)); the guard restores at 04:15"; exit 3; }
     log "start the main server ($(avail_gib) GiB available)"
@@ -153,11 +157,11 @@ restore() {  # §6 = PLAN_OVERNIGHT_MASK_GRID.md §5
     done
     curl -fsS --max-time 5 http://127.0.0.1:8888/health > /dev/null 2>&1 && break
     log "main server not healthy after 1200 s (try $try)"
-    (cd $SERVER && docker compose -f compose-k160t5.yml logs --tail 80) > $R/main-restore-rank-$try.log 2>&1
+    (cd $SERVER && docker compose -f compose-k160t5.yml logs --tail 80) > $R/main-restore-$RESTORE_TAG-$try.log 2>&1
     [ $try = 1 ] && (cd $SERVER && docker compose -f compose-k160t5.yml restart) >> "$LOG" 2>&1
   done
   if ! curl -fsS --max-time 5 http://127.0.0.1:8888/health > /dev/null 2>&1; then
-    log "RESTORE FAIL: main server not healthy; logs in $R/main-restore-rank-*.log; the guard tries at 04:15"; exit 3
+    log "RESTORE FAIL: main server not healthy; logs in $R/main-restore-$RESTORE_TAG-*.log; the guard tries at 04:15"; exit 3
   fi
   local reply
   reply=$(curl -s --max-time 120 http://127.0.0.1:8888/v1/chat/completions -H 'Content-Type: application/json' \
@@ -191,18 +195,3 @@ run_point() {  # point, with the rule of two failed boots in a row
   esac
   return $rc
 }
-
-log "rank night 2 start (the 40k floor at K 144) (start after $START_AFTER; boot by $BOOT_BY; restore at $RESTORE_AT)"
-until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done
-for p in wmask5q-k144; do
-  [ -f $S/tp1-$p/rank-sliced-tp1-manifest.json ] || { log "ERROR: no folder tp1-$p"; restore; exit 1; }
-done
-
-
-run_point wmask5q 144 replay
-for p in wmask5q-k144; do
-  [ -f $R/$p.jsonl ] && (cd $W && $PY -m model_eval.replay --compare $R/botmask5-k160.jsonl $R/$p.jsonl > $R/$p-vs-botmask5-k160.txt 2>&1) \
-    && log "$p against botmask5-k160: $(grep -E '^(nll|tool_names|PASS|FAIL)' $R/$p-vs-botmask5-k160.txt | tr -s ' ' | tr '\n' ';')"
-done
-restore
-log "rank night 2 done"

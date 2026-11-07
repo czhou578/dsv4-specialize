@@ -1,97 +1,145 @@
 # dsv4-specialize
 
 Weight tools, test boots and run scripts that made DeepSeek V4 Flash smaller for the stock-research bot on one
-DGX Spark: 160 of 216 experts per layer, 5 experts per token, 74 GiB loaded in place of 95 GiB. The plans and the
-results summary are in the bot's repo, `czhou578/stock-research-agent`: `MODEL_PRUNE.md` and
-`plans/PLAN_MODEL_SPECIALIZE.md`, `PLAN_OVERNIGHT_MASK_GRID.md`, `PLAN_OVERNIGHT_TOPK.md`, `PLAN_FINAL_REVIEW.md`,
-`PLAN_PHYSICAL_PRUNE.md`. The scripts here refer to the plans by their section numbers.
+DGX Spark. The result runs since 2026-11-06: 160 of 216 routed experts per layer, 5 experts per token, and 74 GiB
+loaded in place of 95 GiB.
 
-The folder on the Spark also holds the test checkpoints (`tp1-*`, 12 to 73 GB each) and a copy of the kernel
-cache. Git ignores them. The stock server in `~/Projects/DeepSeek-v4-Flash-One-DGX-Spark` does not change; the
-pruned model got its own compose file there (`compose-k160t5.yml`).
+The plans and the results are in the bot's repo, `czhou578/stock-research-agent`. Start with `MODEL_PRUNE.md`. The
+details are in `plans/`: `PLAN_MODEL_SPECIALIZE.md`, `PLAN_E2E_RUNNER.md`, `PLAN_OVERNIGHT_MASK_GRID.md`,
+`PLAN_OVERNIGHT_TOPK.md`, `PLAN_FINAL_REVIEW.md`, `PLAN_PHYSICAL_PRUNE.md` and `PLAN_BETTER_RANK.md`. The scripts here
+refer to the plans by their section numbers.
 
-The tools in the order of the work:
+The live server is not in this repo. It is `compose-k160t5.yml` in `~/Projects/DeepSeek-v4-Flash-One-DGX-Spark`
+(container `deepseek-v4-flash-k160t5-deepseek-v4-flash-1`). `start.sh` and `stop.sh` there control the stock model
+only.
 
-| File | Use |
-|---|---|
-| `mask_checkpoint.py` | Builds `tp1-mask-k{K}/`: K of 216 experts per layer stay (plan §5.3). With `--rank expert_rank_bot.json`, builds `tp1-botmask-k{K}/` from the bot rank (plan §6.5); boot it with `MASK_NAME=botmask` |
-| `test_mask_checkpoint.py` | Unit tests on a small synthetic checkpoint |
-| `compose-mask.yml` | Test boot of a mask folder on port 8890 |
-| `check_routed.py` | Plan §5.2 check: no dropped expert in the routing of a test boot |
-| `compose-capture.yml` | Expert capture boot on port 8890: Model Runner V1, no DSpark, `--enable-return-routed-experts` |
-| `serve-v1.sh` | Runs the server's serve script with Model Runner V1 (for `compose-capture.yml` only) |
-| `test_check_routed.py` | Unit tests on synthetic routing data |
-| `overnight_guard.sh` | At 04:15 and 04:35, restores the main server (`MAIN_COMPOSE`, default `compose-k160t5.yml`) if port 8888 is down (`DRY_RUN=1` to test) |
-| `topk_checkpoint.py` | Builds a top-k copy of a tp1 folder (plan §8): `--source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`; boot it with `MASK_NAME=botmask5 MASK_K=160`. `--check` runs the self-check only |
-| `test_topk_checkpoint.py` | Unit tests on a small synthetic checkpoint |
-| `speed_result.py` | The plan §4.4 speed result of one test point, from the files in `model_eval/results` |
-| `topk_run.sh` | The test boots of `PLAN_OVERNIGHT_TOPK.md` §5 and the restore of §6, with its deadlines |
-| `prune_experts.py` | Builds a physically pruned copy of a mask folder (`PLAN_PHYSICAL_PRUNE.md` §3): `--source tp1-botmask5-k160 --out tp1-prune5-k160`. The dropped experts leave the files, and the kept experts get the new ids 0 … K−1. `--check` runs the self-check only |
-| `test_prune_experts.py` | Unit tests on a small synthetic checkpoint |
-| `prune_run.sh` | Runs `prune_experts.py` in a root container from the server image, because the 43 expert files of `data/tp1` are `root:600`. The main server stays up |
-| `prune_boot.sh` | The test boot of `PLAN_PHYSICAL_PRUNE.md` §6: the pruned folder on port 8890, the replay set, the speed tests, then the restore |
-| `compose-mem073.yml` | Override for `compose-mask.yml`: `GPU_MEMORY_UTILIZATION` 0.73 and 128k context, the DeepSeek footprint for two models (`PLAN_MODEL_ROUTER.md` §3) |
-| `mem_boot.sh` | The memory test boot with that override: the boot lines, the free memory at idle and during one bot decode run, then the restore |
-| `image-patch/` | `base_router.py` and `routed_experts_capturer.py` for the capture container (`PLAN_BETTER_RANK.md` §4): the router hands the weights to the capturer, which sums the counts and router weights per layer and expert and writes `capture-out/routing_sums.npz` after each step. `orig/` holds the unpatched files of the image; `diff -u orig/X X` shows the change |
-| `capture_run.sh` | The capture boot of `PLAN_BETTER_RANK.md` §4: the stock model on port 8890 with the weights patch, a smoke test of the sums file, the capture of `model_eval/data/rank`, the three rank files, then the restore. Needs the deadlines set, like `prune_boot.sh` |
-| `rank_masks.sh` | Builds the three mask folders of `PLAN_BETTER_RANK.md` §6 from the stock model: the floor rank at K 160 and K 144, the count rank at K 144 (`RANK_NEW` picks the rank file) |
-| `rank_night.sh` | The test night of `PLAN_BETTER_RANK.md` §6: the three masks on the replay screen, then the restore. Needs the deadlines set |
-| `rank_night2.sh` | One more point for §6: the 40 k floor at K 144 (a copy of `rank_night.sh` with one point) |
-| `draft_test.sh` | The draft test of `PLAN_PHYSICAL_PRUNE.md` §7: the live pruned model on port 8890 with another DSpark draft (`DRAFT_DIR`, also a variable of `compose-mask.yml`), the two decode tests, then the restore |
+## Files
 
 Run the Python files with the stock-research venv: `~/.hermes/stock-research/.venv/bin/python`.
 
-The run scripts (`topk_run.sh`, `prune_boot.sh`, `mem_boot.sh`) share the safety rules of `PLAN_OVERNIGHT_MASK_GRID.md`
-§2: one model in memory, at least 100 GiB available before a boot, `restart: on-failure:1`, a memory watch that stops
-the client below 1 GiB, deadlines, and the restore of the main server as the safe action. Start one in its own tmux
-session with its deadlines set, for example
-`tmux new -d -s prune-boot "START_AFTER='2026-11-06 19:05' BOOT_BY='2026-11-06 20:05' SPEED_BY='2026-11-06 20:20' RESTORE_AT='2026-11-06 21:35' ./prune_boot.sh"`.
+**Weight tools.** Each tool writes a new folder and never changes its source.
 
-## One mask test
+| File | Use |
+|---|---|
+| `mask_checkpoint.py` | Builds `tp1-mask-k{K}/`: K of 216 experts per layer stay (`PLAN_MODEL_SPECIALIZE.md` §5.3). With `--rank <rank file>`, the bot rank decides the dropped experts (§6.5); the folder is then `tp1-botmask-k{K}/` |
+| `topk_checkpoint.py` | Builds a top-k copy of a tp1 folder (§8): `--source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`. `--check` runs the self-check only |
+| `prune_experts.py` | Builds a physically pruned copy of a mask folder (`PLAN_PHYSICAL_PRUNE.md` §3): the dropped experts leave the files, and the kept experts get the new ids 0 … K−1. `--check` runs the self-check only |
+| `prune_run.sh` | Runs `prune_experts.py` in a root container from the server image, because the 43 expert files of `data/tp1` are `root:600`. The main server stays up |
+| `check_routed.py` | The `PLAN_MODEL_SPECIALIZE.md` §5.2 check: no dropped expert in the routing of a test boot |
+| `speed_result.py` | The §4.4 speed result of one test point, from the files in `model_eval/results` |
 
-The main server is the pruned model since 2026-11-06: `compose-k160t5.yml` in the server folder (container
-`deepseek-v4-flash-k160t5-deepseek-v4-flash-1`). `start.sh` and `stop.sh` there handle the stock model only.
+**Test boots.** Each compose file serves on port 8890, so the bot (port 8888) cannot reach a test model.
+
+| File | Use |
+|---|---|
+| `compose-mask.yml` | Boots `tp1-${MASK_NAME}-k${MASK_K}`. `DRAFT_DIR` mounts another DSpark draft; `MASK_EXTRA_ARGS` adds vLLM flags |
+| `compose-mem073.yml` | Override for `compose-mask.yml`: `GPU_MEMORY_UTILIZATION` 0.73 and 128k context (`PLAN_MODEL_ROUTER.md` §3) |
+| `compose-capture.yml` | The expert capture: the stock model with Model Runner V1, no DSpark, `--enable-return-routed-experts` and the weights patch |
+| `serve-v1.sh` | Runs the server's serve script with Model Runner V1 (for `compose-capture.yml` only) |
+| `image-patch/` | The weights patch (`PLAN_BETTER_RANK.md` §4.1): the patched `base_router.py` and `routed_experts_capturer.py`, and `capture-weights.diff`, the change against the image. `patch -R -p1` with the diff gives back the original files |
+
+**Run scripts.** Each script stops the live server, runs its test boots and restores the live server.
+
+| File | Use |
+|---|---|
+| `run_lib.sh` | The shared functions and safety rules of the scripts below. A script sets `LOG`, `RESTORE_TAG` and, if it needs them, `TEST_COMPOSE`, `TEST_PROJECT` and `MASK`, then sources this file |
+| `topk_run.sh` | The top-k test night (`PLAN_OVERNIGHT_TOPK.md` §5 and §6) |
+| `prune_boot.sh` | The test boot of the pruned folder: replay, speed tests (`PLAN_PHYSICAL_PRUNE.md` §6) |
+| `mem_boot.sh` | The memory test boot at 0.73 and 128k: boot lines, free memory at idle and under load (`PLAN_MODEL_ROUTER.md` §3) |
+| `draft_test.sh` | The pruned model with another DSpark draft (`DRAFT_DIR`): the two decode tests (`PLAN_PHYSICAL_PRUNE.md` §7) |
+| `capture_run.sh` | The capture boot (`PLAN_BETTER_RANK.md` §4): a smoke test of the sums file, the capture of `model_eval/data/rank`, the rank files |
+| `rank_masks.sh` | Builds the mask folders of `PLAN_BETTER_RANK.md` §6 from the stock model (`RANK_NEW` picks the rank file). No downtime |
+| `rank_night.sh` | Masks on the replay screen (`PLAN_BETTER_RANK.md` §6). `POINTS` lists them as `NAME:K`; the default is the three masks of §6.1 |
+| `overnight_guard.sh` | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-k160t5.yml`) if port 8888 is down. `DRY_RUN=1` logs the actions only |
+
+**Tests.** `test_mask_checkpoint.py`, `test_topk_checkpoint.py` and `test_prune_experts.py` run each tool on a small
+synthetic checkpoint; `test_check_routed.py` uses synthetic routing data. Run all of them with
+`python -m unittest`.
+
+**Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output (`capture-out/`)
+and the logs. Since 2026-11-07, only two symlinks to the live folder remain: `tp1-prune5-k160` and `tp1-prune5b-k160`.
+
+## Safety rules of the run scripts
+
+CAUTION: Each run script stops the bot's model server. The bot gives no answers until the script restores it. Do not
+run a script near the `daily-report` or `daily-followups` cron jobs (05:00 to 10:00 on weekdays).
+
+The rules come from `PLAN_OVERNIGHT_MASK_GRID.md` §2. `run_lib.sh` applies them:
+
+- Only one model is in memory. Before each boot, no server container runs and at least 100 GiB is available.
+- A boot that is not healthy in 15 minutes goes down. After two failed boots in a row, the script restores the live
+  server.
+- A memory watch reads the free memory every 30 seconds. Below 1 GiB, it stops the client.
+- The deadlines have no defaults: `START_AFTER`, `BOOT_BY`, `SPEED_BY` and `RESTORE_AT`. At `RESTORE_AT`, every client
+  stops and the restore starts.
+- On any other failure, the script does the safe action: the restore.
+
+Start a script in its own tmux session, with its deadlines:
+
+```bash
+tmux new -d -s prune-boot "START_AFTER='2026-11-06 19:05' BOOT_BY='2026-11-06 20:05' SPEED_BY='2026-11-06 20:20' RESTORE_AT='2026-11-06 21:35' ./prune_boot.sh"
+```
+
+## Rebuild the live checkpoint
+
+The live folder `data/tp1-k160t5` came from these steps. The rank file is
+`model_eval/results/expert_rank_bot.json` in the stock-research repo.
+
+1. Build the bot-rank mask: `python mask_checkpoint.py --keep 160 --rank <rank file> --out tp1-botmask-k160`.
+2. Build the top-k copy: `python topk_checkpoint.py --source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`.
+3. Build the pruned folder: `SRC=tp1-botmask5-k160 OUT=tp1-prune5-k160 ./prune_run.sh`. It takes about 11 minutes
+   and writes about 73 GB.
+
+Steps 1 and 2 take about a minute each and write about 12 GB each.
+
+## One mask test by hand
 
 1. Print the plan: `python mask_checkpoint.py --keep 192 --dry-run`.
-2. Build the folder: `python mask_checkpoint.py --keep 192`. It writes about 12.3 GB. Do not build
-   while a speed test runs, because the writes slow the decode.
-3. Copy the kernel cache once (done 2026-11-02). Some files are `root:600`, so a root container
-   from the server image copies them: `mkdir cache && docker run --rm --pull=never --network none
-   --entrypoint cp -v ../DeepSeek-v4-Flash-One-DGX-Spark/cache:/src:ro -v ./cache:/dst IMAGE -a /src/. /dst/`
-   with IMAGE as in `compose-mask.yml`.
+2. Build the folder: `python mask_checkpoint.py --keep 192`. It writes about 12.3 GB. Do not build while a speed
+   test runs, because the writes slow the decode.
+3. Copy the kernel cache once (done 2026-11-02). Some files are `root:600`, so a root container from the server image
+   copies them. Use the image of `compose-mask.yml` as `IMAGE`:
+
+   ```bash
+   mkdir cache && docker run --rm --pull=never --network none --entrypoint cp \
+     -v ../DeepSeek-v4-Flash-One-DGX-Spark/cache:/src:ro -v ./cache:/dst IMAGE -a /src/. /dst/
+   ```
 
 CAUTION: The next step stops the bot's model server. The bot gives no answers until step 8.
 
-4. Stop the main server: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml stop`. Do not stop it near the
-   `daily-report` or `daily-followups` cron jobs.
-5. Boot the test: `MASK_K=192 docker compose -f compose-mask.yml up -d`. For the plan §5.2 check, boot
-   `CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose-capture.yml up -d` instead, wait for
-   `/health`, and run `python check_routed.py --keep 192`. It must print PASS. Model Runner V2 rejects
-   the capture flag, so `compose-mask.yml` cannot do this check.
-6. Score it from the stock-research repo:
-   `python -m model_eval.replay --base-url http://127.0.0.1:8890 --out model_eval/results/mask-k192.jsonl`,
-   then `--compare` against `baseline-k216.jsonl`.
+4. Stop the live server: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml stop`.
+5. Boot the test: `MASK_K=192 docker compose -f compose-mask.yml up -d`.
+   - For the `PLAN_MODEL_SPECIALIZE.md` §5.2 check, boot
+     `CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose-capture.yml up -d` instead.
+   - Wait for `/health`, then run `python check_routed.py --keep 192`. It must print PASS.
+   - Model Runner V2 rejects the capture flag, so `compose-mask.yml` cannot do this check.
+6. Score the test from the stock-research repo:
+   `python -m model_eval.replay --base-url http://127.0.0.1:8890 --out model_eval/results/mask-k192.jsonl`.
+   Then compare it with `baseline-k216.jsonl` (`--compare`).
 7. Stop the test: `MASK_K=192 docker compose -f compose-mask.yml down`.
-8. Start the main server again: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml start`.
+8. Start the live server again: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml start`.
 
 ## The mask
 
-- Layers 3–42: `gate.bias = -1e4` for each dropped expert. The router never chooses it. The kept
-  experts keep their choice and their weights.
-- Layers 0–2 (hash routing): each `tid2eid` entry of a dropped expert moves to the kept expert with
-  the most similar router row. That expert must not be in the token's row yet, and its load must be
-  below twice the mean.
+- Layers 3–42: `gate.bias = -1e4` for each dropped expert. The router never chooses it. The kept experts keep their
+  choice and their weights.
+- Layers 0–2 (hash routing): each `tid2eid` entry of a dropped expert moves to the kept expert with the most similar
+  router row. That expert must not be in the token's row yet, and its load must be below twice the mean.
 - `MASK.json` in each folder records the dropped experts (current and original ids) and the rule.
 
-## Expert capture (plan §6.2)
+## Expert capture
+
+`capture_run.sh` does these steps with the safety rules above (`PLAN_BETTER_RANK.md` §4). The manual steps are:
 
 CAUTION: The capture boot stops the bot's model server, like a mask test.
 
-1. Stop the main server: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml stop`.
-2. Boot the capture: `docker compose -f compose-capture.yml up -d`. It serves the base `data/tp1` on port
-   8890 with Model Runner V1 and no DSpark (`serve-v1.sh`), so the decode is slower than the main server.
-3. From the stock-research-model-eval repo:
-   `python -m model_eval.capture --out model_eval/results/capture-k216.jsonl`, then
-   `python -m model_eval.capture --rank model_eval/results/capture-k216.jsonl model_eval/results/expert_rank_bot.json`.
-4. Stop the capture: `docker compose -f compose-capture.yml down`. Start the main server:
+1. Stop the live server: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml stop`.
+2. Boot the capture: `docker compose -f compose-capture.yml up -d`. It serves the stock `data/tp1` with Model Runner
+   V1 and no DSpark, so the decode is slower than on the live server. The patch writes the sums of the counts and
+   the router weights to `capture-out/routing_sums.npz` after each step.
+3. From the stock-research repo, capture and rank:
+   `python -m model_eval.capture --out model_eval/results/capture-rank.jsonl --data model_eval/data/rank --sources discord,subagent,e2e,cron --sums ~/Projects/dsv4-specialize/capture-out/routing_sums.npz`,
+   then `python -m model_eval.capture --rank model_eval/results/capture-rank.jsonl model_eval/results/expert_rank_weight.json --order weight`.
+   The orders are `count`, `weight`, `skill_max` and `skill_floor`.
+4. Stop the capture: `docker compose -f compose-capture.yml down`. Start the live server:
    `docker compose -f compose-k160t5.yml start` in its folder.

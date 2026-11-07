@@ -1,0 +1,83 @@
+--- a/vllm/model_executor/layers/fused_moe/router/base_router.py
++++ b/vllm/model_executor/layers/fused_moe/router/base_router.py
+@@ -295,6 +295,12 @@
+         # Capture logical ids before EPLB mapping.
+         if self.capture_fn is not None:
+             self.capture_fn(topk_ids)
++            # dsv4-specialize patch (PLAN_BETTER_RANK.md §4): the model runner's capture function is
++            # ``_capture_fn(topk_ids, _layer_id=layer_id, _capturer=capturer)``. Its defaults give the layer and
++            # the capturer, which sums the router weights per expert (``capture_weights``).
++            defaults = getattr(self.capture_fn, "__defaults__", None)
++            if defaults and len(defaults) == 2 and hasattr(defaults[1], "capture_weights"):
++                defaults[1].capture_weights(defaults[0], topk_ids, topk_weights)
+ 
+         # Step 3: Apply EPLB mapping
+         topk_ids = self._apply_eplb_mapping(topk_ids)
+--- a/vllm/model_executor/layers/fused_moe/routed_experts_capturer.py
++++ b/vllm/model_executor/layers/fused_moe/routed_experts_capturer.py
+@@ -8,6 +8,8 @@
+ import logging
+ 
+ import numpy as np
++import os
++
+ import torch
+ 
+ from vllm.config import VllmConfig
+@@ -106,6 +108,48 @@
+         )
+         self.dp_rank = vllm_config.parallel_config.data_parallel_rank
+         self.tp_size = vllm_config.parallel_config.tensor_parallel_size
++        # dsv4-specialize patch (PLAN_BETTER_RANK.md §4): running sums per layer and expert of the times an
++        # expert was chosen and of the router weights it got, over every token that the model computed. The
++        # sums go to ``ROUTING_SUMS_FILE`` after the last layer of each step, so a client can take the
++        # difference around one request. Cached prefix tokens are not computed, so they do not count again.
++        self.sums_file = os.environ.get("ROUTING_SUMS_FILE", "")
++        num_layers, num_experts = hf_config.num_hidden_layers, get_num_experts(hf_config)
++        self.num_experts = num_experts
++        # One spare column: an id outside 0..E-1 (padding) lands there with a zero weight. Every shape stays
++        # static, so the hook also runs under CUDA graph capture (a boolean index would need a sync).
++        dev = self.device_buffer.device
++        self.sum_count = torch.zeros((num_layers, num_experts + 1), dtype=torch.float64, device=dev)
++        self.sum_weight = torch.zeros_like(self.sum_count)
++        self.sum_tokens = torch.zeros((num_layers,), dtype=torch.float64, device=dev)
++        self.last_layer = num_layers - 1
++        self.steps = 0
++
++    def capture_weights(self, layer_id: int, topk_ids: torch.Tensor, topk_weights: torch.Tensor) -> None:
++        """Add this layer's choices to the running sums; after the last layer of an eager step, write the file."""
++        if not self.sums_file or layer_id > self.last_layer:
++            return
++        ids = topk_ids.reshape(-1).to(torch.int64)
++        valid = (ids >= 0) & (ids < self.num_experts)
++        ids = torch.where(valid, ids, torch.full_like(ids, self.num_experts))
++        w = torch.where(valid, topk_weights.reshape(-1).to(torch.float64), torch.zeros((), dtype=torch.float64, device=ids.device))
++        w = torch.nan_to_num(w, nan=0.0, posinf=0.0, neginf=0.0)  # a padded row can carry a NaN weight (2026-11-07)
++        self.sum_count[layer_id].index_add_(0, ids, valid.to(torch.float64))
++        self.sum_weight[layer_id].index_add_(0, ids, w)
++        self.sum_tokens[layer_id] += topk_ids.shape[0]
++        if layer_id == self.last_layer:
++            self.steps += 1
++            self.flush_sums()
++
++    def flush_sums(self) -> None:
++        """Write the sums atomically: a temporary ``.npz`` next to the file, then a rename. Not while a CUDA graph
++        is being captured (the copy to the host would sync); ``clear_buffer`` flushes at the next step start."""
++        if not self.sums_file or torch.cuda.is_current_stream_capturing():
++            return
++        tmp = self.sums_file + ".tmp.npz"  # np.savez keeps a name that ends with .npz
++        np.savez(tmp, count=self.sum_count[:, : self.num_experts].cpu().numpy(),
++                 weight=self.sum_weight[:, : self.num_experts].cpu().numpy(),
++                 tokens=self.sum_tokens.cpu().numpy(), steps=np.array(self.steps))
++        os.replace(tmp, self.sums_file)
+ 
+     def capture(self, layer_id: int, topk_ids: torch.Tensor) -> None:
+         """Capture expert routing decisions for a specific layer.
+@@ -210,6 +254,7 @@
+         the next step.
+         """
+         self.device_buffer.zero_()
++        self.flush_sums()  # dsv4-specialize patch: the sums of a graph-replayed step reach the file here
+ 
+     def get_device_buffer(self) -> torch.Tensor:
+         """Return the underlying device buffer so the model runner can
