@@ -36,6 +36,8 @@ The tools in the order of the work:
 | `capture_run.sh` | The capture boot of `PLAN_BETTER_RANK.md` §4: the stock model on port 8890 with the weights patch, a smoke test of the sums file, the capture of `model_eval/data/rank`, the three rank files, then the restore. Needs the deadlines set, like `prune_boot.sh` |
 | `rank_masks.sh` | Builds the three mask folders of `PLAN_BETTER_RANK.md` §6 from the stock model: the floor rank at K 160 and K 144, the count rank at K 144 (`RANK_NEW` picks the rank file) |
 | `rank_night.sh` | The test night of `PLAN_BETTER_RANK.md` §6: the three masks on the replay screen, then the restore. Needs the deadlines set |
+| `rank_night2.sh` | One more point for §6: the 40 k floor at K 144 (a copy of `rank_night.sh` with one point) |
+| `draft_test.sh` | The draft test of `PLAN_PHYSICAL_PRUNE.md` §7: the live pruned model on port 8890 with another DSpark draft (`DRAFT_DIR`, also a variable of `compose-mask.yml`), the two decode tests, then the restore |
 
 Run the Python files with the stock-research venv: `~/.hermes/stock-research/.venv/bin/python`.
 
