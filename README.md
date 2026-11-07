@@ -32,6 +32,7 @@ The tools in the order of the work:
 | `prune_boot.sh` | The test boot of `PLAN_PHYSICAL_PRUNE.md` §6: the pruned folder on port 8890, the replay set, the speed tests, then the restore |
 | `compose-mem073.yml` | Override for `compose-mask.yml`: `GPU_MEMORY_UTILIZATION` 0.73 and 128k context, the DeepSeek footprint for two models (`PLAN_MODEL_ROUTER.md` §3) |
 | `mem_boot.sh` | The memory test boot with that override: the boot lines, the free memory at idle and during one bot decode run, then the restore |
+| `image-patch/` | `base_router.py` and `routed_experts_capturer.py` for the capture container (`PLAN_BETTER_RANK.md` §4): the router hands the weights to the capturer, which sums the counts and router weights per layer and expert and writes `capture-out/routing_sums.npz` after each step. `orig/` holds the unpatched files of the image; `diff -u orig/X X` shows the change |
 
 Run the Python files with the stock-research venv: `~/.hermes/stock-research/.venv/bin/python`.
 

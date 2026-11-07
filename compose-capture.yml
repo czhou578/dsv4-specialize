@@ -46,11 +46,21 @@ services:
       CUDAGRAPH_CAPTURE_SIZES: "6,12,24"
       VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
       EXTRA_VLLM_ARGS: "--long-prefill-token-threshold 1024 --enable-return-routed-experts"
+      ROUTING_SUMS_FILE: /capture/routing_sums.npz   # PLAN_BETTER_RANK.md §4: the per-expert sums of counts and router weights
       DEFAULT_CHAT_TEMPLATE_KWARGS_THINKING: "true"
       DEFAULT_CHAT_TEMPLATE_KWARGS_EFFORT: "max"
       KV_OFFLOAD_GB: "0"
       VLLM_USE_SIMPLE_KV_OFFLOAD: "0"
     volumes:
+      - ./capture-out:/capture
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/base_router.py"
+        target: /opt/vllm/vllm/model_executor/layers/fused_moe/router/base_router.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/routed_experts_capturer.py"
+        target: /opt/vllm/vllm/model_executor/layers/fused_moe/routed_experts_capturer.py
+        read_only: true
       - type: bind
         source: "${CAPTURE_DIR:-/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1}"
         target: /models/tp1
