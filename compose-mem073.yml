@@ -1,0 +1,7 @@
+# Override for compose-mask.yml: the DeepSeek footprint for two models (PLAN_MODEL_ROUTER.md §3, phase C).
+#   MASK_NAME=prune5 MASK_K=160 docker compose -f compose-mask.yml -f compose-mem073.yml up -d
+services:
+  deepseek-v4-flash-mask:
+    environment:
+      GPU_MEMORY_UTILIZATION: "0.73"
+      MAX_MODEL_LEN: "128000"

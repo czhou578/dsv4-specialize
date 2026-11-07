@@ -1,0 +1,111 @@
+# Test boot of a masked checkpoint (PLAN_MODEL_SPECIALIZE.md §5.3 step 8). Same image, patches and
+# flags as ~/Projects/DeepSeek-v4-Flash-One-DGX-Spark/compose.yml, with these differences:
+# - /models/tp1 is tp1-mask-k${MASK_K}; the base folder is mounted read-only at its host path, so the
+#   symlinks resolve; the draft is mounted read-only. Nothing of the main server is writable.
+# - Port 8890, so the bot (port 8888) fails instead of using a test model.
+# - The no-download entrypoint with SKIP_DOWNLOAD=1: a folder without a manifest stops the boot.
+# - Its own copy of ./cache (README step 3).
+# - MASK_EXTRA_ARGS adds vLLM flags. (The §5.2 capture needs compose-capture.yml: V2 rejects the flag.)
+# - MASK_NAME=botmask boots tp1-botmask-k${MASK_K} (bot rank, mask_checkpoint.py --rank); default mask (REAP).
+#
+# CAUTION: only one model fits in memory. Stop the main server first
+#   (docker compose -f compose-k160t5.yml stop in its folder).
+#   MASK_K=192 docker compose -f compose-mask.yml up -d
+#   MASK_K=192 docker compose -f compose-mask.yml down   # then docker compose -f compose-k160t5.yml start in the server folder
+name: dsv4-mask
+services:
+  deepseek-v4-flash-mask:
+    image: ghcr.io/0xsero/deepseek-v4-flash-0731-spark-sparkinfer@sha256:2e077489a83a0360952828051fe7f7a32c1801e5ce8436d85f7267583d614ff4
+    pull_policy: missing
+    restart: on-failure:1   # CRITICAL: a boot loop can use all host memory and hard-reset the Spark
+    network_mode: host
+    ipc: host
+    shm_size: 16gb
+    entrypoint: ["/bin/bash", "-lc", "bash /patch-run-entrypoint.sh && exec /opt/recipe/scripts/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "http://127.0.0.1:8890/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20m
+      retries: 3
+    environment:
+      PORT: "8890"
+      HOST: "0.0.0.0"
+      SERVED_MODEL_NAME: deepseek-v4-flash-0731-${MASK_NAME:-mask}-k${MASK_K:?set MASK_K}
+      SKIP_DOWNLOAD: "1"
+      MAX_MODEL_LEN: "256000"
+      MAX_NUM_SEQS: "1"
+      MAX_NUM_BATCHED_TOKENS: "8224"
+      VLLM_DSV4_PADDED_NVFP4: "0"
+      KV_FP8_ROPE: "0"
+      MODE: dspark
+      DSPARK_TOKENS: "5"
+      DSPARK_CAPACITY: "0"
+      DSPARK_DYNAMIC_DRAFT_DEPTH: "0"
+      DSPARK_DYNAMIC_DRAFT_DEPTH_WINDOW: "8"
+      DSPARK_DRAFT_EXPERTS: "64"
+      DSPARK_STRUCTURED_EXPERTS_PER_CATEGORY: "32"
+      VLLM_USE_B12X_WO_PROJECTION: "1"
+      GPU_MEMORY_UTILIZATION: "0.93"   # as the main compose.yml since 2026-11-03 (256k KV check)
+      VERIFY_MODEL_CHECKSUMS: "1"
+      MAX_CUDAGRAPH_CAPTURE_SIZE: "24"
+      CUDAGRAPH_CAPTURE_SIZES: "6,12,24"
+      VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
+      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold 1024 ${MASK_EXTRA_ARGS:-}"
+      DEFAULT_CHAT_TEMPLATE_KWARGS_THINKING: "true"
+      DEFAULT_CHAT_TEMPLATE_KWARGS_EFFORT: "max"
+      KV_OFFLOAD_GB: "0"
+      VLLM_USE_SIMPLE_KV_OFFLOAD: "0"
+    volumes:
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/tp1-${MASK_NAME:-mask}-k${MASK_K}"
+        target: /models/tp1
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1"
+        target: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1"
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/dspark-draft-k64"
+        target: /models/dspark-draft-k64
+        read_only: true
+      - ./cache:/cache
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/moe/fused_moe/_impl.py"
+        target: /opt/sparkinfer/sparkinfer/moe/fused_moe/_impl.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/moe/_shared/kernels/tiny_decode.py"
+        target: /opt/sparkinfer/sparkinfer/moe/_shared/kernels/tiny_decode.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/entrypoint-toolfix.sh"
+        target: /patch-run-entrypoint.sh
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/serve-ds4-flash.sh"
+        target: /opt/vllm/serve-ds4-flash.sh
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/vllm/models/deepseek_v4/nvidia/dspark.py"
+        target: /opt/vllm/vllm/models/deepseek_v4/nvidia/dspark.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/attention/_shared/mla/prefill.py"
+        target: /opt/sparkinfer/sparkinfer/attention/_shared/mla/prefill.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/attention/_shared/mla/prefill_mg.py"
+        target: /opt/sparkinfer/sparkinfer/attention/_shared/mla/prefill_mg.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/entrypoint-no-download.sh"
+        target: /opt/recipe/scripts/entrypoint.sh
+        read_only: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

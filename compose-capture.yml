@@ -1,0 +1,105 @@
+# Expert capture boot (PLAN_MODEL_SPECIALIZE.md §6.2 and the §5.2 check). Same image and patches as
+# compose-mask.yml, with these differences:
+# - MODE=mtp0 (no DSpark) and serve-v1.sh: Model Runner V1, because V2 rejects
+#   --enable-return-routed-experts. The decode is slower; the capture sends prefill only.
+# - --enable-return-routed-experts: each reply has choices[0].routed_experts.
+# - /models/tp1 is CAPTURE_DIR: the base data/tp1 by default (Phase 2 rank), or a mask folder (§5.2 check).
+#   The base folder is also mounted read-only at its host path, so the symlinks of a mask folder resolve.
+# - No draft mount. Port 8890, like compose-mask.yml.
+#
+# CAUTION: only one model fits in memory. Stop the main server first
+#   (docker compose -f compose-k160t5.yml stop in its folder).
+#   docker compose -f compose-capture.yml up -d
+#   CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose-capture.yml up -d   # §5.2 check
+#   docker compose -f compose-capture.yml down   # then docker compose -f compose-k160t5.yml start in the server folder
+name: dsv4-capture
+services:
+  deepseek-v4-flash-capture:
+    image: ghcr.io/0xsero/deepseek-v4-flash-0731-spark-sparkinfer@sha256:2e077489a83a0360952828051fe7f7a32c1801e5ce8436d85f7267583d614ff4
+    pull_policy: missing
+    restart: on-failure:1   # CRITICAL: a boot loop can use all host memory and hard-reset the Spark
+    network_mode: host
+    ipc: host
+    shm_size: 16gb
+    entrypoint: ["/bin/bash", "-lc", "bash /patch-run-entrypoint.sh && exec /opt/recipe/scripts/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "http://127.0.0.1:8890/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20m
+      retries: 3
+    environment:
+      PORT: "8890"
+      HOST: "0.0.0.0"
+      SERVED_MODEL_NAME: deepseek-v4-flash-0731-capture
+      SKIP_DOWNLOAD: "1"
+      MAX_MODEL_LEN: "256000"
+      MAX_NUM_SEQS: "1"
+      MAX_NUM_BATCHED_TOKENS: "8224"
+      VLLM_DSV4_PADDED_NVFP4: "0"
+      KV_FP8_ROPE: "0"
+      MODE: mtp0
+      VLLM_USE_B12X_WO_PROJECTION: "1"
+      GPU_MEMORY_UTILIZATION: "0.93"
+      VERIFY_MODEL_CHECKSUMS: "1"
+      MAX_CUDAGRAPH_CAPTURE_SIZE: "24"
+      CUDAGRAPH_CAPTURE_SIZES: "6,12,24"
+      VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
+      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold 1024 --enable-return-routed-experts"
+      DEFAULT_CHAT_TEMPLATE_KWARGS_THINKING: "true"
+      DEFAULT_CHAT_TEMPLATE_KWARGS_EFFORT: "max"
+      KV_OFFLOAD_GB: "0"
+      VLLM_USE_SIMPLE_KV_OFFLOAD: "0"
+    volumes:
+      - type: bind
+        source: "${CAPTURE_DIR:-/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1}"
+        target: /models/tp1
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1"
+        target: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1"
+        read_only: true
+      - ./cache:/cache
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/moe/fused_moe/_impl.py"
+        target: /opt/sparkinfer/sparkinfer/moe/fused_moe/_impl.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/moe/_shared/kernels/tiny_decode.py"
+        target: /opt/sparkinfer/sparkinfer/moe/_shared/kernels/tiny_decode.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/entrypoint-toolfix.sh"
+        target: /patch-run-entrypoint.sh
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/serve-ds4-flash.sh"
+        target: /opt/vllm/serve-ds4-flash.orig.sh
+        read_only: true
+      - type: bind
+        source: "./serve-v1.sh"
+        target: /opt/vllm/serve-ds4-flash.sh
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/vllm/models/deepseek_v4/nvidia/dspark.py"
+        target: /opt/vllm/vllm/models/deepseek_v4/nvidia/dspark.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/attention/_shared/mla/prefill.py"
+        target: /opt/sparkinfer/sparkinfer/attention/_shared/mla/prefill.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/attention/_shared/mla/prefill_mg.py"
+        target: /opt/sparkinfer/sparkinfer/attention/_shared/mla/prefill_mg.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/entrypoint-no-download.sh"
+        target: /opt/recipe/scripts/entrypoint.sh
+        read_only: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
