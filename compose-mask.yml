@@ -5,6 +5,7 @@
 # - Port 8890, so the bot (port 8888) fails instead of using a test model.
 # - The no-download entrypoint with SKIP_DOWNLOAD=1: a folder without a manifest stops the boot.
 # - Its own copy of ./cache (README step 3).
+# - DRAFT_DIR mounts another DSpark draft folder (default: the stock draft); PLAN_PHYSICAL_PRUNE.md §7.
 # - MASK_EXTRA_ARGS adds vLLM flags. (The §5.2 capture needs compose-capture.yml: V2 rejects the flag.)
 # - MASK_NAME=botmask boots tp1-botmask-k${MASK_K} (bot rank, mask_checkpoint.py --rank); default mask (REAP).
 #
@@ -66,7 +67,7 @@ services:
         target: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1"
         read_only: true
       - type: bind
-        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/dspark-draft-k64"
+        source: "${DRAFT_DIR:-/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/dspark-draft-k64}"
         target: /models/dspark-draft-k64
         read_only: true
       - ./cache:/cache
