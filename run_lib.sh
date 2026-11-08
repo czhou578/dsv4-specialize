@@ -44,7 +44,7 @@ wait_mem() {  # $1: seconds; true when at least 100 GiB are available
   [ "$(avail_gib)" -ge 100 ]
 }
 memwatch_start() {  # $1: label
-  ( while true; do m=$(avail_mb); echo "$(date +%T) available_mb=$m" >> /home/colin-spark/.hermes-e2e/memory-$1.log
+  ( while true; do m=$(avail_mb); echo "$(date +%T) available_mb=$m" >> $S/logs/memory-$1.log
       if [ "$m" -lt 1024 ]; then log "MEMORY below 1 GiB ($m MB): stop the client"
         pkill -f "model_eval.replay|model_eval.speed|acceptance_c1"; fi
       sleep 30; done ) &

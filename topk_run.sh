@@ -3,9 +3,9 @@
 # Start it in its own tmux session after the folders of §4 pass the self-check:
 #   tmux new -d -s topk-run ~/Projects/dsv4-specialize/topk_run.sh
 # The safety rules and the shared functions are in run_lib.sh. Set the four deadlines in the environment.
-LOG=${LOG:-/home/colin-spark/.hermes-e2e/topk-run.log}
+LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/topk-run.log}
 RESTORE_TAG=topk
-SPEEDF=/home/colin-spark/.hermes-e2e/stepf-speed.log
+SPEEDF=/home/colin-spark/Projects/dsv4-specialize/history/hermes-e2e/stepf-speed.log   # stepf-speed.sh (history) wrote it
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 log "top-k run start (start after $START_AFTER; boot by $BOOT_BY; speed by $SPEED_BY; restore at $RESTORE_AT)"

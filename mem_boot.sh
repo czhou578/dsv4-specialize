@@ -8,7 +8,7 @@
 # - free memory every 30 s during each client run; below 1 GiB, stop the client;
 # - deadlines: no boot with a replay after BOOT_BY, no speed test after SPEED_BY, and every client stops
 #   at RESTORE_AT, when the restore starts. Any other failure: the safe action (restore).
-LOG=${LOG:-/home/colin-spark/.hermes-e2e/mem-boot.log}
+LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/mem-boot.log}
 RESTORE_TAG=mem
 TEST_COMPOSE="-f compose-mask.yml -f compose-mem073.yml"
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
@@ -29,7 +29,7 @@ if stop_main; then
     (cd $W && timeout $left $PY -m model_eval.speed --base-url $URL --out $R/speed-bot-$L.jsonl --runs 1 > $R/speed-bot-$L.log 2>&1)
     log "$L bot decode exit $?: $(tail -1 $R/speed-bot-$L.log | cut -c1-160)"
     memwatch_stop
-    log "$L lowest available memory during the test: $(awk -F= '{print $2}' /home/colin-spark/.hermes-e2e/memory-$L.log | sort -n | head -1) MB"
+    log "$L lowest available memory during the test: $(awk -F= '{print $2}' $S/logs/memory-$L.log | sort -n | head -1) MB"
     down
   fi
 else

@@ -9,7 +9,7 @@ cd "$(dirname "$0")"
 PY=/home/colin-spark/.hermes/stock-research/.venv/bin/python
 R=/home/colin-spark/Projects/dsv4-specialize/results
 VERIFY=/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/verify_tp1_manifest.py
-LOG=${LOG:-/home/colin-spark/.hermes-e2e/rank-masks.log}
+LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/rank-masks.log}
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 build() {  # $1 rank file, $2 K, $3 top-k 6 folder, $4 top-k 5 folder
   [ -d "$4" ] && { log "$4 exists; skipped"; return 0; }

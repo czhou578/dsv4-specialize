@@ -9,7 +9,7 @@
 # - free memory every 30 s during each client run; below 1 GiB, stop the client;
 # - deadlines: no boot with a replay after BOOT_BY, no speed test after SPEED_BY, and every client stops
 #   at RESTORE_AT, when the restore starts. Any other failure: the safe action (restore).
-LOG=${LOG:-/home/colin-spark/.hermes-e2e/draft-test.log}
+LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/draft-test.log}
 RESTORE_TAG=draft
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 

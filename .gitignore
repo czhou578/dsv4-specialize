@@ -10,4 +10,6 @@ __pycache__/
 # the result files of the test points: replay rows, speed files, boot logs, reports (moved from the bot repo's
 # model_eval/results on 2026-11-08). Only the rank file of the live checkpoint is in git.
 results/*
+# the step scripts of the full runs and their logs, moved from ~/.hermes-e2e on 2026-11-08 (history only)
+history/
 !results/expert_rank_bot.json

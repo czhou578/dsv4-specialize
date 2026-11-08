@@ -71,7 +71,9 @@ synthetic checkpoint; `test_check_routed.py` uses synthetic routing data; `test_
 synthetic sums. Run all of them with `python -m unittest`.
 
 **Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output (`capture-out/`),
-the result files (`results/`, except `results/expert_rank_bot.json`) and the logs. Since 2026-11-07, only two symlinks to the live folder remain: `tp1-prune5-k160` and `tp1-prune5b-k160`.
+the result files (`results/`, except `results/expert_rank_bot.json`), the logs (`logs/`) and `history/hermes-e2e/`: the
+step scripts of the full runs and their logs, moved from `~/.hermes-e2e/` on 2026-11-08. The step scripts keep their old
+paths, so they do not run as they are. Since 2026-11-07, only two symlinks to the live folder remain: `tp1-prune5-k160` and `tp1-prune5b-k160`.
 
 ## Safety rules of the run scripts
 
