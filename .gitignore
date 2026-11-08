@@ -7,3 +7,7 @@ capture-out/
 *.log
 script-backup-*/
 __pycache__/
+# the result files of the test points: replay rows, speed files, boot logs, reports (moved from the bot repo's
+# model_eval/results on 2026-11-08). Only the rank file of the live checkpoint is in git.
+results/*
+!results/expert_rank_bot.json
