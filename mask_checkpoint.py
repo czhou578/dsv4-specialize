@@ -2,7 +2,7 @@
 
 The mask keeps K of the 216 routed experts per layer. The 216 - K experts with the lowest REAP rank
 in ``REAP_K216_PLAN.json`` drop out; the mandatory experts of the two tool categories always stay.
-With ``--rank expert_rank_bot.json`` (``model_eval/capture.py``, plan §6.5), the least used experts of the
+With ``--rank expert_rank_bot.json`` (``capture.py``, plan §6.5), the least used experts of the
 bot's traffic drop out instead, under the same mandatory rule; the folder is then ``tp1-botmask-k{K}``.
 
 - Layers 3-42 (learned router): ``gate.bias[e] = -1e4`` for each dropped expert ``e``. The router

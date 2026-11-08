@@ -35,12 +35,12 @@ if stop_main; then
       memwatch_start capture-k216
       left=$(( RESTORE_S - $(now) ))
       log "capture of $RANKDATA ($left s left)"
-      (cd $W && timeout $left $PY -m model_eval.capture --base-url $URL --out $R/capture-rank.jsonl --data $RANKDATA \
+      (cd $W && timeout $left $PY $S/capture.py --base-url $URL --out $R/capture-rank.jsonl --data $RANKDATA \
         --sources discord,subagent,e2e,cron --sums "$SUMS" > $R/capture-rank.log 2>&1)
       log "capture exit $?: $(wc -l < $R/capture-rank.jsonl) rows, $(grep -c '"error"' $R/capture-rank.jsonl) errors"
       memwatch_stop
       for order in count weight skill_max; do
-        (cd $W && $PY -m model_eval.capture --rank $R/capture-rank.jsonl $R/expert_rank_$order.json --order $order) 2>&1 | tail -1 | tee -a "$LOG"
+        (cd $W && $PY $S/capture.py --rank $R/capture-rank.jsonl $R/expert_rank_$order.json --order $order) 2>&1 | tail -1 | tee -a "$LOG"
       done
     else
       log "ERROR: the sums file did not move after the smoke request; no capture. Check the patch (§4.1)"

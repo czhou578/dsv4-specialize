@@ -1,5 +1,5 @@
 """The speed result of one test point (PLAN_MODEL_SPECIALIZE.md §4.4), from the files that
-``stepf-speed.sh`` and ``topk_run.sh`` write to ``model_eval/results``:
+``run_lib.sh`` writes to ``results/`` (until 2026-11-08: the bot repo's ``model_eval/results``):
 
 - bot decode: the last line of ``speed-bot-{label}.log`` (rate per run, median, spread, acceptance);
 - code decode: ``speed-code-{label}-{1,2,3}.json`` (rate per run = decoded tokens / decode time, then the
@@ -13,7 +13,7 @@ import json
 import statistics
 from pathlib import Path
 
-RESULTS = Path.home() / "Projects/stock-research-model-eval/model_eval/results"
+RESULTS = Path.home() / "Projects/dsv4-specialize/results"
 BASELINE = {"bot": {"rate": 33.64, "noise": 1.42, "accepted_per_draft": 2.25},
             "code": {"rate": 38.86, "noise": 1.65, "accepted_per_draft": 2.67}}
 

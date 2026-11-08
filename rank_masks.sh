@@ -7,7 +7,7 @@
 set -u
 cd "$(dirname "$0")"
 PY=/home/colin-spark/.hermes/stock-research/.venv/bin/python
-R=/home/colin-spark/Projects/stock-research-model-eval/model_eval/results
+R=/home/colin-spark/Projects/dsv4-specialize/results
 VERIFY=/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/verify_tp1_manifest.py
 LOG=${LOG:-/home/colin-spark/.hermes-e2e/rank-masks.log}
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }

@@ -45,7 +45,7 @@ import numpy as np
 from mask_checkpoint import _DTYPES, BASE, HASH_LAYERS, bf16_to_f32, header, read_tensor, sha256_file
 
 MANIFEST = "rank-sliced-tp1-manifest.json"
-RANK = Path.home() / "Projects/stock-research-model-eval/model_eval/results/expert_rank_bot.json"
+RANK = Path.home() / "Projects/dsv4-specialize/results/expert_rank_bot.json"
 VERIFY = Path.home() / "Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/verify_tp1_manifest.py"
 CHUNK_ROWS = 4096
 COPY_BYTES = 16 << 20

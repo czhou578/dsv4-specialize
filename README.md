@@ -30,7 +30,17 @@ Run the Python files with the stock-research venv: `~/.hermes/stock-research/.ve
 | `prune_experts.py` | Builds a physically pruned copy of a mask folder (`PLAN_PHYSICAL_PRUNE.md` §3): the dropped experts leave the files, and the kept experts get the new ids 0 … K−1. `--check` runs the self-check only |
 | `prune_run.sh` | Runs `prune_experts.py` in a root container from the server image, because the 43 expert files of `data/tp1` are `root:600`. The main server stays up |
 | `check_routed.py` | The `PLAN_MODEL_SPECIALIZE.md` §5.2 check: no dropped expert in the routing of a test boot |
-| `speed_result.py` | The §4.4 speed result of one test point, from the files in `model_eval/results` |
+| `speed_result.py` | The §4.4 speed result of one test point, from the files in `results/` |
+
+**Rank tools.** They need the bot repo's eval worktree, `~/Projects/stock-research-model-eval`: `capture.py` and
+`rank_data.py` import its `model_eval/replay.py`, and the rank data is its `model_eval/data/rank/` (out of git). They
+moved here from the bot repo's `model_eval/` on 2026-11-08.
+
+| File | Use |
+|---|---|
+| `capture.py` | The client of the capture boot (`PLAN_MODEL_SPECIALIZE.md` §6.2, `plans/PLAN_BETTER_RANK.md` §4): per segment, the counts of the routed experts and, with `--sums`, the router weights. `--rank` writes `expert_rank_<order>.json` |
+| `rank_data.py` | Merges the exports into `model_eval/data/rank/sessions.jsonl` and keeps the held-out sessions out (`plans/PLAN_BETTER_RANK.md` §3) |
+| `rank_report.py` | Compares the rank files in `results/`: the routing share that each K step removes, and the overlaps (`plans/PLAN_BETTER_RANK.md` §5) |
 
 **Test boots.** Each compose file serves on port 8890, so the bot (port 8888) cannot reach a test model.
 
@@ -57,11 +67,11 @@ Run the Python files with the stock-research venv: `~/.hermes/stock-research/.ve
 | `overnight_guard.sh` | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-k160t5.yml`) if port 8888 is down. `DRY_RUN=1` logs the actions only |
 
 **Tests.** `test_mask_checkpoint.py`, `test_topk_checkpoint.py` and `test_prune_experts.py` run each tool on a small
-synthetic checkpoint; `test_check_routed.py` uses synthetic routing data. Run all of them with
-`python -m unittest`.
+synthetic checkpoint; `test_check_routed.py` uses synthetic routing data; `test_capture.py` and `test_rank.py` use a fake server and
+synthetic sums. Run all of them with `python -m unittest`.
 
-**Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output (`capture-out/`)
-and the logs. Since 2026-11-07, only two symlinks to the live folder remain: `tp1-prune5-k160` and `tp1-prune5b-k160`.
+**Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output (`capture-out/`),
+the result files (`results/`, except `results/expert_rank_bot.json`) and the logs. Since 2026-11-07, only two symlinks to the live folder remain: `tp1-prune5-k160` and `tp1-prune5b-k160`.
 
 ## Safety rules of the run scripts
 
@@ -86,8 +96,7 @@ tmux new -d -s prune-boot "START_AFTER='2026-11-06 19:05' BOOT_BY='2026-11-06 20
 
 ## Rebuild the live checkpoint
 
-The live folder `data/tp1-k160t5` came from these steps. The rank file is
-`model_eval/results/expert_rank_bot.json` in the stock-research repo.
+The live folder `data/tp1-k160t5` came from these steps. The rank file is `results/expert_rank_bot.json` (in git).
 
 1. Build the bot-rank mask: `python mask_checkpoint.py --keep 160 --rank <rank file> --out tp1-botmask-k160`.
 2. Build the top-k copy: `python topk_checkpoint.py --source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`.
@@ -117,9 +126,9 @@ CAUTION: The next step stops the bot's model server. The bot gives no answers un
      `CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose-capture.yml up -d` instead.
    - Wait for `/health`, then run `python check_routed.py --keep 192`. It must print PASS.
    - Model Runner V2 rejects the capture flag, so `compose-mask.yml` cannot do this check.
-6. Score the test from the stock-research repo:
-   `python -m model_eval.replay --base-url http://127.0.0.1:8890 --out model_eval/results/mask-k192.jsonl`.
-   Then compare it with `baseline-k216.jsonl` (`--compare`).
+6. Score the test from the bot repo's eval worktree:
+   `python -m model_eval.replay --base-url http://127.0.0.1:8890 --out ~/Projects/dsv4-specialize/results/mask-k192.jsonl`.
+   Then compare it with `results/baseline-k216.jsonl` (`--compare`).
 7. Stop the test: `MASK_K=192 docker compose -f compose-mask.yml down`.
 8. Start the live server again: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml start`.
 
@@ -141,9 +150,9 @@ CAUTION: The capture boot stops the bot's model server, like a mask test.
 2. Boot the capture: `docker compose -f compose-capture.yml up -d`. It serves the stock `data/tp1` with Model Runner
    V1 and no DSpark, so the decode is slower than on the live server. The patch writes the sums of the counts and
    the router weights to `capture-out/routing_sums.npz` after each step.
-3. From the stock-research repo, capture and rank:
-   `python -m model_eval.capture --out model_eval/results/capture-rank.jsonl --data model_eval/data/rank --sources discord,subagent,e2e,cron --sums ~/Projects/dsv4-specialize/capture-out/routing_sums.npz`,
-   then `python -m model_eval.capture --rank model_eval/results/capture-rank.jsonl model_eval/results/expert_rank_weight.json --order weight`.
+3. From this repo, capture and rank:
+   `python capture.py --out results/capture-rank.jsonl --data ~/Projects/stock-research-model-eval/model_eval/data/rank --sources discord,subagent,e2e,cron --sums capture-out/routing_sums.npz`,
+   then `python capture.py --rank results/capture-rank.jsonl results/expert_rank_weight.json --order weight`.
    The orders are `count`, `weight`, `skill_max` and `skill_floor`.
 4. Stop the capture: `docker compose -f compose-capture.yml down`. Start the live server:
    `docker compose -f compose-k160t5.yml start` in its folder.
