@@ -1,0 +1,24 @@
+# Plans
+
+These plans moved here from the bot's repo, `czhou578/stock-research-agent`, on 2026-11-08. Their text did not
+change, so the section numbers that the scripts cite are still correct.
+
+| Plan | What it covers |
+|---|---|
+| `PLAN_OVERNIGHT_MASK_GRID.md` | The mask-grid night of 2026-11-03, and the safety rules of the run scripts (§2) |
+| `PLAN_OVERNIGHT_TOPK.md` | The top-k night of 2026-11-04 |
+| `PLAN_FINAL_REVIEW.md` | The final review of bot K 160 at top-k 5: the LLM judge and the blind review |
+| `PLAN_PHYSICAL_PRUNE.md` | Phase 3: the prune tool, the test boot, the bot-rank draft and the deploy |
+| `PLAN_BETTER_RANK.md` | The weighted rank and the capture patch. K 144 fails with every rank, so K 160 is the floor |
+
+The plans give paths as they were in the bot's repo. Read them as follows:
+
+- `PLAN_MODEL_SPECIALIZE.md` (the method), `PLAN_E2E_RUNNER.md` (the full runs), `PLAN_MODEL_ROUTER.md`,
+  `MODEL_SWAP.md` and `MODEL_PRUNE.md` stay in the bot's repo.
+- `model_eval/` stays in the bot's repo, except three files: `model_eval/capture.py`, `rank_data.py` and
+  `rank_report.py` are now `capture.py`, `rank_data.py` and `rank_report.py` in this repo.
+- `model_eval/results/` is now `results/` in this repo. The bot's folder keeps the full-run rows of the stock model
+  (`e2e/`) and a copy of the stock baselines (`baseline-k216*`, `speed-*-k216*`).
+- `model_eval/data/` (the recorded bot sessions, with `rank/`) stays in the bot's eval worktree and out of git.
+- The step scripts of `~/.hermes-e2e/` and their logs are now in `history/hermes-e2e/`. The logs of the run scripts
+  are in `logs/`.

@@ -4,10 +4,14 @@ Weight tools, test boots and run scripts that made DeepSeek V4 Flash smaller for
 DGX Spark. The result runs since 2026-11-06: 160 of 216 routed experts per layer, 5 experts per token, and 74 GiB
 loaded in place of 95 GiB.
 
-The plans and the results are in the bot's repo, `czhou578/stock-research-agent`. Start with `MODEL_PRUNE.md`. The
-details are in `plans/`: `PLAN_MODEL_SPECIALIZE.md`, `PLAN_E2E_RUNNER.md`, `PLAN_OVERNIGHT_MASK_GRID.md`,
-`PLAN_OVERNIGHT_TOPK.md`, `PLAN_FINAL_REVIEW.md`, `PLAN_PHYSICAL_PRUNE.md` and `PLAN_BETTER_RANK.md`. The scripts here
-refer to the plans by their section numbers.
+Start with `PRUNE.md`: why, the grid, the final review, the physical prune and the open items. The details are in
+`plans/`: `PLAN_OVERNIGHT_MASK_GRID.md`, `PLAN_OVERNIGHT_TOPK.md`, `PLAN_FINAL_REVIEW.md`, `PLAN_PHYSICAL_PRUNE.md` and
+`PLAN_BETTER_RANK.md`. They moved here from the bot's repo on 2026-11-08; `plans/README.md` tells how to read their
+paths. The scripts here refer to the plans by their section numbers.
+
+Three documents stay in the bot's repo, `czhou578/stock-research-agent`: `MODEL_PRUNE.md` (what runs now, how to go
+back to the stock model, how the harness measures a model), `plans/PLAN_MODEL_SPECIALIZE.md` (the method and the
+harness) and `plans/PLAN_E2E_RUNNER.md` (the full runs). The eval harness, `model_eval/`, also stays there.
 
 The live server is not in this repo. It is `compose-k160t5.yml` in `~/Projects/DeepSeek-v4-Flash-One-DGX-Spark`
 (container `deepseek-v4-flash-k160t5-deepseek-v4-flash-1`). `start.sh` and `stop.sh` there control the stock model
