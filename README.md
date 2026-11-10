@@ -53,6 +53,7 @@ moved here from the bot repo's `model_eval/` on 2026-11-08.
 | `compose-mask.yml` | Boots `tp1-${MASK_NAME}-k${MASK_K}`. `DRAFT_DIR` mounts another DSpark draft; `MASK_EXTRA_ARGS` adds vLLM flags |
 | `compose-mem073.yml` | Override for `compose-mask.yml`: `GPU_MEMORY_UTILIZATION` 0.73 and 128k context (`PLAN_MODEL_ROUTER.md` §3) |
 | `compose-drop.yml` | Override for `compose-mask.yml`: the router patch with its rule (`MOE_DROP`, `MOE_NORM`, `MOE_LAYERS`) and an 8 GiB KV cache (`plans/PLAN_FEWER_EXPERTS.md` §6) |
+| `compose-tune.yml` | Override for `compose-mask.yml`: the draft depth and its graph sizes, the FP8 draft head, the KV pin and the prefill chunk (`plans/PLAN_SERVE_TUNE.md` §6.1). The defaults are the live settings |
 | `compose-capture.yml` | The expert capture: the stock model with Model Runner V1, no DSpark, `--enable-return-routed-experts` and the weights patch. `ROUTING_PROFILE=1` adds the routing profile; `CAPTURE_UTIL` and `CAPTURE_EXTRA_ARGS` change the boot check and add vLLM flags |
 | `serve-v1.sh` | Runs the server's serve script with Model Runner V1 (for `compose-capture.yml` only) |
 | `image-patch/` | The weights patch (`PLAN_BETTER_RANK.md` §4.1): the patched `base_router.py` and `routed_experts_capturer.py`, and `capture-weights.diff`, the change against the image. `patch -R -p1` with the diff gives back the original files. The router patch (`PLAN_FEWER_EXPERTS.md` §6): `moe_drop.py` (the drop rule and the gain anchor) and `router-drop.diff`; `build_router.sh` applies the diff to the image's router file (not in git) |
@@ -71,6 +72,7 @@ moved here from the bot repo's `model_eval/` on 2026-11-08.
 | `rank_night.sh` | Masks on the replay screen (`PLAN_BETTER_RANK.md` §6). `POINTS` lists them as `NAME:K`; the default is the three masks of §6.1 |
 | `fewer_night.sh` | The test night of `plans/PLAN_FEWER_EXPERTS.md`: the routing profile (Phase A), then the replay points C1–C5 and C0 on `tp1-botmask-k160` with `compose-drop.yml` (Phase C), then 5 bot decode runs on the chosen point and 5 on the live server (Phase D). `BOOT_MIN_GIB` makes each boot wait for that much available memory |
 | `fewer_stepf.sh` | Step F of `plans/PLAN_FEWER_EXPERTS.md` §9 on one point (`POINT`, `MOE_DROP`, `MOE_NORM`; `MASK_NAME=prune5` boots the live folder): optional replay (`REPLAY=1`) and speed tests (`SPEED=1`, gate `SPEED_MIN`), the 19 held-out prompts end to end, the restore, the checks, the judge and the blind page |
+| `tune_night.sh` | The lossless window of `plans/PLAN_SERVE_TUNE.md` §6: points T0–T4 on the live folder with `compose-tune.yml` (the draft depth, the FP8 draft head, the KV pin and the prefill chunk), with the graph, head, smoke and prefill checks and the speed tests |
 | `overnight_guard.sh` | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-k160t5.yml`) if port 8888 is down. `DRY_RUN=1` logs the actions only |
 
 **Tests.** `test_mask_checkpoint.py`, `test_topk_checkpoint.py` and `test_prune_experts.py` run each tool on a small

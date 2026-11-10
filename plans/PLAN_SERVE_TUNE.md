@@ -10,7 +10,7 @@ repo, each on your go.
 
 | Step | Status |
 |---|---|
-| §5 Step 0: prepare (no downtime) | 🟨 2026-11-10: the tools of §5.2 are written and tested on branch `serve-tune`; the prompt data of §5.1 is open |
+| §5 Step 0: prepare (no downtime) | ✅ 2026-11-10: the tools pass their tests (§5.2); one metrics snapshot (§5.1). ⛔ The 24-hour snapshot is blocked: the windows restart the server and reset the counters |
 | §6 Step 1: the lossless window (about 3.5 h downtime) | ⬜ |
 | §7 Step 2: the replay window (about 3.5 h downtime) | ⬜ |
 | §8 Step 3: offline studies, then builds | ⬜ |
@@ -106,6 +106,28 @@ The data feeds two decisions:
   about 130k tokens, the 160k option of §6.4 is safe.
 - **#8.** The missed tokens on long prompts give the value of a disk tier (§9).
 
+**Result (2026-11-10 13:47).** One snapshot on port 8888 (`results/metrics-8888-20261110.txt`). The live server
+started at 07:23, so the counters hold 6 h 24 min of traffic:
+
+| Value | Count |
+|---|---|
+| Requests | 181 |
+| Prompt tokens | 2,067,008 |
+| Prompts above 20,000 tokens | 6 (all at or under 50,000) |
+| Prompts above 50,000 tokens | 0 |
+| Prefix-cache hits | 20,480 tokens (1.0% of the queried tokens) |
+| Preemptions | 0 |
+
+- The snapshot is not the bot's traffic alone. The judge of the step F run (`PLAN_FEWER_EXPERTS.md` §9.1) used port
+  8888 from 07:25 to 12:27.
+- ⛔ **The 24-hour snapshot is blocked.** Tonight's windows restart the live server, and a restart sets the counters to
+  zero. Take it after a day with no window.
+- **#2.** No prompt went above 50,000 tokens. Six hours do not prove the 160k option of §6.4 safe, because a session
+  can grow to 128k tokens before Hermes compresses it. T4 keeps the 256k length; the 160k option waits for the
+  24-hour data.
+- **#8.** The prefix cache hit only 1.0% of the prompt tokens. A disk tier serves only prefixes that the cache can
+  match, so find the cause of the low rate before the study of §9.
+
 ### 5.2 Write the tools
 
 | File | Use |
@@ -134,6 +156,14 @@ them: the probe and its test first, then the compose file and the run script.
 The probe has only fake-server tests. Before the window, run `prefill_probe.py --base-url http://127.0.0.1:8888
 --cold 2000` once, when no test uses the live server. It checks the request format with a 2k-token prompt. Do not
 send `--smoke` to the live server: a grammar assertion there stops the bot's server.
+
+**Probe check (2026-11-10 13:50).** The live server was idle. `prefill_probe.py --cold 2000` on port 8888: PASS,
+2,001 tokens, time to first token 1.47 s, 1,361 tok/s, lowest available memory 22,979 MiB, the code recalled.
+`/tokenize` gives 47 template tokens and 1.0 token per filler word.
+
+**Pull requests.** Step 0 has two: the plan and the probe with its test first (0a), then the compose file, the run
+script and the `run_lib.sh` change (0b). `test_moe_drop.py` now skips under `python -m unittest` when pytest is
+missing, so that `python -m unittest` passes in the venv.
 
 ## 6. Step 1: the lossless window (#1, #2, #3, FP8 draft head)
 

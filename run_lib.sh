@@ -46,7 +46,7 @@ wait_mem() {  # $1: seconds, $2: GiB (default 100); true when at least that much
 memwatch_start() {  # $1: label
   ( while true; do m=$(avail_mb); echo "$(date +%T) available_mb=$m" >> $S/logs/memory-$1.log
       if [ "$m" -lt 1024 ]; then log "MEMORY below 1 GiB ($m MB): stop the client"
-        pkill -f "model_eval.replay|model_eval.speed|acceptance_c1"; fi
+        pkill -f "model_eval.replay|model_eval.speed|acceptance_c1|prefill_probe"; fi
       sleep 30; done ) &
   MW=$!
 }
