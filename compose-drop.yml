@@ -1,0 +1,27 @@
+# The router patch of plans/PLAN_FEWER_EXPERTS.md §6, as an override of compose-mask.yml. It mounts moe_drop.py
+# and the patched router file, and passes the rule (MOE_DROP, MOE_NORM, MOE_LAYERS; defaults: no change).
+# - SERVED_MODEL_NAME ends with MOE_LABEL, so each test point has its own name (run_lib.sh speed() uses it).
+# - The KV cache is pinned at 8 GiB, as on the live server. With a pinned KV cache, GPU_MEMORY_UTILIZATION only
+#   sets vLLM's boot check (free memory >= value x 121.7 GiB); 0.93 failed that check on 2026-11-07.
+# Build the router file first: image-patch/build_router.sh (else Docker mounts an empty folder and the boot fails).
+#   MASK_NAME=botmask MASK_K=160 MOE_LABEL=fewer-c2 MOE_DROP=lowest:1 MOE_NORM=anchor:6 \
+#     docker compose -f compose-mask.yml -f compose-drop.yml up -d
+services:
+  deepseek-v4-flash-mask:
+    environment:
+      SERVED_MODEL_NAME: deepseek-v4-flash-0731-${MOE_LABEL:?set MOE_LABEL}
+      MOE_DROP: ${MOE_DROP:-none}
+      MOE_NORM: ${MOE_NORM:-kept}
+      MOE_LAYERS: ${MOE_LAYERS:-all}
+      MOE_TARGET_EXPERTS: ${MOE_TARGET_EXPERTS:-160,216}
+      GPU_MEMORY_UTILIZATION: "0.90"
+      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold 1024 --kv-cache-memory-bytes 8589934592 ${MASK_EXTRA_ARGS:-}"
+    volumes:
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/moe_drop.py"
+        target: /opt/vllm/vllm/model_executor/layers/fused_moe/router/moe_drop.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/fused_topk_bias_router.py"
+        target: /opt/vllm/vllm/model_executor/layers/fused_moe/router/fused_topk_bias_router.py
+        read_only: true

@@ -13,3 +13,5 @@ results/*
 # the step scripts of the full runs and their logs, moved from ~/.hermes-e2e on 2026-11-08 (history only)
 history/
 !results/expert_rank_bot.json
+# the patched router file, built from the image by image-patch/build_router.sh (PLAN_FEWER_EXPERTS.md §6)
+image-patch/fused_topk_bias_router.py
