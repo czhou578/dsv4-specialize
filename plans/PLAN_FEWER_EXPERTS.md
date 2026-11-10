@@ -1,6 +1,6 @@
 # Plan: Fewer experts per token, with an anchored gain
 
-**Status:** 2026-11-09: Phase B done (the router patch and its tests); the test night runs · **Author:** colin-spark · **Date:** 2026-11-09
+**Status:** 2026-11-09: Phases B and A done (the router patch, the routing profile); the test night runs · **Author:** colin-spark · **Date:** 2026-11-09
 **Related:** `PLAN_OVERNIGHT_TOPK.md` (the top-k night of 2026-11-04: top-k 4 fails), `PLAN_BETTER_RANK.md` (the
 capture patch and the run scripts), `PLAN_PHYSICAL_PRUNE.md` (the live model and its deploy), `PLAN_MODEL_SPECIALIZE.md`
 §8 in the bot repo (Phase 4, the speed axis), `PRUNE.md`
@@ -9,7 +9,7 @@ folders; test boots on port 8890 (about 6 hours of downtime in all, in three win
 
 | Step | Status |
 |---|---|
-| §5 Phase A: the routing profile (capture, about 50 min downtime) | ⬜ |
+| §5 Phase A: the routing profile (capture, about 50 min downtime) | ✅ 2026-11-09: the gate passes (§5.1) |
 | §6 Phase B: the router patch and its tests (no downtime) | ✅ 2026-11-09 (§6.1) |
 | §7 Phase C: the replay night (about 4 h downtime) | ⬜ |
 | §8 Phase D: the speed tests (about 1 h downtime) | ⬜ |
@@ -153,6 +153,54 @@ Goal: numbers that pick the thresholds and predict the speed, before any replay.
 
 **Gate.** Skip the threshold points of Phase C if no threshold reaches a mean of 4.5 or less while it keeps the
 union smaller than at top-k 5. A flat profile (the 5th share above 10% for most tokens) predicts that.
+
+### 5.1 Result (2026-11-09)
+
+`fewer_night.sh` ran Phase A from 20:20 to 21:00: the capture container on `tp1-botmask-k160` (top-k 6), healthy
+after 225 s, 92.13 GiB loaded. It captured the 63 segments of the rank data with no error: 2,063,813 computed tokens
+per layer. The profile hook added no time: each segment took the same time as in the capture of 2026-11-07.
+Files (not in git): `results/capture-profile-k160.jsonl`, `results/profile-k160.{json,md}`.
+
+The share of each rank position, in weight order inside the top 6 (all layers):
+
+| Position | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| Share of the mixture | 27.0% | 19.6% | 15.9% | 13.8% | 12.4% | 11.3% |
+
+| Layers | 5th share | 6th share | Tokens with the 5th below 10% | 6th below 5% | 6th below 10% |
+|---|---|---|---|---|---|
+| All | 12.4% | 11.3% | 16.7% | 1.7% | 28.1% |
+| 0–2 (hash) | 12.5% | 10.2% | 22.2% | 11.1% | 43.5% |
+| 3–15 | 12.3% | 11.4% | 16.4% | 0.1% | 28.0% |
+| 16–29 | 12.6% | 11.6% | 14.4% | 1.0% | 23.9% |
+| 30–42 | 12.2% | 11.3% | 18.1% | 1.8% | 29.2% |
+
+| Rule | Experts per token | Distinct experts per window of 6 tokens | Against top-k 5 |
+|---|---|---|---|
+| `none` (top-k 6) | 6.00 | 23.0 | +18.3% |
+| `lowest:1` (top-k 5) | 5.00 | 19.4 | 0 |
+| `lowest:2` (top-k 4) | 4.00 | 15.8 | −18.8% |
+| `threshold:0.10:3` | 5.48 | 21.1 | +8.7% |
+| `threshold:0.12:3` | 4.86 | 19.0 | −2.5% |
+| `threshold:0.12:4` | 5.06 | 19.7 | +1.2% |
+| `threshold:0.15:3` | 3.52 | 14.1 | −27.5% |
+| `threshold:0.15:4` | 4.17 | 16.5 | −15.3% |
+
+The thresholds 0.05 and 0.08 drop almost nothing (5.82 to 5.98 experts per token).
+
+- **The profile is flat, as §2.1 predicted.** The 5th and 6th experts hold 12.4% and 11.3% of a token's mixture.
+  Only 1.7% of the tokens have a 6th share below 5%. So a threshold drops almost nothing until it reaches the usual
+  share of about 11% to 12%, and then it drops many slots at once: T = 0.12 gives 4.86 experts, T = 0.15 gives 4.17.
+  No threshold of the grid falls between them.
+- **The hash layers differ.** In layers 0–2, the 6th share is below 5% for 11.1% of the tokens, against at most
+  1.8% in the other layers. A hash table picks a weak expert more often than the learned router does.
+- **The skills do not differ.** The 5th share is 11.7% to 12.4% and the 6th 10.5% to 11.4% in every skill.
+  `other` and `watchlist` have a few more weak 6th experts (40.5% and 37.5% of tokens below 10%).
+- **The window union shrinks with the top-k.** Six tokens at top-k 6 use 23.0 distinct experts of 160 (36 slots).
+  Top-k 4 uses 18.8% fewer than top-k 5. So a verify step reads about 19% fewer expert weights at top-k 4.
+- **The gate passes.** `threshold:0.15:4` reaches 4.17 experts per token with a window union 15.3% below top-k 5.
+  C5 uses it. The first report asked for 4.3 to 4.5 experts, which is stricter than the gate, and found no rule.
+  `profile_report.py` now follows the gate: 4.5 or less, closest to 4.4.
 
 ## 6. Phase B: the router patch and its tests
 
