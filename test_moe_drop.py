@@ -165,3 +165,20 @@ def test_capture_profile():
     assert p["prof_union"][3, 1] == top5             # layers 3-42: lowest:1 drops the last slot (selection order)
     assert torch.allclose(p["prof_pos"][3].sum(), torch.tensor(M - 1.0, dtype=torch.float64))
     assert p["prof_hist"][3].sum() == 2 * (M - 1)
+
+
+def test_anchor_on_the_live_top5_folder():
+    """C6 (PLAN_FEWER_EXPERTS.md §9): the live folder (top-k 5, 5-column hash tables) with MOE_NORM=anchor:6 only."""
+    r = rule("none", "anchor:6")
+    logits, bias = inputs()
+    w5, ids5 = stock(logits, bias, 5)
+    w, ids = md.apply(r, w5, ids5, logits, bias, False, SCALE)
+    scores = torch.sqrt(F.softplus(logits))
+    mass6 = scores.gather(1, torch.topk(scores + bias, 6).indices).sum(-1, keepdim=True)
+    assert torch.equal(ids, ids5) and torch.allclose(w, scores.gather(1, ids5.long()) / mass6 * SCALE, atol=1e-6)
+    g = torch.Generator().manual_seed(1)
+    table = torch.stack([torch.randperm(E, generator=g)[:5] for _ in range(1000)])
+    hl = inputs(1)[0]
+    hw, hids = stock(hl, None, 5, table, torch.randint(0, 1000, (M,), generator=g))
+    w2, ids2 = md.apply(r, hw, hids, hl, None, True, SCALE)   # the hash layers keep the stock rule
+    assert torch.equal(ids2, hids) and torch.allclose(w2, hw, atol=1e-6)
