@@ -5,7 +5,7 @@ It reads the files that ``fewer_night.sh`` writes to ``results/``: ``fewer-cN.js
 
     python fewer_report.py               # the Phase C table (Markdown)
     python fewer_report.py --decide      # the point for Phase D, or "none" (the table of §7)
-    python fewer_report.py --c5-norm     # the better anchor of C3 and C4, for C5
+    python fewer_report.py --c5-norm     # the best normalization at top-k 4 (kept, C3 or C4), for C5
 """
 
 import argparse
@@ -72,10 +72,11 @@ def decide(r=R):
 
 
 def c5_norm(r=R):
-    c3, c4 = point("fewer-c3", r), point("fewer-c4", r)
-    if c3 and c4:
-        return "anchor:8" if c4["nll_pct"] < c3["nll_pct"] else "anchor:6"
-    return "anchor:6" if c3 else "anchor:8" if c4 else "anchor:6"
+    """The normalization with the lowest NLL at top-k 4: ``kept`` (the plain cut, ``botmask4-k160``), ``anchor:6``
+    (C3) or ``anchor:8`` (C4). The plan named only the two anchors; on 2026-11-09 C3 lost to the plain cut."""
+    cands = {"kept": point("botmask4-k160", r), "anchor:6": point("fewer-c3", r), "anchor:8": point("fewer-c4", r)}
+    cands = {k: p for k, p in cands.items() if p}
+    return min(cands, key=lambda k: cands[k]["nll_pct"]) if cands else "anchor:6"
 
 
 def table(r=R):
