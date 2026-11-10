@@ -1,6 +1,6 @@
 # Plan: Fewer experts per token, with an anchored gain
 
-**Status:** 2026-11-10: Phases A to E done. No point is faster than the live model. The anchored top-5 (C2) is 0.71 points of replay NLL better, but the judge finds no gain in the full runs. The deploy (F) is your decision · **Author:** colin-spark · **Date:** 2026-11-09
+**Status:** 2026-11-10: done. No point is faster than the live model. The anchored top-5 (C2) is 0.71 points of replay NLL better, but the judge finds no gain in the full runs. Decision: no deploy · **Author:** colin-spark · **Date:** 2026-11-09
 **Related:** `PLAN_OVERNIGHT_TOPK.md` (the top-k night of 2026-11-04: top-k 4 fails), `PLAN_BETTER_RANK.md` (the
 capture patch and the run scripts), `PLAN_PHYSICAL_PRUNE.md` (the live model and its deploy), `PLAN_MODEL_SPECIALIZE.md`
 §8 in the bot repo (Phase 4, the speed axis), `PRUNE.md`
@@ -13,7 +13,7 @@ folders; test boots on port 8890 (about 6 hours of downtime in all, in three win
 | §6 Phase B: the router patch and its tests (no downtime) | ✅ 2026-11-09 (§6.1) |
 | §7 Phase C: the replay night (about 4 h downtime) | ✅ 2026-11-10: C2, the anchored top-5, wins; top-4 fails (§7.1) |
 | §8 Phase D: the speed tests (about 1 h downtime) | ✅ 2026-11-10: nothing faster; the anchored top-5 keeps the live speed (§8.1) |
-| §9 Phase E and F: the full runs, the review and the deploy (your decision) | ✅ E: 5 of 5 gates, judge even (§9.1); F: your decision (§9.2) |
+| §9 Phase E and F: the full runs, the review and the deploy (your decision) | ✅ E: 5 of 5 gates, judge even, review skipped (§9.1); F: no deploy (§9.2) |
 
 ---
 
@@ -435,10 +435,14 @@ judged 54 pairs, not 57: the C2 run of `ccd5f1fb` saved no report, so its three 
 - **The result for a deploy:** the judge does not confirm the replay gain of §8.1. C2 is no worse than the stock
   model, and no better than the live model.
 
-**Your blind review** of 20 pairs (`PLAN_FINAL_REVIEW.md` §7): the page is ready (`results/review-fewer-c2.html`,
-20 pairs, seed 11, key in `review-fewer-c2.key.json`). It waits for your decision of §9.2.
+**Your blind review** of 20 pairs (`PLAN_FINAL_REVIEW.md` §7): skipped. The page was ready
+(`results/review-fewer-c2.html`, 20 pairs, seed 11, key in `review-fewer-c2.key.json`). On 2026-11-10 you chose no
+deploy (§9.2), so a review could not change the result.
 
 ### 9.2 Phase F: the deploy (your decision)
+
+**Decision (2026-11-10): no deploy.** The live model stays as it is. On the same day `tp1-prune-k160` (73 GB) and
+`tp1-botmask-k160` (12 GB) were deleted. The text below records what was ready.
 
 **Ready, not done.** `tp1-prune-k160` was built on 2026-11-10 from 07:26 to 07:37, with the live server up:
 `SRC=tp1-botmask-k160 OUT=tp1-prune-k160 ./prune_run.sh`. It holds 160 experts per layer at top-k 6 (73 GB); the
@@ -460,8 +464,7 @@ build removed 28,896 tensors (21.27 GiB), and the byte-for-byte self-check passe
 
 **Recommendation: no deploy.** The tests show no gain that a user would notice, and a deploy adds a patch to the
 live server. Your blind review of §9.1 can still run (about 2 hours); it can show a loss, but it cannot make a gain
-that the judge did not see into a clear one. If you agree, the plan ends here: the live model stays, and the two test
-folders can go.
+that the judge did not see into a clear one. You agreed on 2026-11-10: the plan ends here.
 
 **The steps, if you choose to deploy** (about 45 minutes of downtime, most of it for step 1):
 
