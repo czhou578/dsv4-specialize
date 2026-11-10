@@ -390,6 +390,34 @@ cron jobs, so step F ran from 03:46, after the night; `daily-report` and `daily-
   `MOE_NORM=anchor:6` only. Layers 3–42 then get the anchor from the full score vector; the hash layers keep the
   current rule, because their tables have 5 columns. Test it as one more replay point before a deploy.
 
+### 9.1 Phase E result (2026-11-10)
+
+**Step F.** `fewer_stepf.sh` ran C2 (`tp1-botmask-k160`, `lowest:1` / `anchor:6`, the live bot-rank draft) on the
+19 held-out bot prompts, label `fewer-c2`: 03:46 to 07:23, 216 minutes (the live pick's two runs: 212 and 208). The
+live server was healthy again at 07:25. All 19 prompts exit 0, with no tool failure.
+
+| Gate | Against baseline-1 | Against baseline-2 |
+|---|---|---|
+| Tool-call validity | PASS | PASS |
+| Call order | PASS (1 `split` save) | PASS |
+| Report marker | PASS | PASS |
+| Takes JSON | PASS (0 warnings) | PASS (baseline-2: 5 warnings) |
+| Number fidelity | PASS: 2.2% of numbers unmatched (baseline 3.1%) | PASS: 2.2% (baseline 2.9%) |
+
+- The live pick failed the report marker on `54cc02` in its step F (no saved report). C2 saved it.
+- No answer has a literal `</s>` (the live pick: 1 in 40), and no run calls an unknown tool (the live pick:
+  `terminate_placeholder` once). One prompt (`ccd5f1fb`, `other`) saved no report file; the gate still passes.
+- **An outside change during the run.** At 06:20 the live `hermes-daily-watchdog` timer ran a fallback daily report,
+  because the paused cron job had made none. It wrote `daily_state.json` (`"mode": "fallback"`) and
+  `research.db`. The runner's guard marked prompt 12 (`3d277250`) `CHANGED`. The sandbox works on copies, so the
+  prompt's result does not change.
+- Downtime of the live server for Phases C, D and E: 20:20 to 01:33 and 02:01 to 07:25 (10 h 37 min in all).
+
+**The judge** runs on the live server against `baseline-1`, `baseline-2` and `baseline-3` (57 pairs, about
+5 h): JUDGE_RESULT
+
+**Your blind review** of 20 pairs (`PLAN_FINAL_REVIEW.md` §7): REVIEW_RESULT
+
 ## 10. If Phase C stops the plan
 
 - The live model stays as it is: K 160 at top-k 5.
