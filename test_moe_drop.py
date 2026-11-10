@@ -140,3 +140,28 @@ def test_patched_router():
     w, ids = router._compute_routing(hidden, logits, torch.int32)
     want = md.apply(rule("lowest:1", "anchor:6"), base[0], base[1], logits, bias, False, SCALE)
     assert torch.equal(ids, want[1]) and torch.allclose(w, want[0])
+
+def test_capture_profile():
+    """The capture hook of Phase A (PLAN_FEWER_EXPERTS.md §5) against a direct count."""
+    cap = pytest.importorskip("vllm.model_executor.layers.fused_moe.routed_experts_capturer")
+    if not hasattr(cap, "PROFILE_RULES"):
+        pytest.skip("the image's capturer is not the patched one: run ./test_moe_drop.sh")
+    from types import SimpleNamespace
+    rules = [md.parse({"MOE_DROP": r}) for r in cap.PROFILE_RULES]
+    stub = SimpleNamespace(num_experts=E, num_hash_layers=3, moe_drop=md, prof_rules=rules, prof={
+        k: torch.zeros(s, dtype=torch.float64) for k, s in {"prof_pos": (4, K), "prof_hist": (4, 2, 10),
+        "prof_valid": (4,), "prof_kept": (4, len(rules)), "prof_union": (4, len(rules)), "prof_windows": (4,)}.items()})
+    logits, bias = inputs()
+    w6, ids6 = stock(logits, bias, 6)
+    ids, w = ids6.long().clone(), w6.double()
+    ids[0, 0] = E                                    # one padded token: not counted, its window neither
+    cap.RoutedExpertsCapturer.capture_profile(stub, 3, ids, w)
+    p = stub.prof
+    assert p["prof_valid"][3] == M - 1 and p["prof_windows"][3] == M // 6 - 1
+    assert p["prof_kept"][3, 0] == 6 * (M - 1) and p["prof_kept"][3, 1] == 5 * (M - 1)
+    union = sum(len(set(ids[i:i + 6].flatten().tolist())) for i in range(6, (M // 6) * 6, 6))
+    assert p["prof_union"][3, 0] == union
+    top5 = sum(len(set(ids[i:i + 6, :5].flatten().tolist())) for i in range(6, (M // 6) * 6, 6))
+    assert p["prof_union"][3, 1] == top5             # layers 3-42: lowest:1 drops the last slot (selection order)
+    assert torch.allclose(p["prof_pos"][3].sum(), torch.tensor(M - 1.0, dtype=torch.float64))
+    assert p["prof_hist"][3].sum() == 2 * (M - 1)

@@ -6,6 +6,8 @@
 # - /models/tp1 is CAPTURE_DIR: the base data/tp1 by default (Phase 2 rank), or a mask folder (§5.2 check).
 #   The base folder is also mounted read-only at its host path, so the symlinks of a mask folder resolve.
 # - No draft mount. Port 8890, like compose-mask.yml.
+# - ROUTING_PROFILE=1 adds the routing profile of PLAN_FEWER_EXPERTS.md §5 (moe_drop.py gives the rules).
+#   CAPTURE_UTIL and CAPTURE_EXTRA_ARGS change the memory check and add vLLM flags (default: as before).
 #
 # CAUTION: only one model fits in memory. Stop the main server first
 #   (docker compose -f compose-k160t5.yml stop in its folder).
@@ -40,13 +42,14 @@ services:
       KV_FP8_ROPE: "0"
       MODE: mtp0
       VLLM_USE_B12X_WO_PROJECTION: "1"
-      GPU_MEMORY_UTILIZATION: "0.93"
+      GPU_MEMORY_UTILIZATION: "${CAPTURE_UTIL:-0.93}"
       VERIFY_MODEL_CHECKSUMS: "1"
       MAX_CUDAGRAPH_CAPTURE_SIZE: "24"
       CUDAGRAPH_CAPTURE_SIZES: "6,12,24"
       VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
-      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold 1024 --enable-return-routed-experts"
+      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold 1024 --enable-return-routed-experts ${CAPTURE_EXTRA_ARGS:-}"
       ROUTING_SUMS_FILE: /capture/routing_sums.npz   # PLAN_BETTER_RANK.md §4: the per-expert sums of counts and router weights
+      ROUTING_PROFILE: "${ROUTING_PROFILE:-0}"        # PLAN_FEWER_EXPERTS.md §5: 1 adds the routing profile to the sums
       DEFAULT_CHAT_TEMPLATE_KWARGS_THINKING: "true"
       DEFAULT_CHAT_TEMPLATE_KWARGS_EFFORT: "max"
       KV_OFFLOAD_GB: "0"
@@ -56,6 +59,10 @@ services:
       - type: bind
         source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/base_router.py"
         target: /opt/vllm/vllm/model_executor/layers/fused_moe/router/base_router.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/moe_drop.py"
+        target: /opt/vllm/vllm/model_executor/layers/fused_moe/router/moe_drop.py
         read_only: true
       - type: bind
         source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/routed_experts_capturer.py"
