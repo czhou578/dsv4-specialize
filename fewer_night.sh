@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
-# The test night of plans/PLAN_FEWER_EXPERTS.md: Phase A (§5, the routing profile) and Phase C (§7, the replay
-# points), then the restore of the live server.
+# The test night of plans/PLAN_FEWER_EXPERTS.md: Phase A (§5, the routing profile), Phase C (§7, the replay points)
+# and Phase D (§8, the speed tests of the chosen point and of the live model), then the restore of the live server.
 # All boots use tp1-botmask-k160 (K 160 at top-k 6). The safety rules and the shared functions are in run_lib.sh.
 # CAUTION: this stops the bot's model server. Start it only with the user's go:
-#   tmux new -d -s fewer "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/fewer_night.sh"
-# - PHASES (default "A C") and POINTS (default "c1 c2 c3 c4 c5 c0") select the work.
+#   tmux new -d -s fewer "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... LIVE_BY=... ~/Projects/dsv4-specialize/fewer_night.sh"
+# - PHASES (default "A C D") and POINTS (default "c1 c2 c3 c4 c5 c0") select the work.
 # - C1 boots first among the replay points: if its smoke request fails (the -1 ids in the FusedMoE glue), restore
 #   and stop.
 # - C5 takes its threshold from Phase A (results/profile-k160.json) and the better anchor of C3 and C4; no
 #   threshold: C5 is skipped (the gate of §5).
+# - Phase D: fewer_report.py --decide picks the point (§7). 5 bot decode runs on it, then the restore, then 5 runs
+#   on the live server, which must end by LIVE_BY.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/fewer-night.log}
 RESTORE_TAG=fewer
 TEST_COMPOSE="-f compose-mask.yml -f compose-drop.yml"
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
-PHASES=${PHASES:-A C}
+PHASES=${PHASES:-A C D}
 POINTS=${POINTS:-c1 c2 c3 c4 c5 c0}
+LIVE_BY=${LIVE_BY:?set LIVE_BY: the end of the live speed test}
 declare -A DROP=([c0]=none [c1]=lowest:1 [c2]=lowest:1 [c3]=lowest:2 [c4]=lowest:2)
 declare -A NORM=([c0]=kept [c1]=kept [c2]=anchor:6 [c3]=anchor:6 [c4]=anchor:8)
 export MASK_NAME=botmask MASK_K=160 MOE_LABEL=fewer-none   # compose-drop.yml needs MOE_LABEL, also for a down
@@ -123,5 +126,34 @@ if on C; then
   log "Phase C table: results/fewer-phase-c.md; decision: $(tail -1 $R/fewer-phase-c.md)"
 fi
 
+best=none
+on D && best=$($PY $S/fewer_report.py --decide)
+if [ "$best" != none ] && [ "$(now)" -lt $SPEED_BY_S ]; then
+  p=${best#fewer-}
+  [ $p = c5 ] && read -r DROP[c5] NORM[c5] < $R/fewer-c5.rule
+  export MOE_LABEL=$best-speed MOE_DROP=${DROP[$p]} MOE_NORM=${NORM[$p]}
+  log "Phase D on $best (MOE_DROP=$MOE_DROP MOE_NORM=$MOE_NORM)"
+  if stop_main && boot $best-speed; then
+    BOT_RUNS=5 speed $best-speed
+    down || { restore; exit 1; }
+  fi
+elif on D; then
+  log "Phase D: no point (decision $best) or after $SPEED_BY"
+fi
 restore
+
+if [ "$best" != none ] && on D; then  # the live server on the same night, for the same-day comparison of §8
+  label=live-$(date +%Y%m%d)
+  end=$(( $(date -d "$LIVE_BY" +%s) - $(now) ))
+  if [ $end -gt 600 ]; then
+    memwatch_start $label-speed
+    log "live bot decode test, 5 runs ($end s left)"
+    (cd $W && timeout $end $PY -m model_eval.speed --base-url http://127.0.0.1:8888 --out $R/speed-bot-$label.jsonl \
+      --runs 5 > $R/speed-bot-$label.log 2>&1)
+    log "live bot decode test exit $?: $(tail -1 $R/speed-bot-$label.log | cut -c1-200)"
+    memwatch_stop
+  else
+    log "no time for the live speed test"
+  fi
+fi
 log "fewer night done"
