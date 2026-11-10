@@ -38,10 +38,10 @@ avail_mb() { free -m | awk '/^Mem:/ {print $7}'; }
 main_running() { [ "$(docker inspect -f '{{.State.Running}}' $MAIN 2>/dev/null)" = true ]; }
 servers() { docker ps --format '{{.Names}}' | grep -E 'deepseek|dsv4'; }
 busy() { curl -s --max-time 5 http://127.0.0.1:8888/metrics | awk '/^vllm:num_requests_(running|waiting)/ {s+=$2} END {print (s>0)}'; }
-wait_mem() {  # $1: seconds; true when at least 100 GiB are available
-  local end=$(( $(now) + ${1:-180} ))
-  while [ "$(now)" -lt "$end" ]; do [ "$(avail_gib)" -ge 100 ] && return 0; sleep 5; done
-  [ "$(avail_gib)" -ge 100 ]
+wait_mem() {  # $1: seconds, $2: GiB (default 100); true when at least that much memory is available
+  local end=$(( $(now) + ${1:-180} )) need=${2:-100}
+  while [ "$(now)" -lt "$end" ]; do [ "$(avail_gib)" -ge "$need" ] && return 0; sleep 5; done
+  [ "$(avail_gib)" -ge "$need" ]
 }
 memwatch_start() {  # $1: label
   ( while true; do m=$(avail_mb); echo "$(date +%T) available_mb=$m" >> $S/logs/memory-$1.log
@@ -74,7 +74,8 @@ stop_main() {  # stop the main server when the bot is idle (up to 30 min); 9 on 
 boot() {  # $1: label; 0 healthy, 1 boot failed (down done), 9 safety failure
   local label=$1 ok=0 t0 boot_log=$R/boot-$1.log
   if servers > /dev/null; then log "ERROR: a server container runs: $(servers | tr '\n' ' ')"; return 9; fi
-  wait_mem 300 || { log "ERROR: less than 100 GiB available ($(avail_gib))"; return 9; }
+  # BOOT_MIN_GIB: a test boot at util 0.90 needs 109.5 GiB free (vLLM's boot check); the restore keeps 100
+  wait_mem 300 "${BOOT_MIN_GIB:-100}" || { log "ERROR: less than ${BOOT_MIN_GIB:-100} GiB available ($(avail_gib))"; return 9; }
   log "boot $label ($(avail_gib) GiB available)"
   (cd $S && docker compose $TEST_COMPOSE up -d) >> "$LOG" 2>&1
   t0=$(now)
