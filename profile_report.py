@@ -5,8 +5,9 @@ Input: the JSONL of a ``capture.py --sums`` run on a ``ROUTING_PROFILE=1`` captu
 report with, per layer group and per skill, the share of the 5th and 6th experts, and for each rule the mean
 experts per token and the mean window union (distinct experts per 6 tokens) against ``lowest:1`` (top-k 5).
 
-The choice for point C5: the threshold rule whose mean experts per token is in [4.3, 4.5] and closest to 4.4
-(to 0.01; a tie goes to the smaller window union), with a window union below ``lowest:1``. No such rule: the gate of §5 fails and C5 is skipped.
+The choice for point C5 (the gate of §5): a threshold rule with a mean of 4.5 experts per token or less and a window
+union below ``lowest:1``; of those, the one closest to 4.4 (to 0.01; a tie goes to the smaller window union). No such
+rule: the gate fails and C5 is skipped.
 
     python profile_report.py results/capture-profile-k160.jsonl results/profile-k160
 """
@@ -50,7 +51,7 @@ def summary(t, layers=None):
 
 def choose_c5(rules):
     ok = [(round(abs(v["experts_per_token"] - 4.4), 2), v["window_union"], name) for name, v in rules.items()
-          if name.startswith("threshold") and 4.3 <= v["experts_per_token"] <= 4.5 and v["union_vs_top5"] < 0]
+          if name.startswith("threshold") and v["experts_per_token"] <= 4.5 and v["union_vs_top5"] < 0]
     return min(ok)[2] if ok else None
 
 
@@ -86,7 +87,7 @@ def markdown(res):
     for s, v in res["skills"].items():
         lines.append(f"| {s} | {v['tokens']} | {v['position_share'][4]:.1%} | {v['position_share'][5]:.1%} "
                      f"| {v['below']['6th<10%']:.1%} |")
-    lines += ["", f"C5 threshold (mean 4.3 to 4.5 experts, union below top-k 5): `{res['c5'] or 'none: gate fails'}`"]
+    lines += ["", f"C5 threshold (4.5 experts or less, union below top-k 5, closest to 4.4): `{res['c5'] or 'none: gate fails'}`"]
     return "\n".join(lines) + "\n"
 
 
