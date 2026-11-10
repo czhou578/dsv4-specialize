@@ -1,0 +1,41 @@
+--- a/vllm/model_executor/layers/fused_moe/router/fused_topk_bias_router.py
++++ b/vllm/model_executor/layers/fused_moe/router/fused_topk_bias_router.py
+@@ -14,6 +14,7 @@
+     get_routing_method_type,
+ )
+ from vllm.model_executor.layers.fused_moe.router.base_router import BaseRouter
++from vllm.model_executor.layers.fused_moe.router import moe_drop  # dsv4-specialize patch
+ 
+ 
+ _NATIVE_TOPK_SOFTPLUS_SQRT_EXPERT_COUNTS = frozenset(
+@@ -372,6 +373,9 @@
+         # ``shared_expert_weight``, AFTER the routed top-k is renormalized.
+         self.num_fused_shared_experts = num_fused_shared_experts
+         self.shared_expert_weight = shared_expert_weight
++        # dsv4-specialize patch (plans/PLAN_FEWER_EXPERTS.md §6): the layer index of a target router, in build
++        # order; -1 for another router (the DSpark draft). moe_drop.RULE comes from MOE_DROP, MOE_NORM, MOE_LAYERS.
++        self.moe_layer = moe_drop.next_layer(global_num_experts, hash_indices_table is not None)
+ 
+     @property
+     def routing_method_type(self) -> RoutingMethodType:
+@@ -408,6 +412,20 @@
+             routed_scaling_factor=self.routed_scaling_factor,
+         )
+ 
++        # dsv4-specialize patch: drop slots (id -1, weight 0) and re-anchor the kept weights.
++        if moe_drop.RULE.applies(self.moe_layer):
++            topk_weights, topk_ids = moe_drop.apply(
++                moe_drop.RULE,
++                topk_weights,
++                topk_ids,
++                router_logits,
++                self.e_score_correction_bias.data
++                if self.e_score_correction_bias is not None
++                else None,
++                self._hash_indices_table is not None,
++                self.routed_scaling_factor,
++            )
++
+         if self.num_fused_shared_experts > 0:
+             m = topk_ids.shape[0]
+             n = self.num_fused_shared_experts
