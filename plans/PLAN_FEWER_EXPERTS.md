@@ -438,6 +438,48 @@ judged 54 pairs, not 57: the C2 run of `ccd5f1fb` saved no report, so its three 
 **Your blind review** of 20 pairs (`PLAN_FINAL_REVIEW.md` §7): the page is ready (`results/review-fewer-c2.html`,
 20 pairs, seed 11, key in `review-fewer-c2.key.json`). It waits for your decision of §9.2.
 
+### 9.2 Phase F: the deploy (your decision)
+
+**Ready, not done.** `tp1-prune-k160` was built on 2026-11-10 from 07:26 to 07:37, with the live server up:
+`SRC=tp1-botmask-k160 OUT=tp1-prune-k160 ./prune_run.sh`. It holds 160 experts per layer at top-k 6 (73 GB); the
+build removed 28,896 tensors (21.27 GiB), and the byte-for-byte self-check passed.
+
+**For a deploy:**
+
+- C2 is 0.71 points of replay NLL better than the live folder (95% interval −1.37 to +0.02), and it passes the 5
+  full-run gates against both baselines.
+- No `</s>` leak and no unknown tool call in 19 full runs (the live pick had one of each in its review runs).
+
+**Against a deploy:**
+
+- The judge finds no gain: 18 wins and 20 losses against the stock model, where the live pick had 44 wins and 19
+  losses. Two prompts lose against all three bases; one of them for an outside reason (HTTP 403 errors).
+- The replay gain is small, and its interval touches zero.
+- The speed is 4.0% lower than the live server in the bot test: inside the 4.2% noise, but not a gain.
+- The live server gets two more mounted files (the patch), a 225 MiB larger arena and a second 73 GB folder.
+
+**Recommendation: no deploy.** The tests show no gain that a user would notice, and a deploy adds a patch to the
+live server. Your blind review of §9.1 can still run (about 2 hours); it can show a loss, but it cannot make a gain
+that the judge did not see into a clear one. If you agree, the plan ends here: the live model stays, and the two test
+folders can go.
+
+**The steps, if you choose to deploy** (about 45 minutes of downtime, most of it for step 1):
+
+1. A test boot of the folder on port 8890, with the patch and the live draft:
+   `MASK_NAME=prune MASK_K=160 MOE_LABEL=prune-k160t6 MOE_DROP=lowest:1 MOE_NORM=anchor:6
+   DRAFT_DIR=…/data/dspark-draft-k64-bot docker compose -f compose-mask.yml -f compose-drop.yml up -d`, then the
+   replay. The NLL must equal C2 within the noise, as the live prune equalled its mask (`PLAN_PHYSICAL_PRUNE.md` §6).
+2. `mv tp1-prune-k160 ~/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1-k160t6a` (the same disk).
+3. Copy `image-patch/moe_drop.py` and the built `image-patch/fused_topk_bias_router.py` into the server folder's
+   `image-patch/`, so the live server does not depend on this repo.
+4. Copy `compose-k160t5.yml` to `compose-k160t6a.yml`. Change `/models/tp1` to `data/tp1-k160t6a`, mount the two
+   files at the router paths (as `compose-drop.yml` does), and set `MOE_DROP=lowest:1`, `MOE_NORM=anchor:6` and
+   `MOE_TARGET_EXPERTS=160`. Keep the two served names, so that Hermes, its cron jobs and the gateway need no change.
+5. `docker compose -f compose-k160t5.yml stop`, then `docker compose -f compose-k160t6a.yml up -d` (about 4 min).
+6. Rollback: `docker compose -f compose-k160t6a.yml stop`, then `docker compose -f compose-k160t5.yml start`.
+
+If you do not deploy, delete `tp1-prune-k160` (73 GB) and `tp1-botmask-k160` (12 GB) when you no longer need them.
+
 ## 10. If Phase C stops the plan
 
 - The live model stays as it is: K 160 at top-k 5.
