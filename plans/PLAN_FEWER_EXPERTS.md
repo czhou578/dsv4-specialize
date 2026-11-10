@@ -1,6 +1,6 @@
 # Plan: Fewer experts per token, with an anchored gain
 
-**Status:** 2026-11-10: Phases B, A and C done: the anchored top-5 wins (−1.09% NLL against the live rule), and every cut below 5 experts fails · **Author:** colin-spark · **Date:** 2026-11-09
+**Status:** 2026-11-10: Phases B, A, C and D done: no point is faster; the anchored top-5 (C2) is better than the live model by 0.71 points of NLL at the same speed, within the noise; step F on C2 runs · **Author:** colin-spark · **Date:** 2026-11-09
 **Related:** `PLAN_OVERNIGHT_TOPK.md` (the top-k night of 2026-11-04: top-k 4 fails), `PLAN_BETTER_RANK.md` (the
 capture patch and the run scripts), `PLAN_PHYSICAL_PRUNE.md` (the live model and its deploy), `PLAN_MODEL_SPECIALIZE.md`
 §8 in the bot repo (Phase 4, the speed axis), `PRUNE.md`
@@ -12,7 +12,7 @@ folders; test boots on port 8890 (about 6 hours of downtime in all, in three win
 | §5 Phase A: the routing profile (capture, about 50 min downtime) | ✅ 2026-11-09: the gate passes (§5.1) |
 | §6 Phase B: the router patch and its tests (no downtime) | ✅ 2026-11-09 (§6.1) |
 | §7 Phase C: the replay night (about 4 h downtime) | ✅ 2026-11-10: C2, the anchored top-5, wins; top-4 fails (§7.1) |
-| §8 Phase D: the speed tests (about 1 h downtime) | ⬜ |
+| §8 Phase D: the speed tests (about 1 h downtime) | ✅ 2026-11-10: nothing faster; the anchored top-5 keeps the live speed (§8.1) |
 | §9 Phase E and F: the full runs, the review and the deploy (your decision) | ⬜ |
 
 ---
@@ -337,6 +337,45 @@ live rule, and C1 showed that the hash rule makes no difference. §8.1 tests C6 
 
 **Prediction.** Top-4 points: +5% to +9% bot decode. Threshold points: less. The anchored top-5: the same speed as
 today, plus or minus the draft effect.
+
+### 8.1 Result (2026-11-10)
+
+All bot decode tests ran on the night of 2026-11-09, 5 runs each. The night's boots (C2) used the stock DSpark draft,
+the `compose-mask.yml` default; the live server uses the bot-rank draft, which was 4% faster in the bot test
+(`PLAN_PHYSICAL_PRUNE.md` §7.1). So `fewer_stepf.sh` (§9) ran C2 again with the live draft, and it ran C6.
+
+| Run | Runtime | Draft | Bot decode | Run range | Accepted per draft | Code test |
+|---|---|---|---|---|---|---|
+| The live server (`k160t5`), 01:34–02:01 | top-k 5 | bot rank | 35.41 tok/s | 34.98–37.99 | 2.25 | not run |
+| C2, 00:58–01:31 | top-k 6, one slot dropped | stock | 33.77 tok/s | 33.06–33.84 | 2.12 | 38.88 tok/s |
+| C2, 03:13–03:46 | top-k 6, one slot dropped | bot rank | 34.01 tok/s | 32.00–36.73 | 2.26 | 38.04 tok/s |
+| C6, 02:39–03:10 | top-k 5 (the live folder) | bot rank | 34.61 tok/s | 34.13–35.13 | 2.20 | 36.53 tok/s |
+
+**C6: the smaller variant of §9 on the replay** (the live folder, `MOE_DROP=none`, `MOE_NORM=anchor:6`; boot 02:01,
+replay 02:04–02:39): summed NLL 0.4514, +1.67% against the baseline. The fair reference is the live folder
+itself, `prune5-k160` (2026-11-06): 0.4524, +1.89%. Against it, C6 is −0.21% (95% interval −0.94 to +0.52), better
+on 33 of 60 targets: no clear gain. Against the live folder, C2 is −0.71% (−1.37 to +0.02), and C6 is +0.51% against
+C2 (−0.07 to +1.10).
+
+- **No point is faster than the live server.** The top-4 and threshold points failed in Phase C, so the speed gate
+  for a faster point did not apply.
+- **The anchored top-5 keeps the live speed, within the noise.** C2 with the live draft is 4.0% slower and C6 2.3%
+  slower; the noise floor is 4.2%. The acceptance holds (2.26 and 2.20 against 2.25). The top-k 6 runtime has a
+  1,502 MiB arena (top-k 5: 1,277 MiB), and its draft runs at top-k 6.
+- **The gain needs the hash layers.** C6 anchors only layers 3–42 and gains nothing clear. C2 also drops the
+  weakest of the six hash experts by its real score and anchors layers 0–2 to the six. C1 (the real hash scores
+  without the anchor) gained nothing, so the anchor in the hash layers probably gives most of the gain. A
+  deploy of C2 needs the top-k 6 prune of §9 (a new 73 GB folder), not only a mounted file.
+- **A correction to §7.1.** The live mask (`botmask5-k160`, +2.27%) and the live folder (`prune5-k160`, +1.89%)
+  differ by run noise (−0.38%, −0.92 to +0.05). Against the live folder, C2's gain is 0.71 points, at the edge of
+  its interval.
+
+**Decision.** The gate for a same-speed point (§7 table: "the same speed as today") is a bot decode within the noise
+of the live server: at least 33.92 tok/s. C2 with the live draft passed with 34.01 tok/s, a small margin. Step F
+runs on C2 with the live draft, not on C6. `fewer_stepf.sh` stopped C6's step F 4 seconds after its start (one
+prompt folder in `~/.hermes-e2e/fewer-c6`, with no result). On 2026-11-09 the user allowed a pause of the Tuesday
+cron jobs, so step F ran from 03:46, after the night; `daily-report` and `daily-followups` were paused from 02:01 to
+09:45 on 2026-11-10, and the overnight guard moved to 09:00.
 
 ## 9. Phase E and F: the full runs, the review and the deploy
 
