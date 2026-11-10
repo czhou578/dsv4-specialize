@@ -115,13 +115,13 @@ gates_pass() {  # $1: label; both gates PASS on all 60 targets
   [ "$(grep -c '^PASS' $R/$1-compare.txt 2>/dev/null)" = 2 ] && [ "$(wc -l < $R/$1.jsonl 2>/dev/null)" -ge 60 ]
 }
 
-speed() {  # $1: label
+speed() {  # $1: label; BOT_RUNS sets the runs of the bot decode test (default 3)
   local label=$1 model=deepseek-v4-flash-0731-$1 left n
   [ "$(now)" -ge $SPEED_BY_S ] && { log "$label: after $SPEED_BY, no speed test"; return; }
   memwatch_start "$label-speed"
   left=$(( RESTORE_S - $(now) ))
   log "$label bot decode test ($left s left)"
-  (cd $W && timeout $left $PY -m model_eval.speed --base-url $URL --out $R/speed-bot-$label.jsonl --runs 3 > $R/speed-bot-$label.log 2>&1)
+  (cd $W && timeout $left $PY -m model_eval.speed --base-url $URL --out $R/speed-bot-$label.jsonl --runs ${BOT_RUNS:-3} > $R/speed-bot-$label.log 2>&1)
   log "$label bot decode test exit $?: $(tail -1 $R/speed-bot-$label.log | cut -c1-200)"
   if [ "$(now)" -ge $SPEED_BY_S ]; then
     log "$label: after $SPEED_BY, no code decode test"
