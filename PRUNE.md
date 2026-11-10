@@ -2,7 +2,8 @@
 
 Since 2026-11-06 20:35, the stock-research bot runs on a pruned copy of DeepSeek V4 Flash: 160 of 216 routed experts
 per layer, 5 experts per token in place of 6. This page records why, how the tests chose that point, and what is
-open. The work ran from 2026-11-02 to 2026-11-07. The plans in `plans/` hold the details.
+open. The work ran from 2026-11-02 to 2026-11-07. The plans in `plans/` hold the details. §6 records an extension
+of 2026-11-09 and 2026-11-10: fewer experts per token on the pruned model.
 
 This page moved here from the bot's `MODEL_PRUNE.md` on 2026-11-08. That page keeps what runs now, how to go back
 to the stock model, and how the harness measures a model.
@@ -84,3 +85,35 @@ noise, 74.09 GiB loaded.
   the bot test.
 - **K 144** (about 68 GiB) fails the NLL gate with every rank tried on 2026-11-07 (+3.29% to +3.90% against a +3%
   gate; `plans/PLAN_BETTER_RANK.md` §6). K 160 is the floor for this model without a fine-tune.
+- **The daily report job** has not run since the rename of the served model. On 2026-11-09 at 05:30, Hermes skipped
+  `daily-report` (job `89988a054346`): "global inference config drifted since this job was created (model
+  'deepseek-v4-flash-0731' -> 'deepseek-v4-flash-0731-k160t5'), and this job is unpinned". Pin the job to the new
+  model name. `daily-followups` is not affected.
+
+## 6. Extension: fewer experts per token (`plans/PLAN_FEWER_EXPERTS.md`)
+
+The prune made the model smaller, not faster: K 160 at top-k 5 decodes at about the speed of the stock model. This
+extension asked if the model can use fewer experts per token. A verify step gets about 9% faster for each expert it
+drops, but a plain cut from 5 to 4 experts cost +3.69% NLL on top of top-k 5 (`plans/PLAN_OVERNIGHT_TOPK.md`).
+
+**The tool.** A router patch (`image-patch/moe_drop.py` and `router-drop.diff`) boots the model at top-k 6 and drops
+slots by a rule. A dropped slot gets the expert id -1, and the EXL3 route pack reads no weights for it. The patch can
+also divide the kept weights by the mass of the top 6 experts in place of their own sum: gain anchoring (Chen and
+Yao 2026, https://arxiv.org/abs/2609.04575). `compose-drop.yml` mounts it on a test boot, and `fewer_night.sh` and
+`fewer_stepf.sh` run the tests.
+
+**The tests** ran from 2026-11-09 20:20 to 2026-11-10 07:25, with two short restores of the live server:
+
+| Phase | Result |
+|---|---|
+| A: the routing profile (§5.1 of the plan) | The weights inside the top 6 are flat: the 5th and 6th experts hold 12.4% and 11.3% of a token's mixture |
+| C: the replay (§7.1) | Every cut below 5 experts fails: +6.4% to +21.8% NLL against a +3% gate. At top-k 4, the anchor makes the loss larger. The anchored top-5 (C2) is the best point: +1.17% against the baseline, 0.71 points better than the live folder (95% interval −1.37 to +0.02) |
+| D: the speed (§8.1) | No point is faster than the live server. C2 runs within the noise of the live speed (−4.0%; the noise is 4.2%). The anchor on the live folder alone (C6) gains nothing clear |
+| E: the full runs (§9.1) | C2 passes all 5 gates against both baselines. The judge finds no gain: 18 wins, 20 losses and 16 ties in 54 pairs (the live pick in the same setup: 44 wins, 19 losses) |
+
+**Result.** This model cannot use fewer than 5 experts per token without training: more speed must come from
+elsewhere (a longer draft, or the second, fast model of `PLAN_MODEL_ROUTER.md` in the bot repo). The anchored top-5
+is a little better on the replay (0.71 points of NLL), but the judge does not see a gain in the full runs. A deploy
+would need a top-k 6 prune of the mask and the patch on the live server.
+On 2026-11-10 you decided: no deploy (`plans/PLAN_FEWER_EXPERTS.md` §9.2). The live model did not change, and the
+test folders were deleted.

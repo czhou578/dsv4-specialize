@@ -1,6 +1,6 @@
 # Plan: Fewer experts per token, with an anchored gain
 
-**Status:** 2026-11-10: Phases A to E done. No point is faster than the live model. The anchored top-5 (C2) is 0.71 points of replay NLL better, but the judge finds no gain in the full runs. The deploy (F) is your decision · **Author:** colin-spark · **Date:** 2026-11-09
+**Status:** 2026-11-10: done. No point is faster than the live model. The anchored top-5 (C2) is 0.71 points of replay NLL better, but the judge finds no gain in the full runs. Decision: no deploy · **Author:** colin-spark · **Date:** 2026-11-09
 **Related:** `PLAN_OVERNIGHT_TOPK.md` (the top-k night of 2026-11-04: top-k 4 fails), `PLAN_BETTER_RANK.md` (the
 capture patch and the run scripts), `PLAN_PHYSICAL_PRUNE.md` (the live model and its deploy), `PLAN_MODEL_SPECIALIZE.md`
 §8 in the bot repo (Phase 4, the speed axis), `PRUNE.md`
@@ -13,7 +13,7 @@ folders; test boots on port 8890 (about 6 hours of downtime in all, in three win
 | §6 Phase B: the router patch and its tests (no downtime) | ✅ 2026-11-09 (§6.1) |
 | §7 Phase C: the replay night (about 4 h downtime) | ✅ 2026-11-10: C2, the anchored top-5, wins; top-4 fails (§7.1) |
 | §8 Phase D: the speed tests (about 1 h downtime) | ✅ 2026-11-10: nothing faster; the anchored top-5 keeps the live speed (§8.1) |
-| §9 Phase E and F: the full runs, the review and the deploy (your decision) | ✅ E: 5 of 5 gates, judge even (§9.1); F: your decision (§9.2) |
+| §9 Phase E and F: the full runs, the review and the deploy (your decision) | ✅ E: 5 of 5 gates, judge even, review skipped (§9.1); F: no deploy (§9.2) |
 
 ---
 
@@ -435,8 +435,53 @@ judged 54 pairs, not 57: the C2 run of `ccd5f1fb` saved no report, so its three 
 - **The result for a deploy:** the judge does not confirm the replay gain of §8.1. C2 is no worse than the stock
   model, and no better than the live model.
 
-**Your blind review** of 20 pairs (`PLAN_FINAL_REVIEW.md` §7): the page is ready (`results/review-fewer-c2.html`,
-20 pairs, seed 11, key in `review-fewer-c2.key.json`). It waits for your decision of §9.2.
+**Your blind review** of 20 pairs (`PLAN_FINAL_REVIEW.md` §7): skipped. The page was ready
+(`results/review-fewer-c2.html`, 20 pairs, seed 11, key in `review-fewer-c2.key.json`). On 2026-11-10 you chose no
+deploy (§9.2), so a review could not change the result.
+
+### 9.2 Phase F: the deploy (your decision)
+
+**Decision (2026-11-10): no deploy.** The live model stays as it is. On the same day `tp1-prune-k160` (73 GB) and
+`tp1-botmask-k160` (12 GB) were deleted. The text below records what was ready.
+
+**Ready, not done.** `tp1-prune-k160` was built on 2026-11-10 from 07:26 to 07:37, with the live server up:
+`SRC=tp1-botmask-k160 OUT=tp1-prune-k160 ./prune_run.sh`. It holds 160 experts per layer at top-k 6 (73 GB); the
+build removed 28,896 tensors (21.27 GiB), and the byte-for-byte self-check passed.
+
+**For a deploy:**
+
+- C2 is 0.71 points of replay NLL better than the live folder (95% interval −1.37 to +0.02), and it passes the 5
+  full-run gates against both baselines.
+- No `</s>` leak and no unknown tool call in 19 full runs (the live pick had one of each in its review runs).
+
+**Against a deploy:**
+
+- The judge finds no gain: 18 wins and 20 losses against the stock model, where the live pick had 44 wins and 19
+  losses. Two prompts lose against all three bases; one of them for an outside reason (HTTP 403 errors).
+- The replay gain is small, and its interval touches zero.
+- The speed is 4.0% lower than the live server in the bot test: inside the 4.2% noise, but not a gain.
+- The live server gets two more mounted files (the patch), a 225 MiB larger arena and a second 73 GB folder.
+
+**Recommendation: no deploy.** The tests show no gain that a user would notice, and a deploy adds a patch to the
+live server. Your blind review of §9.1 can still run (about 2 hours); it can show a loss, but it cannot make a gain
+that the judge did not see into a clear one. You agreed on 2026-11-10: the plan ends here.
+
+**The steps, if you choose to deploy** (about 45 minutes of downtime, most of it for step 1):
+
+1. A test boot of the folder on port 8890, with the patch and the live draft:
+   `MASK_NAME=prune MASK_K=160 MOE_LABEL=prune-k160t6 MOE_DROP=lowest:1 MOE_NORM=anchor:6
+   DRAFT_DIR=…/data/dspark-draft-k64-bot docker compose -f compose-mask.yml -f compose-drop.yml up -d`, then the
+   replay. The NLL must equal C2 within the noise, as the live prune equalled its mask (`PLAN_PHYSICAL_PRUNE.md` §6).
+2. `mv tp1-prune-k160 ~/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1-k160t6a` (the same disk).
+3. Copy `image-patch/moe_drop.py` and the built `image-patch/fused_topk_bias_router.py` into the server folder's
+   `image-patch/`, so the live server does not depend on this repo.
+4. Copy `compose-k160t5.yml` to `compose-k160t6a.yml`. Change `/models/tp1` to `data/tp1-k160t6a`, mount the two
+   files at the router paths (as `compose-drop.yml` does), and set `MOE_DROP=lowest:1`, `MOE_NORM=anchor:6` and
+   `MOE_TARGET_EXPERTS=160`. Keep the two served names, so that Hermes, its cron jobs and the gateway need no change.
+5. `docker compose -f compose-k160t5.yml stop`, then `docker compose -f compose-k160t6a.yml up -d` (about 4 min).
+6. Rollback: `docker compose -f compose-k160t6a.yml stop`, then `docker compose -f compose-k160t5.yml start`.
+
+If you do not deploy, delete `tp1-prune-k160` (73 GB) and `tp1-botmask-k160` (12 GB) when you no longer need them.
 
 ## 10. If Phase C stops the plan
 
