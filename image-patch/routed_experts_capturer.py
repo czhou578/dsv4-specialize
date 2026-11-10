@@ -13,6 +13,10 @@ import os
 import torch
 
 from vllm.config import VllmConfig
+
+# dsv4-specialize patch (PLAN_FEWER_EXPERTS.md §5): the drop rules of the routing profile (moe_drop.py syntax)
+PROFILE_RULES = ("none", "lowest:1", "lowest:2") + tuple(
+    f"threshold:{t}:{n}" for t in ("0.05", "0.08", "0.10", "0.12", "0.15") for n in (3, 4))
 from vllm.distributed.parallel_state import get_tp_group
 from vllm.forward_context import get_forward_context
 from vllm.platforms import current_platform
@@ -123,6 +127,42 @@ class RoutedExpertsCapturer:
         self.sum_tokens = torch.zeros((num_layers,), dtype=torch.float64, device=dev)
         self.last_layer = num_layers - 1
         self.steps = 0
+        # dsv4-specialize patch (PLAN_FEWER_EXPERTS.md §5): the routing profile, with ROUTING_PROFILE=1. Per layer:
+        # the summed share of each rank position, histograms of the 5th and 6th share (bins of 2.5 %), and for each
+        # rule of PROFILE_RULES the kept slots and the distinct experts per window of 6 tokens (one verify step).
+        self.profile = os.environ.get("ROUTING_PROFILE", "0") == "1"
+        if self.profile:
+            from vllm.model_executor.layers.fused_moe.router import moe_drop
+            self.moe_drop, k = moe_drop, num_experts_per_tok
+            self.prof_rules = [moe_drop.parse({"MOE_DROP": r}) for r in PROFILE_RULES]
+            self.num_hash_layers = int(getattr(hf_config, "num_hash_layers", 0) or 0)
+            self.prof = {"prof_pos": (num_layers, k), "prof_hist": (num_layers, 2, 10), "prof_valid": (num_layers,),
+                         "prof_kept": (num_layers, len(PROFILE_RULES)), "prof_union": (num_layers, len(PROFILE_RULES)),
+                         "prof_windows": (num_layers,)}
+            self.prof = {key: torch.zeros(shape, dtype=torch.float64, device=dev) for key, shape in self.prof.items()}
+
+    def capture_profile(self, layer_id: int, ids: torch.Tensor, w: torch.Tensor) -> None:
+        """Add one layer's routing profile. ``ids`` [M, K] (invalid ids already E), ``w`` [M, K] float64."""
+        p, (m, k), dev = self.prof, w.shape, w.device
+        ok = (ids < self.num_experts).all(dim=-1) & (w.sum(dim=-1) > 0)
+        okf = ok.to(torch.float64)
+        shares = w / w.sum(dim=-1, keepdim=True).clamp(min=1e-30)
+        ranked = shares.sort(dim=-1, descending=True).values
+        p["prof_valid"][layer_id] += okf.sum()
+        p["prof_pos"][layer_id] += (ranked * okf[:, None]).sum(dim=0)
+        for j, col in enumerate((k - 2, k - 1)):
+            p["prof_hist"][layer_id, j].index_add_(0, (ranked[:, col] / 0.025).floor().clamp(0, 9).long(), okf)
+        # "lowest" drops by selection order: the slot order in layers 3-42 (torch.topk is sorted), the weight in 0-2
+        key = shares if layer_id < self.num_hash_layers else (k - 1 - torch.arange(k, device=dev)).double().expand(m, k)
+        nw = m // 6
+        win_ok = ok[: nw * 6].reshape(nw, 6).all(dim=-1).to(torch.float64)
+        p["prof_windows"][layer_id] += win_ok.sum()
+        for r, rule in enumerate(self.prof_rules):
+            keep = ~self.moe_drop.drop_mask(rule, shares, key) & ok[:, None]
+            p["prof_kept"][layer_id, r] += keep.sum()
+            occ = torch.zeros((nw, self.num_experts + 1), dtype=torch.float64, device=dev)
+            occ.scatter_add_(1, ids[: nw * 6].reshape(nw, 6 * k), keep[: nw * 6].reshape(nw, 6 * k).double())
+            p["prof_union"][layer_id, r] += ((occ[:, : self.num_experts] > 0).sum(dim=-1) * win_ok).sum()
 
     def capture_weights(self, layer_id: int, topk_ids: torch.Tensor, topk_weights: torch.Tensor) -> None:
         """Add this layer's choices to the running sums; after the last layer of an eager step, write the file."""
@@ -136,6 +176,8 @@ class RoutedExpertsCapturer:
         self.sum_count[layer_id].index_add_(0, ids, valid.to(torch.float64))
         self.sum_weight[layer_id].index_add_(0, ids, w)
         self.sum_tokens[layer_id] += topk_ids.shape[0]
+        if self.profile:
+            self.capture_profile(layer_id, ids.reshape(topk_ids.shape), w.reshape(topk_ids.shape))
         if layer_id == self.last_layer:
             self.steps += 1
             self.flush_sums()
@@ -148,7 +190,8 @@ class RoutedExpertsCapturer:
         tmp = self.sums_file + ".tmp.npz"  # np.savez keeps a name that ends with .npz
         np.savez(tmp, count=self.sum_count[:, : self.num_experts].cpu().numpy(),
                  weight=self.sum_weight[:, : self.num_experts].cpu().numpy(),
-                 tokens=self.sum_tokens.cpu().numpy(), steps=np.array(self.steps))
+                 tokens=self.sum_tokens.cpu().numpy(), steps=np.array(self.steps),
+                 **({key: t.cpu().numpy() for key, t in self.prof.items()} if self.profile else {}))
         os.replace(tmp, self.sums_file)
 
     def capture(self, layer_id: int, topk_ids: torch.Tensor) -> None:

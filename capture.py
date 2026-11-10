@@ -84,8 +84,8 @@ def read_sums(path):
         return None
     for _ in range(20):  # a rename is atomic, but the file can be mid-write on another filesystem
         try:
-            with np.load(path) as z:
-                return {k: z[k].copy() for k in ("count", "weight", "tokens", "steps")}
+            with np.load(path) as z:  # the prof_* arrays are there with ROUTING_PROFILE=1 (PLAN_FEWER_EXPERTS.md §5)
+                return {k: z[k].copy() for k in z.files}
         except (ValueError, EOFError, OSError):
             time.sleep(0.1)
     raise RuntimeError(f"{path}: cannot read the sums file")
@@ -98,7 +98,8 @@ def sums_delta(before, after):
     return {"wcount": (after["count"] - before["count"]).astype(np.int64).tolist(),
             "weight": np.round(after["weight"] - before["weight"], 5).tolist(),
             "computed_tokens": (after["tokens"] - before["tokens"]).astype(np.int64).tolist(),
-            "steps": int(after["steps"] - before["steps"])}
+            "steps": int(after["steps"] - before["steps"]),
+            **{k: np.round(after[k] - before.get(k, 0), 3).tolist() for k in after if k.startswith("prof_")}}
 
 
 def count(routed, start=0, experts=EXPERTS):

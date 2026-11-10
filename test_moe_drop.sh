@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run test_moe_drop.py in the server image, with the patched router mounted (plans/PLAN_FEWER_EXPERTS.md §6).
+# Run test_moe_drop.py in the server image, with the patched router and capturer mounted (plans/PLAN_FEWER_EXPERTS.md §6).
 # Build the router file first: image-patch/build_router.sh. The CUDA graph test needs a few MB of GPU memory.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -9,4 +9,5 @@ R=/opt/vllm/vllm/model_executor/layers/fused_moe/router
 docker run --rm --gpus all --entrypoint python -v "$PWD:/s:ro" -w /s -e PYTHONDONTWRITEBYTECODE=1 \
   -v "$PWD/image-patch/moe_drop.py:$R/moe_drop.py:ro" \
   -v "$PWD/image-patch/fused_topk_bias_router.py:$R/fused_topk_bias_router.py:ro" \
+  -v "$PWD/image-patch/routed_experts_capturer.py:${R%/router}/routed_experts_capturer.py:ro" \
   "$IMAGE" -m pytest -q -p no:cacheprovider test_moe_drop.py "$@"
