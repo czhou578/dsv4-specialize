@@ -1,6 +1,6 @@
 # Plan: Fewer experts per token, with an anchored gain
 
-**Status:** 2026-11-09: Phases B and A done (the router patch, the routing profile); the test night runs · **Author:** colin-spark · **Date:** 2026-11-09
+**Status:** 2026-11-10: Phases B, A and C done: the anchored top-5 wins (−1.09% NLL against the live rule), and every cut below 5 experts fails · **Author:** colin-spark · **Date:** 2026-11-09
 **Related:** `PLAN_OVERNIGHT_TOPK.md` (the top-k night of 2026-11-04: top-k 4 fails), `PLAN_BETTER_RANK.md` (the
 capture patch and the run scripts), `PLAN_PHYSICAL_PRUNE.md` (the live model and its deploy), `PLAN_MODEL_SPECIALIZE.md`
 §8 in the bot repo (Phase 4, the speed axis), `PRUNE.md`
@@ -11,7 +11,7 @@ folders; test boots on port 8890 (about 6 hours of downtime in all, in three win
 |---|---|
 | §5 Phase A: the routing profile (capture, about 50 min downtime) | ✅ 2026-11-09: the gate passes (§5.1) |
 | §6 Phase B: the router patch and its tests (no downtime) | ✅ 2026-11-09 (§6.1) |
-| §7 Phase C: the replay night (about 4 h downtime) | ⬜ |
+| §7 Phase C: the replay night (about 4 h downtime) | ✅ 2026-11-10: C2, the anchored top-5, wins; top-4 fails (§7.1) |
 | §8 Phase D: the speed tests (about 1 h downtime) | ⬜ |
 | §9 Phase E and F: the full runs, the review and the deploy (your decision) | ⬜ |
 
@@ -274,6 +274,57 @@ baseline; decisions not below the baseline by more than the noise (3).
 | Only C2 passes and beats C1 by more than 0.23 points | Phase D on C2: the same speed as today, a better model |
 | C3 or C4 misses the gate by less than 0.5 points | A second night: `lowest:2` on one layer group at a time (3–15, 16–29, 30–42), then on the two most robust groups |
 | Nothing passes, and C2 does not beat C1 | Stop (§10) |
+
+### 7.1 Result (2026-11-09 to 2026-11-10)
+
+`fewer_night.sh` ran the points from 21:00 to 00:55, each on `tp1-botmask-k160` (top-k 6) with the patch. Every
+boot log had the 43 `[moe_drop]` lines, with hash tables in layers 0–2 only. Replay against `baseline-k216.jsonl`
+(summed NLL 0.4440); the 95% intervals are paired bootstraps over the 60 targets:
+
+| Point | Rule | Experts per token | Summed NLL | Reasoning | Answer | Decisions (of 60) | Tool names | Gates |
+|---|---|---|---|---|---|---|---|---|
+| C0 | `none` / `kept` | 6 | +1.31% | +0.67% | +2.40% | 41 → 43 | 92.8% | pass |
+| C1 | `lowest:1` / `kept` | 5 | +2.16% | +1.91% | +2.59% | 41 → 42 | 95.2% | pass |
+| **C2** | **`lowest:1` / `anchor:6`** | **5** | **+1.17%** | **+0.80%** | **+1.79%** | **41 → 41** | **95.2%** | **pass** |
+| C3 | `lowest:2` / `anchor:6` | 4 | +8.20% | +7.33% | +9.76% | 41 → 29 | 96.4% | fail |
+| C4 | `lowest:2` / `anchor:8` | 4 | +21.80% | +20.31% | +24.43% | 41 → 32 | 94.0% | fail |
+| C5 | `threshold:0.15:4` / `kept` | 4.17 | +6.37% | +6.81% | +5.60% | 41 → 38 | 95.2% | fail |
+| Reference: the top-6 mask (2026-11-03) | | 6 | +1.37% | +0.94% | +2.17% | 41 → 43 | 94.0% | pass |
+| Reference: the live rule, top-5 (2026-11-04) | | 5 | +2.27% | +2.31% | +2.21% | 41 → 42 | 95.2% | pass |
+| Reference: the plain top-4 (2026-11-04) | | 4 | +6.04% | +6.03% | +6.06% | 41 → 39 | 95.2% | fail |
+
+| Comparison (summed NLL) | Change | 95% interval |
+|---|---|---|
+| C0 against the top-6 mask (the patch with the rule `none`; the pinned KV cache) | −0.08% | −0.50 to +0.28 |
+| C1 against the live rule (real hash scores against the estimate) | −0.11% | −0.77 to +0.42 |
+| C2 against C1 (the anchor at top-5) | −0.97% | −1.59 to −0.29 |
+| C2 against the live rule | −1.09% | −1.79 to −0.42 |
+| C2 against the top-6 mask | −0.22% | −0.78 to +0.47 |
+| C3 against the plain top-4 (the anchor at top-4) | +2.03% | +0.08 to +4.13 |
+| C5 against the plain top-4 (4.17 experts, dynamic, against 4) | +0.31% | −0.30 to +1.03 |
+
+- **The patch works.** The -1 slots run through the FusedMoE glue and the CUDA graphs: C1's first rows matched the
+  live rule, and no boot or request failed. C0 (the patch with the rule `none`, and the KV cache pinned at
+  8 GiB) equals the top-6 mask of 2026-11-03. C1 equals the live rule: the hash estimate of `topk_checkpoint.py`
+  cost nothing that the replay can see.
+- **The anchored top-5 (C2) is the best point.** It beats C1 by 0.97 points, four times the run noise, and it is
+  better on 44 of 60 targets and in every skill except `stock-update` (+0.29%). It is as good as the top-6 mask. The
+  turns without a tool call cost +0.01% against the baseline (C1: +2.13%); the tool-call turns +1.60% (C1: +2.17%).
+- **Every point below 5 experts fails.** At top-4, the anchor does harm: `anchor:6` costs 2 points more than the
+  plain cut, and `anchor:8` (a smaller gain still) costs +21.8%. C3 and C4 also lost 12 and 9 of the 41 good decisions. The
+  dynamic threshold (C5) is no better than the static top-4 at about the same mean, as the study of §2.3 found. A
+  probable reason: at top-5 the kept experts hold about 89% of the six-expert mass, and the anchor keeps their
+  trained gain; at top-4 they hold about 76%, and the missing mass hurts more than the boost of a renormalization.
+- **The smoke request.** C0, C1, C2 and C3 answered "17" to "What is 17 times 3?" with thinking off; C4 and C5
+  answered 51. C0 has the patch off, so this is a habit of the model with thinking off, not a fault of the patch.
+- **Changes against the plan.** C5 took `kept`, not the better of the two anchors: C3 had lost to the plain top-4
+  by then, so the anchors were the weaker rules at top-4 (`fewer_report.py --c5-norm`). C0 ran last, because the
+  unit tests already showed that the rule `none` does not run.
+
+**Decision (§7 table).** C3, C4 and C5 fail. C2 passes and beats C1 by more than the noise: Phase D on C2. The
+deploy would use the smaller variant of §9 (C6: the live folder with `MOE_NORM=anchor:6` only), because it keeps
+the live arena and the live draft. In layers 3–42, C6 computes the same weights as C2; only the hash layers keep the
+live rule, and C1 showed that the hash rule makes no difference. §8.1 tests C6 on the replay before Phase D and E.
 
 ## 8. Phase D: the speed tests
 
