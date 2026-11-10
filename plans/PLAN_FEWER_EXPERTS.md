@@ -1,6 +1,6 @@
 # Plan: Fewer experts per token, with an anchored gain
 
-**Status:** 2026-11-10: Phases B, A, C and D done: no point is faster; the anchored top-5 (C2) is better than the live model by 0.71 points of NLL at the same speed, within the noise; step F on C2 runs · **Author:** colin-spark · **Date:** 2026-11-09
+**Status:** 2026-11-10: Phases A to E done. No point is faster than the live model. The anchored top-5 (C2) is 0.71 points of replay NLL better, but the judge finds no gain in the full runs. The deploy (F) is your decision · **Author:** colin-spark · **Date:** 2026-11-09
 **Related:** `PLAN_OVERNIGHT_TOPK.md` (the top-k night of 2026-11-04: top-k 4 fails), `PLAN_BETTER_RANK.md` (the
 capture patch and the run scripts), `PLAN_PHYSICAL_PRUNE.md` (the live model and its deploy), `PLAN_MODEL_SPECIALIZE.md`
 §8 in the bot repo (Phase 4, the speed axis), `PRUNE.md`
@@ -13,7 +13,7 @@ folders; test boots on port 8890 (about 6 hours of downtime in all, in three win
 | §6 Phase B: the router patch and its tests (no downtime) | ✅ 2026-11-09 (§6.1) |
 | §7 Phase C: the replay night (about 4 h downtime) | ✅ 2026-11-10: C2, the anchored top-5, wins; top-4 fails (§7.1) |
 | §8 Phase D: the speed tests (about 1 h downtime) | ✅ 2026-11-10: nothing faster; the anchored top-5 keeps the live speed (§8.1) |
-| §9 Phase E and F: the full runs, the review and the deploy (your decision) | ⬜ |
+| §9 Phase E and F: the full runs, the review and the deploy (your decision) | ✅ E: 5 of 5 gates, judge even (§9.1); F: your decision (§9.2) |
 
 ---
 
@@ -413,10 +413,30 @@ live server was healthy again at 07:25. All 19 prompts exit 0, with no tool fail
   prompt's result does not change.
 - Downtime of the live server for Phases C, D and E: 20:20 to 01:33 and 02:01 to 07:25 (10 h 37 min in all).
 
-**The judge** runs on the live server against `baseline-1`, `baseline-2` and `baseline-3` (57 pairs, about
-5 h): JUDGE_RESULT
+**The judge** ran on the live server from 07:25 to 12:27 against `baseline-1`, `baseline-2` and `baseline-3`. It
+judged 54 pairs, not 57: the C2 run of `ccd5f1fb` saved no report, so its three pairs drop out. No pair had an error.
 
-**Your blind review** of 20 pairs (`PLAN_FINAL_REVIEW.md` §7): REVIEW_RESULT
+| Pairs | Wins | Losses | Ties |
+|---|---|---|---|
+| Against `baseline-1` | 5 | 3 | 10 |
+| Against `baseline-2` | 7 | 8 | 3 |
+| Against `baseline-3` | 6 | 9 | 3 |
+| **All 54** | **18** | **20** | **16** (38 decided, p_loss 0.44) |
+
+- **Rule 1 of `PLAN_FINAL_REVIEW.md` §2.3 passes.** The fail line for 38 decided pairs is 25 losses.
+- **No gain.** The live pick had 44 wins, 19 losses and 51 ties in 114 pairs of the same setup. Its runs were 1 to
+  2 days after the baselines, and C2's run was 5 to 7 days after them, so the data dates differ. Against
+  `baseline-3` alone (the nearest date), the live pick had 10 wins and 9 losses; C2 has 6 wins and 9 losses.
+- **Two prompts lose against all three bases** (the live pick had none):
+  - `quant-drift`: the data source returned HTTP 403 errors on 2026-11-10, so C2's answer has a tiny peer sample
+    and many warnings. This is an outside failure, not a fault of the model.
+  - `54cc02` (the subagent research prompt of §15.9 of `PLAN_E2E_RUNNER.md`): the judge names typos, padding and a
+    missing backlog figure ($15.0B) in C2's answer.
+- **The result for a deploy:** the judge does not confirm the replay gain of §8.1. C2 is no worse than the stock
+  model, and no better than the live model.
+
+**Your blind review** of 20 pairs (`PLAN_FINAL_REVIEW.md` §7): the page is ready (`results/review-fewer-c2.html`,
+20 pairs, seed 11, key in `review-fewer-c2.key.json`). It waits for your decision of §9.2.
 
 ## 10. If Phase C stops the plan
 
