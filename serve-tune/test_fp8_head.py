@@ -1,4 +1,4 @@
-"""Tests of the FP8 head of the target (plans/PLAN_SERVE_TUNE.md §7.2). They need torch, vLLM and a GPU: run
+"""Tests of the FP8 head of the target (PLAN_SERVE_TUNE.md §7.2). They need torch, vLLM and a GPU: run
 ./test_fp8_head.sh, which runs them in the server image (about 0.3 GB of GPU memory, safe beside the live server).
 """
 

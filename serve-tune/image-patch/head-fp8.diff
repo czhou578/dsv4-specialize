@@ -4,7 +4,7 @@
          self.model.finalize_mega_moe_weights()
          self.model.finalize_mhc_broadcast_weights()
          self.model.setup_b12x_wo_projection()
-+        # dsv4-specialize patch (plans/PLAN_SERVE_TUNE.md §7.2): FP8_TARGET_HEAD=1 gives the head (and the DSpark
++        # dsv4-specialize patch (serve-tune/PLAN_SERVE_TUNE.md §7.2): FP8_TARGET_HEAD=1 gives the head (and the DSpark
 +        # draft, which shares the head module) a rowwise-FP8 copy and frees the BF16 weight.
 +        from vllm.model_executor.layers import fp8_target_head
 +        if fp8_target_head.enabled() and isinstance(self.lm_head, ParallelLMHead):

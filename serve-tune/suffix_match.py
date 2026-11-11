@@ -1,4 +1,4 @@
-"""Count the suffix matches in the bot's recorded sessions (plans/PLAN_SERVE_TUNE.md §8.1).
+"""Count the suffix matches in the bot's recorded sessions (PLAN_SERVE_TUNE.md §8.1).
 
 The script tokenizes the sessions of ``model_eval/data/rank/sessions.jsonl`` and puts them in one token stream,
 the oldest ``started_at`` first. Each message is one piece. An output piece is a turn that the model wrote:

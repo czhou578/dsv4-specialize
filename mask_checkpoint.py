@@ -4,7 +4,7 @@ The mask keeps K of the 216 routed experts per layer. The 216 - K experts with t
 in ``REAP_K216_PLAN.json`` drop out; the mandatory experts of the two tool categories always stay.
 With ``--rank expert_rank_bot.json`` (``capture.py``, plan §6.5), the least used experts of the
 bot's traffic drop out instead, under the same mandatory rule; the folder is then ``tp1-botmask-k{K}``.
-With ``--keep-per-layer`` (a JSON list of 43 K values from ``alloc_k.py``, PLAN_SERVE_TUNE.md §7.3),
+With ``--keep-per-layer`` (a JSON list of 43 K values from ``serve-tune/alloc_k.py``, serve-tune/PLAN_SERVE_TUNE.md §7.3),
 each layer keeps its own K. ``MASK.json`` then records the list and its mean.
 
 - Layers 3-42 (learned router): ``gate.bias[e] = -1e4`` for each dropped expert ``e``. The router
@@ -219,7 +219,7 @@ def main(argv=None):
     k_option = parser.add_mutually_exclusive_group(required=True)
     k_option.add_argument("--keep", type=int, help="experts kept per layer (K)")
     k_option.add_argument("--keep-per-layer", type=Path, metavar="FILE",
-                          help="JSON list of one K per layer (alloc_k.py); needs --out")
+                          help="JSON list of one K per layer (serve-tune/alloc_k.py); needs --out")
     parser.add_argument("--base", type=Path, default=BASE)
     parser.add_argument("--rank", type=Path, help="expert_rank_bot.json; default: the REAP rank")
     parser.add_argument("--out", type=Path,

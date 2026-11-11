@@ -1,4 +1,4 @@
-"""The FP8 head of the target model (plans/PLAN_SERVE_TUNE.md §7.2, idea #4).
+"""The FP8 head of the target model (serve-tune/PLAN_SERVE_TUNE.md §7.2, idea #4).
 
 After the weights load, ``install`` makes a rowwise-FP8 copy of the head (``lm_head``, 129,280 x 4,096 BF16,
 0.99 GiB) and frees the BF16 weight. The copy becomes the ``quant_method`` of the head, so every logits path reads it:

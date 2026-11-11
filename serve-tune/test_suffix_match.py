@@ -1,4 +1,4 @@
-"""Tests of suffix_match.py (plans/PLAN_SERVE_TUNE.md §8.1), on synthetic token lists."""
+"""Tests of suffix_match.py (PLAN_SERVE_TUNE.md §8.1), on synthetic token lists."""
 
 import unittest
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The wide-draft window of plans/PLAN_SERVE_TUNE.md §8.2 (#7) on port 8890, then the restore of the live server.
+# The wide-draft window of PLAN_SERVE_TUNE.md §8.2 (#7) on port 8890, then the restore of the live server.
 # Each point boots the live folder with compose-tune.yml at the live settings, with one draft and one depth, and
 # runs the graph check, bot decode x 5 and the code test:
 #   D0  the live draft (dspark-draft-k64-bot) at depth 5: the reference
@@ -7,12 +7,12 @@
 # The depth cannot go below 5, the block size of the drafts (§3). Build the wide drafts first (§8.2, result).
 # CAUTION: this stops the bot's model server for about 3 h 15 min. Start it only with the user's go, not
 # 05:00-10:00 on weekdays, and not during another test:
-#   tmux new -d -s draft "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/tune_draft.sh"
+#   tmux new -d -s draft "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/serve-tune/tune_draft.sh"
 # POINTS (default "d0:k64:5 w1:k96:5 w2:k96:6 w3:k128:5 w4:k128:6") lists the points as name:draft:depth.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/tune-draft.log}
 RESTORE_TAG=draft-wide
-TEST_COMPOSE="-f compose-mask.yml -f compose-tune.yml"
-source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
+TEST_COMPOSE="-f compose-mask.yml -f serve-tune/compose-tune.yml"
+source "$(cd "$(dirname "$0")/.." && pwd)/run_lib.sh"   # run_lib.sh is in the repo root
 
 POINTS=${POINTS:-d0:k64:5 w1:k96:5 w2:k96:6 w3:k128:5 w4:k128:6}
 NOISE=0.042                        # the noise floor of the bot decode test

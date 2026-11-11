@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The lossless window of plans/PLAN_SERVE_TUNE.md §6 (Step 1): the live folder (tp1-prune5b-k160) and the bot draft
+# The lossless window of PLAN_SERVE_TUNE.md §6 (Step 1): the live folder (tp1-prune5b-k160) and the bot draft
 # on port 8890 at five points, then the restore of the live server.
 #   T0  the live settings (depth 5): the reference. Graph check, prefill probe, bot decode x 5, code test
 #   T1  depth 3 (graph sizes 4,8,16): graph check, smoke, bot decode x 5, code test
@@ -7,18 +7,19 @@
 #   T3  the fastest valid depth of T0-T2, with the FP8 draft head: graph and head checks, bot decode x 5, code test
 #   T4  that depth, the head only if T3 beat its base by more than the noise, KV pin 7.25 GiB, prefill chunk 8224:
 #       graph check, smoke, prefill probe, bot decode x 3, code test. If T4 does not boot, T4b has the 8 GiB pin.
-# run_lib.sh runs docker compose in ~/Projects/dsv4-specialize, so compose-tune.yml and prefill_probe.py must be there.
+# run_lib.sh runs docker compose in the repo root (~/Projects/dsv4-specialize); this folder holds compose-tune.yml and
+# prefill_probe.py.
 # CAUTION: this stops the bot's model server for about 3.5 h. Start it only with the user's go, not 05:00-10:00 on
 # weekdays, and not during another test:
-#   tmux new -d -s tune "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/tune_night.sh"
+#   tmux new -d -s tune "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/serve-tune/tune_night.sh"
 # POINTS (default "t0 t3 t4") selects the points. Without T0-T3, set BEST_DEPTH and T4_HEAD for T4.
 # T1 and T2 are not in the default: the image refuses a depth below the draft's dspark_block_size (5 for the live
 # draft), because a smaller depth gives incorrect output (vllm/config/speculative.py). Use them with a draft of a
 # smaller block size only.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/tune-night.log}
 RESTORE_TAG=tune
-TEST_COMPOSE="-f compose-mask.yml -f compose-tune.yml"
-source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
+TEST_COMPOSE="-f compose-mask.yml -f serve-tune/compose-tune.yml"
+source "$(cd "$(dirname "$0")/.." && pwd)/run_lib.sh"   # run_lib.sh is in the repo root
 
 POINTS=${POINTS:-t0 t3 t4}
 NOISE=0.042                        # the noise floor of the bot decode test
@@ -37,7 +38,7 @@ probe() {  # $1 label, $2 kind (probe|smoke), the rest: prefill_probe.py argumen
   local label=$1 kind=$2 left=$(( RESTORE_S - $(now) )) rc n; shift 2
   [ $left -le $([ $kind = probe ] && echo 900 || echo 120) ] && { log "$label: no time for the $kind"; return; }
   memwatch_start "$label-$kind"
-  timeout $left $PY $S/prefill_probe.py --base-url $URL --model deepseek-v4-flash-0731-$label \
+  timeout $left $PY $S/serve-tune/prefill_probe.py --base-url $URL --model deepseek-v4-flash-0731-$label \
     --out $R/$kind-$label.json "$@" > /dev/null 2> $R/$kind-$label.err; rc=$?
   memwatch_stop
   n=$(docker logs $MASK 2>&1 | grep -cE 'AssertionError|Workspace is locked')
@@ -83,7 +84,7 @@ run() {  # tpoint with the rules of run_lib.sh: two failed boots in a row, or a 
 }
 
 log "tune night start (points $POINTS; boot by $BOOT_BY; speed by $SPEED_BY; restore at $RESTORE_AT)"
-for need in $S/compose-tune.yml $S/prefill_probe.py $S/tp1-prune5b-k160/rank-sliced-tp1-manifest.json; do
+for need in $S/serve-tune/compose-tune.yml $S/serve-tune/prefill_probe.py $S/tp1-prune5b-k160/rank-sliced-tp1-manifest.json; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done

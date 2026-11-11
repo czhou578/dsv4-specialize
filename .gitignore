@@ -15,7 +15,7 @@ history/
 !results/expert_rank_bot.json
 # the patched router file, built from the image by image-patch/build_router.sh (PLAN_FEWER_EXPERTS.md §6)
 image-patch/fused_topk_bias_router.py
-# the patched model file of the FP8 head, built from the image by image-patch/build_head.sh (PLAN_SERVE_TUNE.md §7.2)
-image-patch/deepseek_v4_model.py
-# the wide DSpark drafts of PLAN_SERVE_TUNE.md §8.2 (4-6 GB each), built from the image with the plan file in results/
+# the patched model file of the FP8 head, built from the image by serve-tune/image-patch/build_head.sh (serve-tune/PLAN_SERVE_TUNE.md §7.2)
+serve-tune/image-patch/deepseek_v4_model.py
+# the wide DSpark drafts of serve-tune/PLAN_SERVE_TUNE.md §8.2 (4-6 GB each), built from the image with the plan file in results/
 dspark-draft-*/
