@@ -1,7 +1,7 @@
 # weight folders (12-73 GB each): built by mask_checkpoint.py, topk_checkpoint.py, prune_experts.py
 tp1-*/
 tp1-*
-# the kernel cache copy (README step 3), the capture output, logs, backups, bytecode
+# the kernel cache copy (RUNBOOK.md, "One mask test by hand", step 3), the capture output, logs, backups, bytecode
 cache/
 capture-out/
 *.log
