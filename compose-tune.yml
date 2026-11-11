@@ -1,0 +1,18 @@
+# The test points of plans/PLAN_SERVE_TUNE.md §6, as an override of compose-mask.yml. The defaults are the live
+# settings: draft depth 5, graph sizes 6,12,24, no FP8 draft head, an 8 GiB KV pin, prefill chunks of 1024 tokens.
+# - SERVED_MODEL_NAME ends with TUNE_LABEL, so each point has its own name (run_lib.sh speed() uses it).
+# - The graph sizes must be multiples of depth + 1, so the verify step gets a full graph (tune_night.sh sets them).
+# - The KV cache is pinned, as on the live server. GPU_MEMORY_UTILIZATION then only sets vLLM's boot check.
+# - MAX_NUM_BATCHED_TOKENS stays at 8224 (compose-mask.yml): it also sizes the locked MLA workspace (server README).
+#   MASK_NAME=prune5b MASK_K=160 DRAFT_DIR=.../data/dspark-draft-k64-bot TUNE_LABEL=tune-t1 TUNE_DEPTH=3 \
+#     TUNE_GRAPH_SIZES=4,8,16 TUNE_GRAPH_MAX=16 docker compose -f compose-mask.yml -f compose-tune.yml up -d
+services:
+  deepseek-v4-flash-mask:
+    environment:
+      SERVED_MODEL_NAME: deepseek-v4-flash-0731-${TUNE_LABEL:?set TUNE_LABEL}
+      DSPARK_TOKENS: "${TUNE_DEPTH:-5}"
+      CUDAGRAPH_CAPTURE_SIZES: "${TUNE_GRAPH_SIZES:-6,12,24}"
+      MAX_CUDAGRAPH_CAPTURE_SIZE: "${TUNE_GRAPH_MAX:-24}"
+      DSPARK_FP8_DRAFT_HEAD: "${TUNE_FP8_DRAFT_HEAD:-0}"
+      GPU_MEMORY_UTILIZATION: "0.90"
+      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold ${TUNE_PREFILL:-1024} --kv-cache-memory-bytes ${TUNE_KV_BYTES:-8589934592} ${MASK_EXTRA_ARGS:-}"
