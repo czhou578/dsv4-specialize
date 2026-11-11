@@ -309,6 +309,12 @@ python -m unittest
   with a hyphen, so this file adds the folder to the path.
 - `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM. `./test_moe_drop.sh` runs it in
   the server image.
+- `test_loader_patch.py` (the loader patch, `plans/PLAN_LOADER_PATCH.md` §5.2) also needs vLLM. Build
+  `image-patch/perlayer/` first with `image-patch/build_perlayer.sh`, then `./test_loader_patch.sh` runs it in the
+  server image.
+- `./loader_kernel_check.sh` runs the GPU check of §5.3 (`loader_kernel_check.py`): the real experts of one layer of
+  the K 160 prune and of the MD prune, through the patched loader. It uses about 3 GiB of GPU memory beside the live
+  server, so run it only when the bot is idle.
 
 ## Run the scripts
 
