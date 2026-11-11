@@ -22,3 +22,5 @@ image-patch/fused_topk_bias_router.py
 serve-tune/image-patch/deepseek_v4_model.py
 # the wide DSpark drafts of serve-tune/PLAN_SERVE_TUNE.md §8.2 (4-6 GB each), built from the image with the plan file in results/
 dspark-draft-*/
+# the patched loader and model files of the loader patch, built from the image by image-patch/build_perlayer.sh (plans/PLAN_LOADER_PATCH.md §4.4)
+image-patch/perlayer/

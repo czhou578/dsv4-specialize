@@ -1,0 +1,18 @@
+# The loader patch (plans/PLAN_LOADER_PATCH.md §4), as an override on top of compose-mask.yml and
+# serve-tune/compose-tune.yml. It mounts the image's EXL3 loader and DeepSeek V4 model file with
+# image-patch/per-layer-experts.diff applied, so a folder with a different expert count in each layer loads.
+# A uniform folder loads as in the stock image.
+# Build the two files first: image-patch/build_perlayer.sh (else Docker mounts an empty folder and the boot fails).
+#   MASK_NAME=prunemd5 MASK_K=149 TUNE_LABEL=lp-p1 \
+#     docker compose -f compose-mask.yml -f serve-tune/compose-tune.yml -f compose-perlayer.yml up -d
+services:
+  deepseek-v4-flash-mask:
+    volumes:
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/perlayer/exl3.py"
+        target: /opt/vllm/vllm/model_executor/layers/quantization/exl3.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/perlayer/deepseek_v4_model.py"
+        target: /opt/vllm/vllm/models/deepseek_v4/nvidia/model.py
+        read_only: true

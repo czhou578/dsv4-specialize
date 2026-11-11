@@ -145,7 +145,9 @@ experts at about 69.80 GiB, with the replay result and the speed of the mask. Th
 `prune_experts.py` builds a folder with a different K in each layer.
 
 - Plan: [PLAN_LOADER_PATCH.md](plans/PLAN_LOADER_PATCH.md).
-- Tools: [prune_experts.py](prune_experts.py) (§5.1 of the plan).
+- Tools: [prune_experts.py](prune_experts.py) (§5.1 of the plan), and the patch (§5.2):
+  [image-patch/per-layer-experts.diff](image-patch/per-layer-experts.diff),
+  [image-patch/build_perlayer.sh](image-patch/build_perlayer.sh) and [compose-perlayer.yml](compose-perlayer.yml).
 
 ### 7. Remove whole layers (planned)
 
@@ -260,9 +262,10 @@ moved here from the bot repo's `model_eval/` on 2026-11-08.
 | [compose-mask.yml](compose-mask.yml) | Boots `tp1-${MASK_NAME}-k${MASK_K}`. `DRAFT_DIR` mounts another DSpark draft; `MASK_EXTRA_ARGS` adds vLLM flags |
 | [compose-mem073.yml](compose-mem073.yml) | Override for `compose-mask.yml`: `GPU_MEMORY_UTILIZATION` 0.73 and 128k context (`PLAN_MODEL_ROUTER.md` §3) |
 | [compose-drop.yml](compose-drop.yml) | Override for `compose-mask.yml`: the router patch with its rule (`MOE_DROP`, `MOE_NORM`, `MOE_LAYERS`) and an 8 GiB KV cache (`plans/PLAN_FEWER_EXPERTS.md` §6) |
+| [compose-perlayer.yml](compose-perlayer.yml) | Override for `compose-mask.yml`: the loader patch, so a folder with a different expert count in each layer loads (`plans/PLAN_LOADER_PATCH.md` §4). A uniform folder loads as in the stock image. Build the two files first with `image-patch/build_perlayer.sh` |
 | [compose-capture.yml](compose-capture.yml) | The expert capture: the stock model with Model Runner V1, no DSpark, `--enable-return-routed-experts` and the weights patch. `ROUTING_PROFILE=1` adds the routing profile; `CAPTURE_UTIL` and `CAPTURE_EXTRA_ARGS` change the boot check and add vLLM flags |
 | [serve-v1.sh](serve-v1.sh) | Runs the server's serve script with Model Runner V1 (for `compose-capture.yml` only) |
-| [image-patch/](image-patch/) | The weights patch (`PLAN_BETTER_RANK.md` §4.1): the patched `base_router.py` and `routed_experts_capturer.py`, and `capture-weights.diff`, the change against the image. `patch -R -p1` with the diff gives back the original files. The router patch (`PLAN_FEWER_EXPERTS.md` §6): `moe_drop.py` (the drop rule and the gain anchor) and `router-drop.diff`; `build_router.sh` applies the diff to the image's router file (not in git) |
+| [image-patch/](image-patch/) | The weights patch (`PLAN_BETTER_RANK.md` §4.1): the patched `base_router.py` and `routed_experts_capturer.py`, and `capture-weights.diff`, the change against the image. `patch -R -p1` with the diff gives back the original files. The router patch (`PLAN_FEWER_EXPERTS.md` §6): `moe_drop.py` (the drop rule and the gain anchor) and `router-drop.diff`; `build_router.sh` applies the diff to the image's router file (not in git). The loader patch (`plans/PLAN_LOADER_PATCH.md` §4): `per-layer-experts.diff` changes the image's `exl3.py` and DeepSeek V4 `model.py`; `build_perlayer.sh` applies it and writes `image-patch/perlayer/` (not in git) |
 
 **Run scripts.** Each script stops the live server, runs its test boots and restores the live server. Read the
 safety rules in [RUNBOOK.md](RUNBOOK.md) before you start one.
