@@ -1,6 +1,6 @@
 # Plan: a different expert count in each layer (the loader patch)
 
-**Status:** 2026-11-11: plan only. Nothing is built · **Author:** colin-spark · **Date:** 2026-11-11
+**Status:** 2026-11-11: the work before the window is done (§5.5). The window of §6 waits for your go · **Author:** colin-spark · **Date:** 2026-11-11
 **Source:** `PLAN_COLD_EXPERTS.md` §5.5. MD, the cut of 486 cold experts, has no measurable cost on the replay in two
 windows (+0.18% against R0). A prune of MD frees about 4.29 GiB, but each layer then keeps a different number of
 experts (140 to 160). The runtime accepts one number for all layers. This plan patches the runtime.
@@ -12,11 +12,11 @@ experts (140 to 160). The runtime accepts one number for all layers. This plan p
 | Step | Status |
 |---|---|
 | §3 Read the runtime code (no downtime) | ✅ 2026-11-11: five places tie the expert count to one value; one of them costs 1.28 GiB per count (§3) |
-| §5.1 `prune_experts.py` with a K per layer (no downtime) | ⬜ |
-| §5.2 The patch, its build script and the test compose file (no downtime) | ⬜ |
-| §5.3 The kernel check on the GPU (no downtime, about 30 min) | ⬜ |
-| §5.4 The prune of MD (no downtime, about 15 min) | ⬜ |
-| §6 The test window (about 2 h 30 min downtime) | ⬜ |
+| §5.1 `prune_experts.py` with a K per layer (no downtime) | ✅ 2026-11-11 (#25): a uniform folder stays byte-equal |
+| §5.2 The patch, its build script and the test compose file (no downtime) | ✅ 2026-11-11 (#26, #27): the diff applies to the pinned image; 5 tests pass in the image |
+| §5.3 The kernel check on the GPU (no downtime, about 30 min) | ✅ 2026-11-11 (#27): MD equals K 160 bit for bit; no cross-talk on the pool; one arena for all counts |
+| §5.4 The prune of MD (no downtime, about 15 min) | ✅ 2026-11-11 10:48–10:58: `tp1-prunemd5-k149`, 4.29 GiB less, the self-check passes |
+| §6 The test window (about 2 h 30 min downtime) | ⬜ `loader_window.sh` is ready (#28); it waits for your go |
 | §7 The decision | ⬜ |
 
 ---
@@ -177,6 +177,46 @@ when the bot is idle, and stop it if the free memory falls below 4 GiB.
 11 min, with the bot up). Expect about 69.80 GiB of tensors (74.09 − 4.29). Run the self-check and
 `verify_tp1_manifest.py`.
 
+### 5.5 Result of the work before the window (2026-11-11)
+
+**§5.1, the prune tool (#25).** `prune_experts.py` writes the lists of §4.1 for a mask with a different K in each
+layer. For a uniform mask, the old and the new tool write the same 17 files of the synthetic checkpoint, byte for
+byte. The new test builds a K of 7, 7, 5 and 6.
+
+**§5.2, the patch (#26) and its tests (#27).** The diff (`image-patch/per-layer-experts.diff`) applies to both files
+of the pinned image, and both compile. The 5 tests of `test_loader_patch.py` pass in the image:
+
+- the counts per layer;
+- a draft layer keeps its own count;
+- a bad list stops the load;
+- the pool takes the largest scratch, and a smaller count gets a view at the same address.
+
+**§5.3, the kernel check (#27), 11:00 to 11:03, with the bot up.** `loader_kernel_check.py` ran the real experts of
+layer 26 through the patched pool and SparkInfer. It used the K 160 prune (160 experts) and the MD prune (140 of the
+same experts).
+
+| Check | Decode (4 tokens) | Prefill (512 tokens) |
+|---|---|---|
+| The MD output equals the K 160 output, bit for bit | Yes (maximum difference 0.0) | Yes (0.0) |
+| The MD output does not change after a K 160 run on the same pool | Yes | Yes |
+| K 160 on the pool equals K 160 with its own scratch | Yes | Yes |
+
+- **The count does not change the scratch.** At the live capacity of 8224 tokens, the prefill arena is 1277.1 MiB for
+  140 and for 160 experts. So the pool of MD's 15 counts holds one arena, as the live model does now. Use the exact
+  K values of §4.5; the rounded values are not necessary.
+- **The cost of a count is small.** The first run of a count took at most 2.05 s, and it compiled a few small route
+  kernels into `./cache`.
+- **The memory.** The check used about 3.3 GiB (22.1 GiB available before, 18.8 GiB after). Its first run stopped
+  before the load: `cudaMemGetInfo` gave 2.2 GiB "free", because on the GB10 it leaves out the page cache. The check
+  now reads `MemAvailable`, as `run_lib.sh` does.
+
+**§5.4, the prune of MD (10:48 to 10:58, with the bot up).**
+
+- `prune_run.sh` with `SRC=tp1-coldmd5-k149 OUT=tp1-prunemd5-k149` built the folder.
+- It removed 34,728 tensors: the 2,894 dropped experts (the 2,408 live drops and the 486 of MD), 12 tensors each.
+- The folder holds 6,394 experts and 73.24 GiB of tensors, against 77.53 GiB in the live folder: 4.29 GiB less.
+- The self-check and `verify_tp1_manifest.py` pass on all 48 files.
+
 ## 6. The test window (about 2 h 30 min downtime)
 
 **CAUTION:** this stops the bot's model server. Start it only on your go. Pause the Hermes cron jobs first, and do
@@ -193,6 +233,10 @@ not run it during another test.
   for P1.
 - The window script follows `cold_replay.sh`: the KV pin of 7.25 GiB, `BOOT_MIN_GIB=110`, the memory watch, and the
   deadlines.
+- **The script is `loader_window.sh` (#28).** P0 also runs the prefill probe, so P1 has a reference in the same
+  window. After the restore, the script logs each gate of §6.1. Start it with the deadlines, for example:
+  `tmux new -d -s loader "START_AFTER=<now> BOOT_BY=<+1 h 45 min> SPEED_BY=<+2 h 10 min> RESTORE_AT=<+2 h 30 min>
+  ~/Projects/dsv4-specialize/loader_window.sh"`.
 
 ### 6.1 The gates
 
