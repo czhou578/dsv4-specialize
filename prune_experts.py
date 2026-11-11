@@ -16,6 +16,9 @@ the router but still loads all of them. This tool removes them from the files:
   ``model.safetensors.index.json``, ``tier-bitmap-3.0bpw.json`` and ``rank-sliced-tp1-manifest.json`` get the
   new values. vLLM stops if ``experts_per_layer`` is not ``n_routed_experts``.
 - ``REAP_K{K}_PLAN.json``: ``keep_by_layer`` in the ids of the 256-expert model; ``mtp_keep`` does not change.
+- A different K in each layer (``PLAN_LOADER_PATCH.md`` §4.1): ``n_routed_experts`` is the largest K, the new key
+  ``n_routed_experts_per_layer`` holds the K of each layer, and the other count fields hold that list in place of
+  one integer. ``{K}`` in the plan name is then the rounded mean. Only the patched image loads such a folder.
 - ``EXL3_MANIFEST.json`` describes the TP4 source repo and stays a link, as in the mask folders.
 
 The 43 expert files of ``data/tp1`` are ``root:600``, so run the build in a root container (README). Other files
@@ -50,9 +53,13 @@ def keep_lists(mask, experts):
         if not drop <= set(range(experts)):
             raise ValueError(f"layer {layer}: a dropped id is outside 0-{experts - 1}")
         out[int(layer)] = [e for e in range(experts) if e not in drop]
-    if len({len(k) for k in out.values()}) != 1:
-        raise ValueError("the layers keep different numbers of experts")
     return out
+
+
+def layer_counts(keep):
+    """``(the K of each layer in layer order, the value of the count fields)``: K, or the list for a K per layer."""
+    ks = [len(keep[layer]) for layer in sorted(keep)]
+    return ks, ks[0] if len(set(ks)) == 1 else ks
 
 
 def lookup(keep, experts):
@@ -150,11 +157,14 @@ def router_edits(src, weight_map, keep, experts):
 
 
 def edit_json(src, out, keep, experts, plan_name, data_change, tensors_removed, renames):
-    k = len(next(iter(keep.values())))
+    ks, k = layer_counts(keep)
     cfg = json.loads((src / "config.json").read_text())
     if cfg["n_routed_experts"] != experts or cfg["hybrid_tr3_tail"]["experts_per_layer"] != experts:
         raise ValueError("config.json: the expert count is not the source count")
-    cfg["n_routed_experts"] = k
+    cfg["n_routed_experts"] = max(ks)
+    cfg.pop("n_routed_experts_per_layer", None)
+    if isinstance(k, list):
+        cfg["n_routed_experts_per_layer"] = ks
     cfg["hybrid_tr3_tail"]["experts_per_layer"] = k
     cfg["reap_pruning"]["kept_experts_per_layer"] = k
     (out / "config.json").write_text(json.dumps(cfg, indent=2) + "\n")
@@ -216,14 +226,15 @@ def self_check(src, out, verify=VERIFY):
     """Check a pruned folder against its source; raise on a failure, return a summary."""
     record = json.loads((out / "PRUNE.json").read_text())
     keep = {int(L): v for L, v in record["keep"].items()}
-    experts, k = record["source_experts"], len(next(iter(keep.values())))
+    ks, k = layer_counts(keep)
     s_map = json.loads((src / INDEX).read_text())["weight_map"]
     o_map = json.loads((out / INDEX).read_text())["weight_map"]
     cfg = json.loads((out / "config.json").read_text())
     quant = json.loads((out / "quantization_config.json").read_text())
-    if {cfg["n_routed_experts"], cfg["hybrid_tr3_tail"]["experts_per_layer"],
-            quant["rank_sliced"]["experts_per_layer"]} != {k}:
-        raise ValueError("config: the expert counts are not all K")
+    per_layer = ks if isinstance(k, list) else None
+    if (cfg["n_routed_experts"] != max(ks) or cfg.get("n_routed_experts_per_layer") != per_layer
+            or cfg["hybrid_tr3_tail"]["experts_per_layer"] != k or quant["rank_sliced"]["experts_per_layer"] != k):
+        raise ValueError("config: the expert counts do not match the kept experts")
     summary = {"experts_same_bytes": 0, "router_tensors": 0, "other_tensors_same_bytes": 0}
     renames = {}
     for name in s_map:
@@ -280,7 +291,7 @@ def build(src, out, verify=VERIFY, base=BASE):
     mask = json.loads((src / "MASK.json").read_text())
     experts = json.loads((src / "config.json").read_text())["n_routed_experts"]
     keep = keep_lists(mask, experts)
-    k = len(next(iter(keep.values())))
+    ks, k = layer_counts(keep)
     weight_map = json.loads((src / INDEX).read_text())["weight_map"]
     expert_files = sorted({f for n, f in weight_map.items() if EXPERT_RE.match(n)})
     router = router_edits(src, weight_map, keep, experts)
@@ -299,7 +310,7 @@ def build(src, out, verify=VERIFY, base=BASE):
     shutil.copyfile(src / "MASK.json", out / "MASK.json")
     if (src / "TOPK.json").exists():
         shutil.copyfile(src / "TOPK.json", out / "TOPK.json")
-    plan_name = f"REAP_K{k}_PLAN.json"
+    plan_name = f"REAP_K{round(sum(ks) / len(ks))}_PLAN.json"
     links = link_files(src, out, EDITED | set(expert_files) | set(router), base)
     edit_json(src, out, keep, experts, plan_name, data_change, removed, renames)
     record = {"source": str(src.resolve()), "source_experts": experts, "kept_experts": k,
@@ -329,8 +340,9 @@ def main(argv=None):
         print(f"self-check PASS: {args.out}")
         return
     record = build(args.source, args.out, args.verify)
-    gib = -record["tensor_bytes_change"] / 2**30
-    print(f"experts {record['source_experts']} -> {record['kept_experts']} per layer: rewrote "
+    gib, k = -record["tensor_bytes_change"] / 2**30, record["kept_experts"]
+    k = k if isinstance(k, int) else f"{min(k)}-{max(k)} (mean {sum(k) / len(k):.2f})"
+    print(f"experts {record['source_experts']} -> {k} per layer: rewrote "
           f"{len(record['rewritten'])} files, removed {record['tensors_removed']} tensors ({gib:.2f} GiB); "
           f"{len(record['links']['symlink'])} symlinks, {len(record['links']['hardlink'])} hardlinks")
     print(f"self-check PASS; wrote {args.out}")
