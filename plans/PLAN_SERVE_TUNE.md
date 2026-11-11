@@ -12,7 +12,7 @@ repo, each on your go.
 |---|---|
 | §5 Step 0: prepare (no downtime) | ✅ 2026-11-10: the tools pass their tests (§5.2); one metrics snapshot (§5.1). ⛔ The 24-hour snapshot is blocked: the windows restart the server and reset the counters |
 | §6 Step 1: the lossless window (about 3.5 h downtime) | ✅ 2026-11-10 14:13–16:03 (§6.7): #2 (KV pin 7.25 GiB) passes, deploy is your decision; #1 is closed (the draft's block size is 5, §3); the FP8 draft head and #3 (prefill chunk) fail |
-| §7 Step 2: the replay window (about 3.5 h downtime) | ⬜ |
+| §7 Step 2: the replay window (about 3.5 h downtime) | ✅ 2026-11-10 16:04–19:46 (§7.4): #4 (FP8 head of the target) saves 0.49 GiB but fails its gate (+0.91% NLL against the live model); #5 (K per layer) fails at mean K 144 and 152. No deploy |
 | §8 Step 3: offline studies, then builds | ⬜ |
 | §9 Step 4: the KV tier study | ⬜ |
 
@@ -438,6 +438,54 @@ The global rule drops 0.6% less weight share than the even rule. `tune_replay.sh
 replay of N1 and N2.
 
 The window holds #4 (75 min), #5 (2 h) and the restore: about 3.5 hours.
+
+### 7.4 Result (2026-11-10, 16:04 to 19:46): every point fails a gate
+
+`tune_replay.sh` ran right after the Step 1 window, on your go. It ran the gate points first (H1, N1, N2, N3), then
+the speed reference H0. Every point booted with `compose-tune.yml` at the live settings and the bot draft. Logs:
+`logs/tune-replay.log`, `results/tune-{h1,n1,n2,n3}*`.
+
+| Point | What | Boot | Summed NLL against the baseline | Decisions (baseline 41) | Tool names (baseline 77 of 83) | Gates |
+|---|---|---|---|---|---|---|
+| Live model (2026-11-06) | Prune, K 160 | — | +1.89% | 42 | 78 | pass |
+| H1 | #4: the FP8 head of the target | 181 s, **73.60 GiB** | +2.82% (**+0.91%** against the live replay) | 39 | 80 | **fails** the gate of #4 |
+| N1 | #5: global rule, mean K 144 | 241 s, 95.39 GiB | **+3.79%** | 39 | 79 | **fails** (NLL) |
+| N2 | #5: even rule, mean K 144 | 225 s, 95.39 GiB | **+4.26%** | 38 | 79 | **fails** (NLL) |
+| N3 | #5: global rule (the better one), mean K 152 | 285 s, 95.39 GiB | +2.74% | **37** | 77 | **fails** (decisions: −4, the noise is 3) |
+
+**#4, the FP8 head of the target: fails.**
+
+- The patch works: the boot log says "FP8 target head: 129280 rows; 0.99 GiB BF16 freed, 0.49 GiB FP8 kept". The
+  weights take 73.60 GiB against 74.09 GiB, so the patch saves the 0.49 GiB of the estimate.
+- The gates against the baseline pass, but the summed NLL rises 0.91% against the live replay (20,858 against
+  20,669). The gate of #4 allows +0.5%, and the run noise is about 0.22%. The answer NLL does not move (0.2689 to
+  0.2691); the loss is in the reasoning tokens (0.7443 to 0.7547, +1.4%).
+- Speed, against H0 (the live settings, the same window, 180 s boot, 74.09 GiB):
+
+  | Point | Bot decode (runs) | Accepted per step | Code decode (runs) | Code accepted per step |
+  |---|---|---|---|---|
+  | H0 | 34.64 tok/s (33.77–35.58) | 2.14 | 40.58 tok/s (40.56–40.70) | 2.63 |
+  | H1 | 35.70 tok/s (35.16–36.49) | 2.14 | 43.51 tok/s (42.36–43.59) | 2.66 |
+
+  The bot decode gains 3.1%, inside the noise floor of 4.2%, as the estimate of +2% to +3% said. The code decode
+  gains 7.2%, above its noise (1.65 tok/s), with the same acceptance; the code test is for information only. H0
+  accepts 2.14 tokens per step with the settings of T0 (2.20 in §6.7), so a part of the drop of T3 (2.10) is
+  noise between boots.
+- No deploy, by the gate of §7.1. The 0.49 GiB and the code decode gain do not outweigh a loss of 0.91% of the
+  summed NLL, which is four times the run noise.
+
+**#5, a K per layer: fails at every point.**
+
+- At mean K 144, both rules are worse than a uniform K 144 (`PLAN_BETTER_RANK.md` §6.1: +3.29% with the floor rank,
+  +3.51% with the count rank). The even rule is the worst (+4.26%), although it spreads the dropped share evenly.
+- At mean K 152, the NLL passes (+2.74%), but the correct decisions fall from 41 to 37. A uniform K 152 lies, by the
+  steps of `PLAN_BETTER_RANK.md` §6.1, at about +2.6% to +2.9%. So the allocation by weight share gains nothing
+  over a uniform K.
+- So the weight share of the router alone does not predict the cost of a cut in a layer. A better allocation needs
+  a measured cost per layer (one replay per layer cut), which is outside this plan.
+- No new prune plan follows. K 160 stays the floor (`PLAN_BETTER_RANK.md` §6.3). No point passed, so the prune with
+  a different K in each layer, its full runs and your blind review do not apply. The folders `tp1-klg5-k144`,
+  `tp1-kle5-k144`, `tp1-klg5-k152` and `tp1-kle5-k152` are deleted.
 
 ## 8. Step 3: offline studies, then builds (#6, #7)
 
