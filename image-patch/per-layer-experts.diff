@@ -1,0 +1,321 @@
+diff -ru a/vllm/model_executor/layers/quantization/exl3.py b/vllm/model_executor/layers/quantization/exl3.py
+--- a/vllm/model_executor/layers/quantization/exl3.py	2026-11-11 10:50:09.758356512 -0800
++++ b/vllm/model_executor/layers/quantization/exl3.py	2026-11-11 10:51:15.527868980 -0800
+@@ -72,6 +72,10 @@
+ _SPARKINFER_MIXED_TRELLIS_API: Any | None = None
+ _RANK_SLICED_RUNTIMES: dict[tuple[Any, ...], dict[str, Any]] = {}
+ _MIXED_TRELLIS_RUNTIMES: dict[tuple[Any, ...], dict[str, Any]] = {}
++# dsv4-specialize (PLAN_LOADER_PATCH.md §4.3): with a different expert count in
++# each layer, each count needs its own SparkInfer plan, but all of them share
++# one decode scratch and one prefill arena, as the layers of a uniform model do.
++_RANK_SLICED_SCRATCH_POOLS: dict[tuple[Any, ...], dict[str, torch.Tensor]] = {}
+ _NEXT_RUNTIME_SCOPE_ID = 0
+ _MIXED_TRELLIS_ROUTE_BLOCK_SIZE = 8
+ 
+@@ -126,6 +130,70 @@
+     return (_runtime_scope_id(quant_config), _is_draft_layer(layer))
+ 
+ 
++def _spec_nbytes(spec: Any) -> int:
++    numel = 1
++    for size in spec.shape:
++        numel *= int(size)
++    return numel * torch.empty((), dtype=spec.dtype).element_size()
++
++
++def _pool_view(buffer: torch.Tensor, spec: Any) -> torch.Tensor:
++    """A view of a scratch pool with the shape and dtype of one plan's scratch."""
++    nbytes = _spec_nbytes(spec)
++    if nbytes > buffer.numel():
++        raise RuntimeError(
++            f"EXL3 scratch of {nbytes} bytes exceeds its pool of {buffer.numel()} "
++            "bytes; the pool was sized from other plans (PLAN_LOADER_PATCH.md §4.3)"
++        )
++    return buffer[:nbytes].view(spec.dtype).view(tuple(spec.shape))
++
++
++def _plan_scratch_pool(
++    api: Any,
++    layer: Any,
++    counts: list[int],
++    plan_fn: Any,
++    roles: dict[str, tuple[int, int]],
++    device: torch.device,
++) -> dict[str, torch.Tensor]:
++    """One byte buffer per role, sized for the largest scratch of all counts.
++
++    The weight plan of each count uses the arguments of
++    ``_prepare_rank_sliced_weights``; it describes shapes only, so no weights
++    are needed. dsv4-specialize, PLAN_LOADER_PATCH.md §4.3.
++    """
++    bits = int(layer.exl3_layer_bitrates[0])
++    sizes = dict.fromkeys(roles, 0)
++    for count in counts:
++        weight_plan = api.plan_weights(
++            quant_modes="w4a16",
++            source_format="exl3_trellis_mcg",
++            activation=layer.activation.value,
++            params_dtype=layer.exl3_params_dtype,
++            num_experts=count,
++            hidden_size=int(layer.exl3_hidden_size),
++            intermediate_size=int(layer.exl3_intermediate_size_per_partition),
++            w13_layout="w13",
++            trellis_bits=bits,
++            trellis_tile_config=layer.exl3_trellis_tile_config,
++        )
++        for role, (max_tokens, block_m) in roles.items():
++            _, spec = plan_fn(max_tokens, block_m, weight_plan)
++            sizes[role] = max(sizes[role], _spec_nbytes(spec))
++    pool = {
++        role: torch.empty(size, dtype=torch.uint8, device=device)
++        for role, size in sizes.items()
++    }
++    logger.info(
++        "EXL3 rank-sliced per-layer experts: %d counts %s share one scratch "
++        "pool: %s",
++        len(counts),
++        counts,
++        ", ".join(f"{role}={size / (1 << 20):.1f}MiB" for role, size in sizes.items()),
++    )
++    return pool
++
++
+ def _runtime_scope_id(quant_config: Any) -> int:
+     """Stable identity for the model that owns a rank-sliced runtime.
+ 
+@@ -534,6 +602,20 @@
+                 "unsupported rank-sliced EXL3 tensor schema: "
+                 f"{metadata['tensor_schema']!r}"
+             )
++        # dsv4-specialize (PLAN_LOADER_PATCH.md §4.3): experts_per_layer is an
++        # integer, or a list with one count for each MoE layer.
++        counts = metadata["experts_per_layer"]
++        if isinstance(counts, list):
++            span = int(layers[1]) - int(layers[0]) + 1
++            if len(counts) != span or any(int(value) <= 0 for value in counts):
++                raise ValueError(
++                    "rank-sliced EXL3 experts_per_layer must be an integer or one "
++                    f"positive count for each of the {span} MoE layers, got {counts!r}"
++                )
++            if str(metadata["bits"]).strip().lower() == "mixed":
++                raise NotImplementedError(
++                    "mixed-bitrate EXL3 does not support a per-layer experts_per_layer"
++                )
+         self.rank_sliced_metadata = dict(metadata)
+         bits_field = metadata["bits"]
+         if isinstance(bits_field, str) and bits_field.strip().lower() == "mixed":
+@@ -616,7 +698,7 @@
+         if self.rank_sliced_k_values is None:
+             if self.bits is None or float(self.bits) != int(self.bits):
+                 raise ValueError(f"invalid uniform EXL3 bitrate {self.bits!r}")
+-            experts = int(self.rank_sliced_metadata["experts_per_layer"])
++            experts = self.rank_sliced_layer_experts(layer_name)
+             return (int(self.bits),) * experts
+         try:
+             return self.rank_sliced_bits_by_layer[layer_index]
+@@ -625,6 +707,25 @@
+                 f"rank-sliced EXL3 bitrate map has no layer {layer_index}"
+             ) from exc
+ 
++    def rank_sliced_layer_experts(self, layer_name: str) -> int:
++        """The routed-expert count of one layer (dsv4-specialize, PLAN_LOADER_PATCH.md §4.3)."""
++        counts = self.rank_sliced_metadata["experts_per_layer"]
++        if not isinstance(counts, list):
++            return int(counts)
++        match = re.search(r"(?:^|\.)layers\.(\d+)(?:\.|$)", layer_name)
++        if match is None:
++            raise ValueError(
++                f"cannot resolve rank-sliced EXL3 layer index from {layer_name!r}"
++            )
++        first, last = (int(value) for value in self.rank_sliced_metadata["moe_layers"])
++        layer_index = int(match.group(1))
++        if not first <= layer_index <= last:
++            raise ValueError(
++                f"layer {layer_index} is outside the rank-sliced MoE layers "
++                f"[{first}, {last}]"
++            )
++        return int(counts[layer_index - first])
++
+     def apply_vllm_mapper(self, hf_to_vllm_mapper: WeightsMapper) -> None:
+         # Keep both spellings: loader prefixes use vLLM names, while packed
+         # source-matrix discovery intentionally refers to the unstacked HF name.
+@@ -1373,8 +1474,8 @@
+                     "rank-sliced EXL3 checkpoint TP does not match runtime: "
+                     f"checkpoint={checkpoint_tp}, runtime={layer.exl3_tp_size}"
+                 )
+-            expected_experts = int(
+-                self.quant_config.rank_sliced_metadata["experts_per_layer"]
++            expected_experts = self.quant_config.rank_sliced_layer_experts(
++                str(layer.layer_name)
+             )
+             if expected_experts != num_experts:
+                 raise ValueError(
+@@ -2116,7 +2217,7 @@
+ 
+         api = _load_sparkinfer_fused_moe()
+ 
+-        def _plan_with_scratch(plan_max_tokens: int, plan_block_m: int):
++        def _plan(plan_max_tokens: int, plan_block_m: int, weight_plan: Any):
+             caps = api.Caps(
+                 max_tokens=plan_max_tokens,
+                 num_topk=topk,
+@@ -2125,12 +2226,46 @@
+                 # still lets the W4A16 core derive route_E from weight_E.
+                 route_num_experts=0,
+                 device=x.device,
+-                weight_plan=layer.exl3_trellis_weights.plan,
++                weight_plan=weight_plan,
+                 quant_mode="w4a16",
+                 w4a16_block_size_m=plan_block_m,
+             )
+             plan = api.plan(caps)
+-            scratch_spec = plan.scratch_specs()[0]
++            return plan, plan.scratch_specs()[0]
++
++        # dsv4-specialize (PLAN_LOADER_PATCH.md §4.3): a per-layer expert count
++        # takes the scratch from one pool for all counts of this model. The pool
++        # is sized once, for the largest plan of all counts, so it never grows
++        # and the pointers in the CUDA graphs stay valid.
++        pool = None
++        counts = self.quant_config.rank_sliced_metadata["experts_per_layer"]
++        if isinstance(counts, list):
++            pool_key = key[:5] + key[6:]  # the runtime key without the count
++            pool = _RANK_SLICED_SCRATCH_POOLS.get(pool_key)
++            if pool is None:
++                pool = _plan_scratch_pool(
++                    api,
++                    layer,
++                    sorted({int(value) for value in counts}),
++                    _plan,
++                    {
++                        "decode": (max_trellis_m, block_m),
++                        **(
++                            {"prefill": (max_batched_tokens, prefill_block_m)}
++                            if prefill_plan_enabled
++                            else {}
++                        ),
++                    },
++                    x.device,
++                )
++                _RANK_SLICED_SCRATCH_POOLS[pool_key] = pool
++
++        def _plan_with_scratch(plan_max_tokens: int, plan_block_m: int, role: str):
++            plan, scratch_spec = _plan(
++                plan_max_tokens, plan_block_m, layer.exl3_trellis_weights.plan
++            )
++            if pool is not None:
++                return plan, _pool_view(pool[role], scratch_spec)
+             scratch = torch.empty(
+                 scratch_spec.shape,
+                 dtype=scratch_spec.dtype,
+@@ -2138,7 +2273,9 @@
+             )
+             return plan, scratch
+ 
+-        trellis_plan, trellis_scratch = _plan_with_scratch(max_trellis_m, block_m)
++        trellis_plan, trellis_scratch = _plan_with_scratch(
++            max_trellis_m, block_m, "decode"
++        )
+         # Prefill batches (m > max_trellis_m) run through a second planned
+         # Trellis capacity instead of the eager ExLlamaV3 parity path. The
+         # large block keeps expert tiles streamed once per block of routed
+@@ -2147,7 +2284,7 @@
+         prefill_scratch = None
+         if prefill_plan_enabled:
+             prefill_plan, prefill_scratch = _plan_with_scratch(
+-                max_batched_tokens, prefill_block_m
++                max_batched_tokens, prefill_block_m, "prefill"
+             )
+ 
+         # With a Trellis window starting at m=1 there is no reachable eager
+Only in b/vllm/model_executor/layers/quantization: __pycache__
+diff -ru a/vllm/models/deepseek_v4/nvidia/model.py b/vllm/models/deepseek_v4/nvidia/model.py
+--- a/vllm/models/deepseek_v4/nvidia/model.py	2026-11-11 10:50:09.757350240 -0800
++++ b/vllm/models/deepseek_v4/nvidia/model.py	2026-11-11 10:50:09.783773234 -0800
+@@ -581,6 +581,28 @@
+ DeepseekV4MegaMoEExperts.weight_loader.supports_moe_loading = True  # type: ignore[attr-defined]
+ 
+ 
++def _layer_routed_experts(config, prefix: str) -> int:
++    """The routed-expert count of one layer (dsv4-specialize, PLAN_LOADER_PATCH.md §4.2).
++
++    A folder pruned to a different K in each layer lists them in
++    ``n_routed_experts_per_layer``, and ``n_routed_experts`` is the largest.
++    A folder without the list, and every layer past its end, use
++    ``n_routed_experts``: the DSpark draft builds its layers (index 43 and up)
++    with this config, after it sets ``n_routed_experts`` to its own count.
++    """
++    per_layer = getattr(config, "n_routed_experts_per_layer", None)
++    layer_index = extract_layer_index(prefix)
++    if not per_layer or layer_index >= len(per_layer):
++        return config.n_routed_experts
++    count = int(per_layer[layer_index])
++    if not 0 < count <= config.n_routed_experts:
++        raise ValueError(
++            f"n_routed_experts_per_layer[{layer_index}]={count} is outside "
++            f"[1, n_routed_experts={config.n_routed_experts}]"
++        )
++    return count
++
++
+ class DeepseekV4MoE(nn.Module):
+     def __init__(
+         self,
+@@ -606,7 +628,7 @@
+         self.routed_scaling_factor = getattr(config, "routed_scaling_factor", 1.0)
+         self.hidden_size = config.hidden_size
+ 
+-        self.n_routed_experts = config.n_routed_experts
++        self.n_routed_experts = _layer_routed_experts(config, prefix)
+         self.n_activated_experts = config.num_experts_per_tok
+         self.moe_intermediate_size = config.moe_intermediate_size
+         self.swiglu_limit = config.swiglu_limit
+@@ -625,7 +647,7 @@
+ 
+         self.gate = GateLinear(
+             input_size=config.hidden_size,
+-            output_size=config.n_routed_experts,
++            output_size=self.n_routed_experts,
+             bias=False,
+             out_dtype=torch.float32,
+             prefix=f"{prefix}.gate",
+@@ -642,7 +664,7 @@
+             self.gate.tid2eid = nn.Parameter(
+                 torch.randint(
+                     0,
+-                    config.n_routed_experts,
++                    self.n_routed_experts,
+                     (config.vocab_size, config.num_experts_per_tok),
+                     dtype=self.hash_indices_dtype,
+                 ),
+@@ -650,7 +672,7 @@
+             )
+         elif getattr(config, "topk_method", None) == "noaux_tc":
+             self.gate.e_score_correction_bias = nn.Parameter(
+-                torch.empty(config.n_routed_experts, dtype=torch.float32),
++                torch.empty(self.n_routed_experts, dtype=torch.float32),
+                 requires_grad=False,
+             )
+ 
+@@ -689,6 +711,11 @@
+ 
+         eplb_config = vllm_config.parallel_config.eplb_config
+         self.n_redundant_experts = eplb_config.num_redundant_experts
++        if self.n_routed_experts != config.n_routed_experts:
++            raise NotImplementedError(
++                "MegaMoE does not support n_routed_experts_per_layer "
++                "(PLAN_LOADER_PATCH.md §4.2)"
++            )
+         self.n_routed_experts = config.n_routed_experts
+         self.n_shared_experts = config.n_shared_experts or 0
+         self.n_logical_experts = self.n_routed_experts
+@@ -738,7 +765,7 @@
+         self.experts = FusedMoE(
+             shared_experts=self.shared_experts,
+             gate=self.gate,
+-            num_experts=config.n_routed_experts,
++            num_experts=self.n_routed_experts,
+             top_k=config.num_experts_per_tok,
+             hidden_size=config.hidden_size,
+             intermediate_size=config.moe_intermediate_size,
+Only in b/vllm/models/deepseek_v4/nvidia: __pycache__
