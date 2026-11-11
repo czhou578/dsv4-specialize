@@ -25,11 +25,13 @@ The tool writes the list of ``--rule`` to ``--out`` and prints one summary line 
 import argparse
 import heapq
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 
-import mask_checkpoint as mc
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # mask_checkpoint.py is in the repo root
+import mask_checkpoint as mc  # noqa: E402
 
 RANK = Path.home() / "Projects/dsv4-specialize/results/expert_rank_weight.json"
 HASH_K = 160

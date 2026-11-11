@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The replay window of plans/PLAN_SERVE_TUNE.md §7 (Step 2) on port 8890, then the restore of the live server.
+# The replay window of PLAN_SERVE_TUNE.md §7 (Step 2) on port 8890, then the restore of the live server.
 #   H1  the FP8 target head (#4, compose-head.yml) on the live folder: head check, replay, bot decode x 5, code test
 #   N1  a K per layer, rule global, mean 144 (#5, tp1-klg5-k144): replay
 #   N2  a K per layer, rule even, mean 144 (tp1-kle5-k144): replay
@@ -10,13 +10,13 @@
 # folders of §7.3 (alloc_k.py, mask_checkpoint.py --keep-per-layer, topk_checkpoint.py --top-k 5).
 # CAUTION: this stops the bot's model server for about 4 h. Start it only with the user's go, not 05:00-10:00 on
 # weekdays, and not during another test:
-#   tmux new -d -s replay "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/tune_replay.sh"
+#   tmux new -d -s replay "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/serve-tune/tune_replay.sh"
 # POINTS (default "h1 n1 n2 n3 h0") selects the points; N3_RULE (klg5 or kle5) sets the rule of N3.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/tune-replay.log}
 RESTORE_TAG=replay
-TUNE="-f compose-mask.yml -f compose-tune.yml"
+TUNE="-f compose-mask.yml -f serve-tune/compose-tune.yml"
 TEST_COMPOSE=$TUNE
-source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
+source "$(cd "$(dirname "$0")/.." && pwd)/run_lib.sh"   # run_lib.sh is in the repo root
 
 POINTS=${POINTS:-h1 n1 n2 n3 h0}
 export MASK_NAME=prune5b MASK_K=160 TUNE_LABEL=tune-h0   # compose-tune.yml needs TUNE_LABEL, also for a down
@@ -31,11 +31,11 @@ nll() { awk '$1 == "nll" {print $3}' $R/tune-$1-compare.txt 2>/dev/null; }
 hpoint() {
   local label=tune-$1 f=$R/boot-tune-$1.log rc ok=1
   export TUNE_LABEL=$label MASK_NAME=$2 MASK_K=$3
-  TEST_COMPOSE="$TUNE$([ $4 = 1 ] && echo ' -f compose-head.yml')"
+  TEST_COMPOSE="$TUNE$([ $4 = 1 ] && echo ' -f serve-tune/compose-head.yml')"
   [ $(( $(now) + 60 * $7 )) -gt $RESTORE_S ] && { log "$label: needs $7 min, no time before $RESTORE_AT"; return 2; }
   [ "$(now)" -ge $BOOT_BY_S ] && { log "$label: after $BOOT_BY, not booted"; return 2; }
   [ -f $S/tp1-$2-k$3/rank-sliced-tp1-manifest.json ] || { log "ERROR: no folder $S/tp1-$2-k$3"; return 2; }
-  [ $4 = 0 ] || [ -s $S/image-patch/deepseek_v4_model.py ] || { log "ERROR: no deepseek_v4_model.py"; return 2; }
+  [ $4 = 0 ] || [ -s $S/serve-tune/image-patch/deepseek_v4_model.py ] || { log "ERROR: no deepseek_v4_model.py"; return 2; }
   stop_main || return 9
   log "$label: folder tp1-$2-k$3, FP8 target head $4, compose $TEST_COMPOSE"
   boot $label; rc=$?
@@ -64,7 +64,7 @@ run() {  # hpoint with the rules of run_lib.sh: two failed boots in a row, or a 
 }
 
 log "replay window start (points $POINTS; boot by $BOOT_BY; speed by $SPEED_BY; restore at $RESTORE_AT)"
-for need in $S/compose-tune.yml $S/compose-head.yml $S/tp1-prune5b-k160/rank-sliced-tp1-manifest.json \
+for need in $S/serve-tune/compose-tune.yml $S/serve-tune/compose-head.yml $S/tp1-prune5b-k160/rank-sliced-tp1-manifest.json \
   $R/baseline-k216.jsonl $R/prune5-k160.jsonl; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done

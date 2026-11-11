@@ -1,5 +1,8 @@
 # Plan: a faster decode and less memory from the serving settings
 
+**Moved** on 2026-11-10 from `plans/` to `serve-tune/`, with its tools and results; `README.md` in this folder is the
+write-up. The other plans that this plan names are in `../plans/`.
+
 **Status:** 2026-11-10: done. Two ideas pass a gate. The KV pin of 7.25 GiB (#2) is live since 2026-11-10 23:04 (§6.8). The 128-expert draft (#7, +4.2% for 2.39 GiB) is skipped for now, your decision (§8.2). The other ideas fail or cannot run. ⛔ Blocked: the 24-hour metrics (§5.1) and the KV tier study (§9) · **Author:** colin-spark · **Date:** 2026-11-09
 **Source:** a ranked list of 11 ideas for the speed and the memory of the live server. This plan checks each idea
 against this stack and puts the ideas in an order with tests and gates.

@@ -81,7 +81,7 @@ noise, 74.09 GiB loaded.
   6.5 to 7 GiB, so a smaller context saves nothing. Since 21:10 the live server pins the KV at 8 GiB with
   `--kv-cache-memory-bytes`; it then uses about 94 GiB in all, and 23.7 GB stays available (`PLAN_MODEL_ROUTER.md`
   §3, bot repo). Since 2026-11-10 23:04 the pin is 7.25 GiB (265,498 tokens, 1.04x for 256k), which saves 0.75 GiB
-  (`plans/PLAN_SERVE_TUNE.md` §6.8).
+  (`serve-tune/PLAN_SERVE_TUNE.md` §6.8).
 - **The bot-rank draft model** is live since 2026-11-07 (`plans/PLAN_PHYSICAL_PRUNE.md` §7.1): acceptance +4.7% in
   the bot test.
 - **K 144** (about 68 GiB) fails the NLL gate with every rank tried on 2026-11-07 (+3.29% to +3.90% against a +3%

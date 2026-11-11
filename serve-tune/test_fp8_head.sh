@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run test_fp8_head.py in the server image, with fp8_target_head.py mounted (plans/PLAN_SERVE_TUNE.md §7.2).
+# Run test_fp8_head.py in the server image, with fp8_target_head.py mounted (PLAN_SERVE_TUNE.md §7.2).
 # The tests need about 0.3 GB of GPU memory. Do not run them while a test window runs.
 set -euo pipefail
 cd "$(dirname "$0")"

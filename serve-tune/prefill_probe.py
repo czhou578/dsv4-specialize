@@ -1,4 +1,4 @@
-"""The prefill probe and the smoke requests of plans/PLAN_SERVE_TUNE.md §6.3.
+"""The prefill probe and the smoke requests of PLAN_SERVE_TUNE.md §6.3.
 
 - Cold: a prompt of about N tokens. It starts with a nonce, so the prefix cache cannot hit. A secret code near the
   start and a question at the end check the output (a broken prefill kernel loses the code).
