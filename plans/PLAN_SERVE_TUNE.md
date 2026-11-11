@@ -1,6 +1,6 @@
 # Plan: a faster decode and less memory from the serving settings
 
-**Status:** 2026-11-10: done. Two ideas pass a gate, and their deploys are your decision: the KV pin of 7.25 GiB (#2, §6.7) and the 128-expert draft (#7, §8.2, +4.2% for 2.39 GiB). The other ideas fail or cannot run. ⛔ Blocked: the 24-hour metrics (§5.1) and the KV tier study (§9) · **Author:** colin-spark · **Date:** 2026-11-09
+**Status:** 2026-11-10: done. Two ideas pass a gate. The KV pin of 7.25 GiB (#2) is live since 2026-11-10 23:04 (§6.8). The 128-expert draft (#7, +4.2% for 2.39 GiB) is skipped for now, your decision (§8.2). The other ideas fail or cannot run. ⛔ Blocked: the 24-hour metrics (§5.1) and the KV tier study (§9) · **Author:** colin-spark · **Date:** 2026-11-09
 **Source:** a ranked list of 11 ideas for the speed and the memory of the live server. This plan checks each idea
 against this stack and puts the ideas in an order with tests and gates.
 **Related:** `PLAN_FEWER_EXPERTS.md` (done 2026-11-10, no deploy; it changes the expert side), `PLAN_PHYSICAL_PRUNE.md` §7 (the
@@ -11,9 +11,9 @@ repo, each on your go.
 | Step | Status |
 |---|---|
 | §5 Step 0: prepare (no downtime) | ✅ 2026-11-10: the tools pass their tests (§5.2); one metrics snapshot (§5.1). ⛔ The 24-hour snapshot is blocked: the windows restart the server and reset the counters |
-| §6 Step 1: the lossless window (about 3.5 h downtime) | ✅ 2026-11-10 14:13–16:03 (§6.7): #2 (KV pin 7.25 GiB) passes, deploy is your decision; #1 is closed (the draft's block size is 5, §3); the FP8 draft head and #3 (prefill chunk) fail |
+| §6 Step 1: the lossless window (about 3.5 h downtime) | ✅ 2026-11-10 14:13–16:03 (§6.7): #2 (KV pin 7.25 GiB) passes, live since 23:04 (§6.8); #1 is closed (the draft's block size is 5, §3); the FP8 draft head and #3 (prefill chunk) fail |
 | §7 Step 2: the replay window (about 3.5 h downtime) | ✅ 2026-11-10 16:04–19:46 (§7.4): #4 (FP8 head of the target) saves 0.49 GiB but fails its gate (+0.91% NLL against the live model); #5 (K per layer) fails at mean K 144 and 152. No deploy |
-| §8 Step 3: offline studies, then builds | ✅ 2026-11-10: #6 (suffix drafts) fails the study gate (+8.5%, the gate is 10%), so no build (§8.1); #7 (wider draft): 128 experts at depth 5 pass at the edge (+4.21%) for +2.39 GiB, deploy is your decision (§8.2) |
+| §8 Step 3: offline studies, then builds | ✅ 2026-11-10: #6 (suffix drafts) fails the study gate (+8.5%, the gate is 10%), so no build (§8.1); #7 (wider draft): 128 experts at depth 5 pass at the edge (+4.21%) for +2.39 GiB; skipped for now, your decision (§8.2) |
 | §9 Step 4: the KV tier study | ⛔ Blocked: it needs one week of metrics (§9.1). The connector checks are done: a file-system tier exists; the support for this model needs a test boot |
 
 ---
@@ -319,6 +319,21 @@ memory and no output change. The risk: the margin over the 256k need falls from 
 fewer warm tokens. §5.1 saw no prompt above 50,000 tokens. Do not take the 160k option of §6.4 before the 24-hour
 data of §5.1 exists.
 
+### 6.8 Deploy of #2 (2026-11-10, 23:01 to 23:04, on your go)
+
+1. The backup is `compose-k160t5.yml.bak.20261110_tune` in the server folder.
+2. One line of `compose-k160t5.yml` changed: `--kv-cache-memory-bytes 8589934592` became `7784628224`, and its
+   comment names this plan. Nothing else changed: the prefill chunk stays 1024, the depth 5, no FP8 draft head.
+3. `docker compose -f compose-k160t5.yml up -d` recreated the container at 23:01:09. It was healthy at 23:03:51
+   (downtime about 2 min 40 s).
+4. The checks pass. The boot log says "reserved 7.25 GiB memory for KV Cache", 265,498 KV tokens, 1.04x for 256,000
+   tokens per request, the graph sizes 6, 12, 24, and both full graph captures. The weights take 74.09 GiB. The
+   reply is "OK.", both served names answer, and the Hermes gateway is active. 23.5 GB stays available at idle.
+5. Watch the next `daily-report` run (2026-11-11 from 05:00).
+
+To go back, copy `compose-k160t5.yml.bak.20261110_tune` over `compose-k160t5.yml` and run
+`docker compose -f compose-k160t5.yml up -d` in the server folder.
+
 ## 7. Step 2: the replay window (#4, #5)
 
 These ideas change the output. The replay screen gates them. A deploy of #5 also needs the full runs.
@@ -620,6 +635,9 @@ certainty first, run D0 and W3 once more in one window (`POINTS="d0:k64:5 w3:k12
 4. Check the boot lines (76.48 GiB with the 8 GiB pin), one reply, and the next `daily-report` run.
 
 To go back, copy the backup over the file and run `docker compose -f compose-k160t5.yml up -d`.
+
+**Your decision (2026-11-10): skip the 128-expert draft for now.** The live draft stays `dspark-draft-k64-bot`. The
+steps above and the plan file in `results/` stay ready for a later switch.
 
 ## 9. Step 4: a KV tier on the NVMe disk (#8)
 
