@@ -5,6 +5,9 @@ tp1-*
 cache/
 capture-out/
 *.log
+# the logs folder holds the run logs and the cron backups of the test windows; only its placeholder is in git
+logs/*
+!logs/.gitkeep
 script-backup-*/
 __pycache__/
 # the result files of the test points: replay rows, speed files, boot logs, reports (moved from the bot repo's
