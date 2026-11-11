@@ -1,9 +1,9 @@
 # Plan: a faster decode and less memory from the serving settings
 
-**Status:** 2026-11-09: plan written; nothing built · **Author:** colin-spark · **Date:** 2026-11-09
+**Status:** 2026-11-10: done. Two ideas pass a gate, and their deploys are your decision: the KV pin of 7.25 GiB (#2, §6.7) and the 128-expert draft (#7, §8.2, +4.2% for 2.39 GiB). The other ideas fail or cannot run. ⛔ Blocked: the 24-hour metrics (§5.1) and the KV tier study (§9) · **Author:** colin-spark · **Date:** 2026-11-09
 **Source:** a ranked list of 11 ideas for the speed and the memory of the live server. This plan checks each idea
 against this stack and puts the ideas in an order with tests and gates.
-**Related:** `PLAN_FEWER_EXPERTS.md` (in progress; it changes the expert side), `PLAN_PHYSICAL_PRUNE.md` §7 (the
+**Related:** `PLAN_FEWER_EXPERTS.md` (done 2026-11-10, no deploy; it changes the expert side), `PLAN_PHYSICAL_PRUNE.md` §7 (the
 bot-rank draft), `PLAN_BETTER_RANK.md` (the capture data), `PRUNE.md` (the live model)
 **Scope:** test boots on port 8890; new tools and run scripts in this repo; edits of `compose-k160t5.yml` in the server
 repo, each on your go.
@@ -13,8 +13,8 @@ repo, each on your go.
 | §5 Step 0: prepare (no downtime) | ✅ 2026-11-10: the tools pass their tests (§5.2); one metrics snapshot (§5.1). ⛔ The 24-hour snapshot is blocked: the windows restart the server and reset the counters |
 | §6 Step 1: the lossless window (about 3.5 h downtime) | ✅ 2026-11-10 14:13–16:03 (§6.7): #2 (KV pin 7.25 GiB) passes, deploy is your decision; #1 is closed (the draft's block size is 5, §3); the FP8 draft head and #3 (prefill chunk) fail |
 | §7 Step 2: the replay window (about 3.5 h downtime) | ✅ 2026-11-10 16:04–19:46 (§7.4): #4 (FP8 head of the target) saves 0.49 GiB but fails its gate (+0.91% NLL against the live model); #5 (K per layer) fails at mean K 144 and 152. No deploy |
-| §8 Step 3: offline studies, then builds | ⬜ |
-| §9 Step 4: the KV tier study | ⬜ |
+| §8 Step 3: offline studies, then builds | ✅ 2026-11-10: #6 (suffix drafts) fails the study gate (+8.5%, the gate is 10%), so no build (§8.1); #7 (wider draft): 128 experts at depth 5 pass at the edge (+4.21%) for +2.39 GiB, deploy is your decision (§8.2) |
+| §9 Step 4: the KV tier study | ⛔ Blocked: it needs one week of metrics (§9.1). The connector checks are done: a file-system tier exists; the support for this model needs a test boot |
 
 ---
 
@@ -519,6 +519,27 @@ Build (about two days, only if the gate passes):
 
 **Gate.** The bot decode gain is above the noise floor.
 
+**Result of the study (2026-11-10): the gate fails, so the build does not start.** `suffix_match.py` (tests:
+`test_suffix_match.py`) ran in the server image, with no GPU, in about 11 s. It read the 66 sessions of
+`model_eval/data/rank/sessions.jsonl`. An output position is one token of a target turn of the bot: the reasoning,
+the content and the tool calls (599 turns, 675,623 positions). The search history holds 3,159,695 tokens, and a match
+is at most 32 tokens long. The depth is 5, because the draft cannot go below its block size (§3).
+
+| m | Positions with a match of at least m tokens | Correct tokens of the next 5 | Gate estimate at depth 5 |
+|---|---|---|---|
+| 4 | 44.0% | 2.36 | +3.1% |
+| 8 | 20.2% | 3.45 | **+8.5%** |
+| 16 | 10.5% | 3.98 | +6.2% |
+
+- No estimate reaches 10%. The best is +8.5%, and it is an upper bound. At depths 3 and 4 the best is +6.0%.
+- The reasoning tokens are 53% of the positions, and their estimate is about 0 at every m. The answer tokens alone
+  (the content and the tool calls) reach +17.2% at m = 8. DSpark probably accepts more than 2.14 tokens on those
+  tokens too, so that number does not prove a gain. A suffix draft for the answer tokens only is the one variant to
+  study again.
+- 31% to 35% of the matched positions find their match in an older session. These sessions repeat sandbox prompts,
+  so the live bot reuses less text, and the real gain is probably lower.
+- No deploy follows.
+
 ### 8.2 #7: a wider draft (96 or 128 experts)
 
 The live draft keeps the 64 MTP experts with the highest bot rank of layer 42 (3.0 GB). A wider draft reads more bytes
@@ -536,6 +557,70 @@ per pass. So the acceptance must rise more than the draft time.
 **Gate.** The bot decode beats the reference by more than the noise floor. The memory cost (about 1.5 or 3 GiB) works
 against the memory goal, so the deploy is your decision.
 
+**Steps 1 and 2 (2026-11-10, no downtime).**
+
+- The plan file of the live draft was not saved. A rebuild found it: a copy of `REAP_K160_PLAN.json` with
+  `mtp_ranked` in the weight order of layer 42 (`expert_rank_weight.json`). The 64-expert rebuild gives the live file
+  byte for byte (sha256 `729159…cdcd3c`). The count rank (`expert_rank_bot.json`) matches only 57 of the 64 experts.
+  The plan file is `results/dspark-draft-bot-plan.json`.
+- A correction to `PLAN_PHYSICAL_PRUNE.md` §7: the live draft came from `--source data/tp1`, not from `tp1-k160t5`.
+  Its `config.json` equals the one of `data/tp1` with `n_routed_experts: 64`. The MTP tensors are the same in both
+  folders.
+- The builds used the image's `build_dspark_draft.py` with no GPU, in under 10 s each:
+
+| Draft | Size | More than the live draft | `n_routed_experts` |
+|---|---|---|---|
+| `dspark-draft-k64-bot` (live) | 2.94 GiB | — | 64 |
+| `dspark-draft-k96-bot` | 4.14 GiB | +1.20 GiB | 96 |
+| `dspark-draft-k128-bot` | 5.33 GiB | +2.39 GiB | 128 |
+
+- The first 64 experts of each wide draft are the 64 of the live draft, in the same order.
+- The runtime reads the expert count from the draft's `config.json`: the draft gets its own `ModelConfig`, and
+  `dspark.py` builds the draft layers with that count. `DSPARK_DRAFT_EXPERTS` only sets the build of a missing draft
+  in the entrypoint, so a test boot needs no change. No CUDA graph size depends on 64. One kernel choice changes: the
+  native router kernel exists for 64 and 128 experts, and 96 experts take the exact PyTorch path, as the 160 experts
+  of the target do.
+- `tune_draft.sh` is the window of step 3: D0 (the live draft at depth 5), then W1 to W4 (96 and 128 experts at
+  depths 5 and 6), each with the graph check and 5 bot decode runs. The depth cannot go below 5 (§3).
+  `tune_night.sh` cannot do this test, because it sets `DRAFT_DIR` itself.
+
+**Step 3: the window (2026-11-10, 19:46 to 22:40).** You moved the start of the windows to the afternoon, so this
+window fit. `tune_draft.sh` ran right after the Step 2 window. The live server was down from 19:46 to 22:40, and the
+restore was healthy at 22:40 (reply "OK."). Logs: `logs/tune-draft.log`, `results/speed-*-tune-{d0,w1,w2,w3,w4}*`.
+
+| Point | Draft, depth | Weights | Bot decode (runs) | Accepted per step | Code decode | Against D0 |
+|---|---|---|---|---|---|---|
+| D0 | 64 experts (live), 5 | 74.09 GiB | 35.64 tok/s (35.12–36.25) | 2.23 | 41.14 tok/s | — |
+| W1 | 96 experts, 5 | 75.29 GiB | 35.82 tok/s (34.91–36.72) | 2.28 | 42.05 tok/s | +0.5% |
+| W2 | 96 experts, 6 | 75.29 GiB | 34.93 tok/s (34.13–35.75) | 2.37 | 43.49 tok/s | −2.0% |
+| W3 | 128 experts, 5 | 76.48 GiB | **37.14 tok/s** (36.80–38.41) | 2.43 | 43.20 tok/s | **+4.21%** |
+| W4 | 128 experts, 6 | 76.48 GiB | 35.66 tok/s (35.29–38.40) | 2.53 | 43.86 tok/s | +0.1% |
+
+- Every point booted in 166 s to 195 s, and every graph check passed, also with the sizes 7, 14, 28 of depth 6.
+- **W3 passes the gate, at the edge:** +4.21% against a noise floor of 4.2% (37.14 against 37.137 tok/s). Each of
+  its 5 runs is above each run of D0. The acceptance rises at every position (2.23 to 2.43, +9%), and the code decode
+  rises 5.0%. So the gain is most likely real, and about as large as the noise floor.
+- **Depth 6 does not pay.** The 6th position adds only 0.10 to 0.12 accepted tokens, and W2 and W4 are not faster
+  than D0. Depth 5 stays, also with a wider draft (§6.6).
+- **96 experts add too little acceptance** (2.23 to 2.28) for the larger reads.
+- **The cost:** the 128-expert draft takes 2.39 GiB more (76.48 against 74.09 GiB).
+- The two wide drafts are deleted. The plan file `results/dspark-draft-bot-plan.json` rebuilds either one in under
+  10 s.
+
+**Deploy recommendation (your decision): W3 only if the memory is free to spend.** It gives +4.2% bot decode and
++5.0% code decode, with no output change, for 2.39 GiB. That works against the memory goal of this plan: the KV pin
+of §6.7 saves only 0.75 GiB, and `PLAN_MODEL_ROUTER.md` §3 wants the room for a second model. If you want more
+certainty first, run D0 and W3 once more in one window (`POINTS="d0:k64:5 w3:k128:5"`, about 75 min). To deploy:
+
+1. Rebuild the draft into the server repo: the command of step 3 with `--experts 128` and
+   `--output .../DeepSeek-v4-Flash-One-DGX-Spark/data/dspark-draft-k128-bot`.
+2. Back up `compose-k160t5.yml` as `compose-k160t5.yml.bak.<date>_k128draft`, and point the draft mount (now
+   `data/dspark-draft-k64-bot`) at the new folder.
+3. Run `docker compose -f compose-k160t5.yml up -d` in the server folder (about 3 min; the graph sizes do not change).
+4. Check the boot lines (76.48 GiB with the 8 GiB pin), one reply, and the next `daily-report` run.
+
+To go back, copy the backup over the file and run `docker compose -f compose-k160t5.yml up -d`.
+
 ## 9. Step 4: a KV tier on the NVMe disk (#8)
 
 The goal: a warm session skips the prefill after the pool evicts it, or after a restart. A prefill of 128k tokens
@@ -550,6 +635,23 @@ On this machine, a CPU tier gives nothing: the CPU and the GPU share the same 12
 
 **Gate.** More than about 20 long misses per day, and a connector that supports the record. Then write a separate
 plan.
+
+### 9.1 Result (2026-11-10): blocked
+
+⛔ **Step 1 is blocked.** It needs one week of metrics, and §5.1 has one snapshot of 6 hours. Tonight's windows
+restart the live server, which sets the counters to zero. Start the week after the last window of this plan.
+
+Steps 2 and 3 need no metrics, so they ran on the image (no downtime):
+
+- **A connector exists.** The image's vLLM has the native offload connector (`offloading_connector.py`) with a
+  file-system tier (`vllm/v1/kv_offload/tiering/fs`). The LMCache connector code is there, but the `lmcache` package
+  is not installed.
+- **The support for this model is not proven.** The connector has code for hybrid models, but one worker path
+  asserts a single KV cache group (`distributed/kv_transfer/kv_connector/v1/offloading/worker.py:250`). This model
+  has several groups (the compressed attention and the sliding window), and no file of the connector names the
+  `nvfp4_ds_mla` record. A test boot with the connector decides.
+- **The low hit rate of §5.1 comes first.** The prefix cache hit 1.0% of the prompt tokens. If the bot's prompts do
+  not share prefixes, a disk tier has nothing to serve. Find the cause before the week of metrics ends.
 
 ## 10. Not now (#9, #10, #11)
 
