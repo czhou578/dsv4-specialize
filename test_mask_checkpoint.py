@@ -149,6 +149,30 @@ class MaskTest(unittest.TestCase):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 mc.main(argv + ["--base", str(self.base)])  # no --out; both K options
 
+    def test_a_drop_file_drops_exactly_its_ids_also_a_mandatory_one(self):
+        plan, tmp = json.loads((self.base / "REAP_K216_PLAN.json").read_text()), Path(self.tmp.name)
+        same = tmp / "same.json"   # the drops of --keep 6, as a drop file, give the same mask
+        same.write_text(json.dumps({layer: ids for layer, (ids, _) in mc.drop_lists(plan, 6).items()}))
+        a = mc.build(self.base, 6, tmp / "a", dry_run=True)
+        b = mc.build(self.base, None, tmp / "b", dry_run=True, drop_file=same)
+        self.assertEqual({k: sorted(v["drop"]) for k, v in a["layers"].items()},
+                         {k: v["drop"] for k, v in b["layers"].items()})
+        self.assertEqual(a["hash_entries_remapped"], b["hash_entries_remapped"])
+        mand, out = tmp / "mand.json", tmp / "mand"
+        mand.write_text(json.dumps({str(i): [7, 3] for i in range(4)}))  # current 3 is the mandatory original 3
+        with contextlib.redirect_stdout(io.StringIO()):
+            mc.main(["--drop-file", str(mand), "--base", str(self.base), "--out", str(out)])
+        record = json.loads((out / "MASK.json").read_text())
+        self.assertEqual(record["layers"]["3"]["drop_original"], [3, 9])
+        self.assertEqual(record["drop_file"]["mandatory_dropped"]["3"], 1)
+        self.assertEqual((record["keep"], record["keep_per_layer"]), (6.0, [6] * 4))
+        bias = mc.read_tensor(out / "carried-001.safetensors", "layers.3.ffn.gate.bias")
+        self.assertEqual(np.flatnonzero(bias < 0).tolist(), [3, 7])
+        for bad in ({"0": [1]}, {str(i): [1, 1] for i in range(4)}, {str(i): [8] for i in range(4)}):
+            mand.write_text(json.dumps(bad))   # a missing layer, a repeated id, an id out of range
+            with self.assertRaises(ValueError):
+                mc.file_drops(plan, mand)
+
 
 if __name__ == "__main__":
     unittest.main()

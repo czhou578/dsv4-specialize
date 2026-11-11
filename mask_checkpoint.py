@@ -6,6 +6,8 @@ With ``--rank expert_rank_bot.json`` (``capture.py``, plan §6.5), the least use
 bot's traffic drop out instead, under the same mandatory rule; the folder is then ``tp1-botmask-k{K}``.
 With ``--keep-per-layer`` (a JSON list of 43 K values from ``serve-tune/alloc_k.py``, serve-tune/PLAN_SERVE_TUNE.md §7.3),
 each layer keeps its own K. ``MASK.json`` then records the list and its mean.
+With ``--drop-file`` (``{layer: current ids}`` for all 43 layers, from ``cold_sets.py``, plans/PLAN_COLD_EXPERTS.md
+§6), the tool drops exactly those ids, and a mandatory expert may drop.
 
 - Layers 3-42 (learned router): ``gate.bias[e] = -1e4`` for each dropped expert ``e``. The router
   adds the bias only to choose the top-k, so it never chooses ``e``, and the kept experts keep their
@@ -85,6 +87,12 @@ def bot_order(rank):
     return {int(layer): [e["id"] for e in items] for layer, items in rank["layers"].items()}
 
 
+def mandatory(plan, layer):
+    """The original ids of the mandatory experts of ``layer``: the top 32 of each tool category."""
+    return {e for cat in plan["keep_maps"]["structured_ranked_by_category"].values()
+            for e in cat[str(layer)][:MANDATORY_PER_CATEGORY]}
+
+
 def drop_order(plan, bot=None):
     """``{layer: current ids that can drop, lowest rank first}``. The mandatory experts are not in it.
 
@@ -94,8 +102,7 @@ def drop_order(plan, bot=None):
     out = {}
     for layer in range(len(maps["keep_by_layer"])):
         kept, ranked = maps["keep_by_layer"][str(layer)], maps["ranked_by_layer"][str(layer)]
-        mandatory = {e for cat in maps["structured_ranked_by_category"].values()
-                     for e in cat[str(layer)][:MANDATORY_PER_CATEGORY]}
+        must = mandatory(plan, layer)
         current = {e: i for i, e in enumerate(kept)}
         if bot is None:
             order = [current[e] for e in reversed(ranked) if e in current]
@@ -103,7 +110,7 @@ def drop_order(plan, bot=None):
             if sorted(bot[layer]) != list(range(len(kept))):
                 raise ValueError(f"layer {layer}: the bot rank does not list the {len(kept)} current ids")
             order = list(reversed(bot[layer]))
-        out[layer] = [c for c in order if kept[c] not in mandatory]
+        out[layer] = [c for c in order if kept[c] not in must]
     return out
 
 
@@ -176,14 +183,37 @@ def edits(base, drops):
     return changes, remapped
 
 
-def build(base, keep, out, dry_run=False, rank=None):
+def file_drops(plan, path):
+    """``{layer: (current ids, original ids)}`` from a drop file: exactly its ids, mandatory or not."""
+    kept_by_layer = plan["keep_maps"]["keep_by_layer"]
+    raw = {int(layer): ids for layer, ids in json.loads(Path(path).read_text()).items()}
+    if sorted(raw) != list(range(len(kept_by_layer))):
+        raise ValueError(f"the drop file must list all {len(kept_by_layer)} layers")
+    out = {}
+    for layer, ids in sorted(raw.items()):
+        kept = kept_by_layer[str(layer)]
+        if len(set(ids)) != len(ids) or not all(0 <= c < len(kept) for c in ids) or len(ids) >= len(kept):
+            raise ValueError(f"layer {layer}: the drop ids must be distinct current ids, and one must stay")
+        out[layer] = (sorted(ids), [kept[c] for c in sorted(ids)])
+    return out
+
+
+def build(base, keep, out, dry_run=False, rank=None, drop_file=None):
     """Write the masked folder; return the ``MASK.json`` record. ``keep``: one K, or a list with one
-    K per layer. ``rank``: path of an ``expert_rank_bot.json``, or None for the REAP rank."""
+    K per layer; None with ``drop_file``. ``rank``: path of an ``expert_rank_bot.json``, or None for the
+    REAP rank."""
     plan = json.loads((base / "REAP_K216_PLAN.json").read_text())
     bot = bot_order(json.loads(Path(rank).read_text())) if rank else None
-    drops = drop_lists(plan, keep, bot)
+    drops = file_drops(plan, drop_file) if drop_file else drop_lists(plan, keep, bot)
     changes, remapped = edits(base, drops)
+    if drop_file:
+        sizes = plan["keep_maps"]["keep_by_layer"]
+        keep = [len(sizes[str(layer)]) - len(drops[layer][0]) for layer in range(len(sizes))]
     per_layer = {} if isinstance(keep, int) else {"keep_per_layer": list(keep)}
+    if drop_file:
+        per_layer["drop_file"] = {"file": str(drop_file), "sha256": sha256_file(drop_file),
+                                  "mandatory_dropped": {layer: len(mandatory(plan, layer) & set(orig))
+                                                        for layer, (_, orig) in drops.items()}}
     record = {"keep": keep if isinstance(keep, int) else sum(keep) / len(keep), **per_layer,
               "base": str(base), "mask_bias": MASK_BIAS,
               "rank": ({"file": str(rank), "sha256": sha256_file(rank)} if rank
@@ -220,17 +250,20 @@ def main(argv=None):
     k_option.add_argument("--keep", type=int, help="experts kept per layer (K)")
     k_option.add_argument("--keep-per-layer", type=Path, metavar="FILE",
                           help="JSON list of one K per layer (serve-tune/alloc_k.py); needs --out")
+    k_option.add_argument("--drop-file", type=Path, metavar="FILE",
+                          help="JSON {layer: current ids to drop} (cold_sets.py); needs --out")
     parser.add_argument("--base", type=Path, default=BASE)
     parser.add_argument("--rank", type=Path, help="expert_rank_bot.json; default: the REAP rank")
     parser.add_argument("--out", type=Path,
                         help="default: tp1-mask-k{K} (REAP) or tp1-botmask-k{K} (--rank) next to this script")
     parser.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
     args = parser.parse_args(argv)
-    if args.keep_per_layer and not args.out:
-        parser.error("--keep-per-layer needs --out")
+    if (args.keep_per_layer or args.drop_file) and not args.out:
+        parser.error("--keep-per-layer and --drop-file need --out")
     out = args.out or OUT_ROOT / f"tp1-{'botmask' if args.rank else 'mask'}-k{args.keep}"
-    keep = args.keep if args.keep is not None else json.loads(args.keep_per_layer.read_text())
-    record = build(args.base, keep, out, args.dry_run, args.rank)
+    keep = args.keep if args.keep is not None else (
+        json.loads(args.keep_per_layer.read_text()) if args.keep_per_layer else None)
+    record = build(args.base, keep, out, args.dry_run, args.rank, args.drop_file)
     drops = [len(v["drop"]) for v in record["layers"].values()]
     print(f"K={record['keep']}: drop {min(drops)}-{max(drops)} experts per layer; "
           f"hash entries remapped {record['hash_entries_remapped']}; "
