@@ -5,7 +5,8 @@ removes the routed experts that the bot's own traffic rarely uses. The pruned mo
 and the tests found no loss of quality. The bot uses the pruned model since 2026-11-06.
 
 The repo holds the weight tools, the test boots, the run scripts, the plans and the results. It is the record of one
-project on one machine. Read [Scope and requirements](#scope-and-requirements) before you try to run it elsewhere.
+project on one machine. The [timeline](#timeline-of-the-work) shows the six stages of the work and the files of each
+stage. Read [Scope and requirements](#scope-and-requirements) before you try to run it elsewhere.
 
 ## Results
 
@@ -44,38 +45,103 @@ The stock model against the pruned model that the bot uses now. [PRUNE.md](PRUNE
 Each test point passes four tests in this order: the replay screen, the speed tests, the full runs and the final
 review. The [glossary](#glossary) defines each test.
 
-## What did not work
+## Timeline of the work
 
-- **The public REAP rank.** It drops experts that the bot uses. With it, K 192 already fails the NLL gate (+3.31%).
-  The bot's own rank costs +0.29% at K 176.
-- **Top-k 4.** It costs +6.05% NLL.
-- **K 144 (about 68 GiB).** It fails the NLL gate with every rank that the tests tried (+3.29% to +3.90%). K 160 is
-  the floor for this model without a fine-tune.
-- **Fewer than 5 experts per token.** A router patch tested drop rules and a gain anchor. Every cut fails the NLL
-  gate (+6.4% to +21.8%), and no point is faster ([PRUNE.md](PRUNE.md) §6).
-- **Most serving settings.** One of 11 ideas is live: a smaller KV cache pin saves 0.75 GiB. A wider draft model
-  gives +4.2% decode speed for 2.39 GiB, but it is not deployed. The other ideas fail their gates or cannot run on
-  this stack ([serve-tune/README.md](serve-tune/README.md)).
+The work ran in six stages, in this order. Each stage asked one question about the model or the server. The live
+model comes from stage 1. The other stages are experiments, and their files stay in the repo as the record.
 
-## Open work
+```mermaid
+flowchart LR
+    S1["1. Prune experts<br/>11-02 to 11-07<br/>K 160, top-k 5: live"]
+    S2["2. Better rank<br/>11-06 to 11-07<br/>K 144 fails"]
+    S3["3. Fewer experts per token<br/>11-09 to 11-10<br/>no deploy"]
+    S4["4. Serving settings<br/>11-10<br/>KV pin: live"]
+    S5["5. Cold experts<br/>11-10 to 11-11<br/>repeat test open"]
+    S6["6. Fewer layers<br/>planned"]
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6
+```
 
-- **Cold experts** ([plans/PLAN_COLD_EXPERTS.md](plans/PLAN_COLD_EXPERTS.md)). The default mask rule keeps 257
-  "mandatory" tool experts, and each gets less than 0.1% of the routing weight of its layer. A test on 2026-11-10
-  dropped them with no measurable cost: +0.42% NLL against the live set, under the limit of 0.5%. A repeat test of
-  the cold ordinary experts is open.
-- **Fewer layers** ([plans/PLAN_FEWER_LAYERS.md](plans/PLAN_FEWER_LAYERS.md)). A plan to skip whole layers. Nothing
-  is built.
+**Start here.** The live model comes from the three weight tools of stage 1: [mask_checkpoint.py](mask_checkpoint.py),
+[topk_checkpoint.py](topk_checkpoint.py) and [prune_experts.py](prune_experts.py). Read them first.
 
-## Timeline
+**Shared by all stages:** [run_lib.sh](run_lib.sh) (the safety rules of every run script),
+[compose-mask.yml](compose-mask.yml) (the base of every test boot), [speed_result.py](speed_result.py) (the speed
+result of a test point) and [overnight_guard.sh](overnight_guard.sh) (it restores the live server at night if the
+server is down).
 
-| Date | Step | Result |
-|---|---|---|
-| 2026-11-02 to 11-06 | The mask grid, the top-k night and the final review | The pick: bot rank, K 160, top-k 5 |
-| 2026-11-06 | The physical prune | The pruned model is live since 20:35 |
-| 2026-11-07 | The bot-rank draft model, and K 144 with new ranks | The draft is live; K 144 fails |
-| 2026-11-09 to 11-10 | Fewer experts per token | No deploy |
-| 2026-11-10 | The serving settings | The KV pin of 7.25 GiB is live |
-| 2026-11-10 to 11-11 | Cold experts | The bot does not need the cold tool experts |
+### 1. Prune the routed experts to K 160 (2026-11-02 to 11-07): live
+
+**Question:** can the model lose the experts that the bot rarely uses, fit in about 72 GiB, and keep its quality? A
+grid of masks tested K and top-k on the replay screen. The bot's own rank beat the public REAP rank: with REAP, K 192
+already fails the NLL gate (+3.31%), but the bot rank costs only +0.29% at K 176. Top-k 4 fails (+6.05%). The pick,
+K 160 at top-k 5, passed the final review. The physical prune went live on 2026-11-06, and a draft model built for
+the bot rank followed on 2026-11-07.
+
+- Plans: [PLAN_OVERNIGHT_MASK_GRID.md](plans/PLAN_OVERNIGHT_MASK_GRID.md),
+  [PLAN_OVERNIGHT_TOPK.md](plans/PLAN_OVERNIGHT_TOPK.md), [PLAN_FINAL_REVIEW.md](plans/PLAN_FINAL_REVIEW.md) and
+  [PLAN_PHYSICAL_PRUNE.md](plans/PLAN_PHYSICAL_PRUNE.md). The summary is [PRUNE.md](PRUNE.md) §1–§5.
+- Tools: [capture.py](capture.py), [mask_checkpoint.py](mask_checkpoint.py), [topk_checkpoint.py](topk_checkpoint.py),
+  [prune_experts.py](prune_experts.py), [prune_run.sh](prune_run.sh) and [check_routed.py](check_routed.py).
+- Test boots: [compose-capture.yml](compose-capture.yml), [serve-v1.sh](serve-v1.sh) and
+  [compose-mem073.yml](compose-mem073.yml).
+- Run scripts: [topk_run.sh](topk_run.sh), [prune_boot.sh](prune_boot.sh), [mem_boot.sh](mem_boot.sh) and
+  [draft_test.sh](draft_test.sh).
+- Result: [results/expert_rank_bot.json](results/expert_rank_bot.json), the expert rank of the live model.
+
+### 2. Try K 144 with a better rank (2026-11-06 to 11-07): fails
+
+**Question:** can a better rank push the prune to K 144 (about 68 GiB)? The first rank counted how often the router
+picked each expert. A patch of the capture also recorded the router weights, so the new ranks could order the experts
+by their contribution. K 144 failed the NLL gate with every rank (+3.29% to +3.90%). So K 160 is the floor for this
+model without a fine-tune.
+
+- Plan: [PLAN_BETTER_RANK.md](plans/PLAN_BETTER_RANK.md).
+- Tools: [rank_data.py](rank_data.py), [rank_report.py](rank_report.py), and the weights patch in
+  [image-patch/](image-patch/) (`base_router.py`, `routed_experts_capturer.py` and `capture-weights.diff`).
+- Run scripts: [capture_run.sh](capture_run.sh), [rank_masks.sh](rank_masks.sh) and [rank_night.sh](rank_night.sh).
+
+### 3. Use fewer experts per token (2026-11-09 to 11-10): no deploy
+
+**Question:** can each token use fewer than 5 experts, for a faster decode? A router patch dropped expert slots by a
+rule, and it could rescale the kept weights (a gain anchor). Every cut below 5 experts failed the NLL gate (+6.4% to
++21.8%), and no point was faster than the live server. The anchored top-5 was a little better on the replay, but the
+judge found no gain. So nothing changed on the live server.
+
+- Plan: [PLAN_FEWER_EXPERTS.md](plans/PLAN_FEWER_EXPERTS.md). The summary is [PRUNE.md](PRUNE.md) §6.
+- Tools: the router patch in [image-patch/](image-patch/) (`moe_drop.py`, `router-drop.diff` and `build_router.sh`),
+  [profile_report.py](profile_report.py) and [fewer_report.py](fewer_report.py).
+- Test boot: [compose-drop.yml](compose-drop.yml).
+- Run scripts: [fewer_night.sh](fewer_night.sh) and [fewer_stepf.sh](fewer_stepf.sh).
+
+### 4. Tune the serving settings (2026-11-10): the KV pin is live
+
+**Question:** can the server settings give more speed or free memory, with no change to the weights? Of 11 ideas, one
+is live: a KV cache pin of 7.25 GiB frees 0.75 GiB. A wider draft model gives +4.2% decode speed for 2.39 GiB, but it
+is not deployed. The other ideas fail their gates or cannot run on this stack.
+
+- All files: [serve-tune/](serve-tune/README.md), with its own plan, tools, data and write-up.
+- Also: `mask_checkpoint.py --keep-per-layer`, for a different K in each layer.
+
+### 5. Drop the cold experts (2026-11-10 to 11-11): the bot does not need the cold tool experts
+
+**Question:** does the bot need the experts that its traffic rarely uses? The default mask rule keeps 257 "mandatory"
+tool experts, and each gets less than 0.1% of the routing weight of its layer. A replay window dropped them with no
+measurable cost: +0.42% NLL against the live set, under the limit of 0.5%. The result for the cold ordinary experts
+is not clear, and a repeat test is open. A mask frees no memory, so a prune with a different K in each layer needs a
+loader patch first.
+
+- Plan: [PLAN_COLD_EXPERTS.md](plans/PLAN_COLD_EXPERTS.md).
+- Tools: [cold_sets.py](cold_sets.py) and `mask_checkpoint.py --drop-file`.
+- Run script: [cold_replay.sh](cold_replay.sh).
+
+### 6. Remove whole layers (planned)
+
+**Question:** can the model skip whole layers, or one half of a layer? The plan ranks the layers by Block Influence,
+measures the best cuts on calibration data, confirms them with the replay gate, and heals each cut with a linear map.
+Two whole layers would bring the load from 74.09 GiB to about 71 GiB. The NLL budget is small, so the plan expects
+that zero layers is a likely result. Nothing is built yet.
+
+- Plan: [PLAN_FEWER_LAYERS.md](plans/PLAN_FEWER_LAYERS.md).
 
 ## Documents
 
@@ -142,6 +208,8 @@ You can reuse these parts:
 | Test window | A time in which a run script stops the live server, runs test boots and restores the live server |
 
 ## Files
+
+The tables below sort the files by type. The [timeline](#timeline-of-the-work) sorts them by stage.
 
 Run the Python files with the stock-research venv: `~/.hermes/stock-research/.venv/bin/python`.
 
