@@ -1,0 +1,22 @@
+# The FP8 head of the target (plans/PLAN_SERVE_TUNE.md §7.2, #4), as an override on top of compose-mask.yml and
+# compose-tune.yml. It mounts fp8_target_head.py and the patched model file, and sets FP8_TARGET_HEAD=1.
+# - The head gets a rowwise-FP8 copy after the load, and the BF16 weight is freed (about 0.49 GiB net). The draft
+#   shares the head module, so it reads the same FP8 copy.
+# - The FP8 draft head must stay off: it reads the BF16 weight, which the patch frees.
+# Build the model file first: image-patch/build_head.sh (else Docker mounts an empty folder and the boot fails).
+#   MASK_NAME=prune5b MASK_K=160 TUNE_LABEL=head-h1 \
+#     docker compose -f compose-mask.yml -f compose-tune.yml -f compose-head.yml up -d
+services:
+  deepseek-v4-flash-mask:
+    environment:
+      FP8_TARGET_HEAD: "1"
+      DSPARK_FP8_DRAFT_HEAD: "0"
+    volumes:
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/fp8_target_head.py"
+        target: /opt/vllm/vllm/model_executor/layers/fp8_target_head.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/deepseek_v4_model.py"
+        target: /opt/vllm/vllm/models/deepseek_v4/nvidia/model.py
+        read_only: true
