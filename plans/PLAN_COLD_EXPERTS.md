@@ -183,8 +183,8 @@ With the two windows of §7.2 and §7.3:
 2. **MD passes.** It stays at or under +0.5% against R0 in both replays, which is the condition of §5.4. Its smoke test
    passes twice, and it passes the baseline gate twice. So the bot does not need the 486 cold experts of MD on this
    traffic, and a prune of them frees about 4.29 GiB.
-3. **Next: the loader-patch plan of §8.** A prune with a different K in each layer needs it, and without it no cut
-   frees memory. M1 needs no repeat, because MD contains M1 and passes twice.
+3. **Next: the loader-patch plan of §8** (`PLAN_LOADER_PATCH.md`). A prune with a different K in each layer needs
+   it, and without it no cut frees memory. M1 needs no repeat, because MD contains M1 and passes twice.
 4. **The gate needs two replays for a small cut.** One replay moves by up to 0.56%, more than the 0.5% limit. For the
    next cut, compare the mean of two replays per point, each against an R0 of the same window.
 5. **A larger cut is open.** By §5.3, all three points have no measurable cost (D1 on the mean), so the cut can grow:
