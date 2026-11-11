@@ -11,7 +11,7 @@ repo, each on your go.
 | Step | Status |
 |---|---|
 | §5 Step 0: prepare (no downtime) | ✅ 2026-11-10: the tools pass their tests (§5.2); one metrics snapshot (§5.1). ⛔ The 24-hour snapshot is blocked: the windows restart the server and reset the counters |
-| §6 Step 1: the lossless window (about 3.5 h downtime) | ⬜ |
+| §6 Step 1: the lossless window (about 3.5 h downtime) | ✅ 2026-11-10 14:13–16:03 (§6.7): #2 (KV pin 7.25 GiB) passes, deploy is your decision; #1 is closed (the draft's block size is 5, §3); the FP8 draft head and #3 (prefill chunk) fail |
 | §7 Step 2: the replay window (about 3.5 h downtime) | ⬜ |
 | §8 Step 3: offline studies, then builds | ⬜ |
 | §9 Step 4: the KV tier study | ⬜ |
@@ -60,6 +60,14 @@ The source list used the recipe's README. Five of its facts differ on this stack
 | Larger prefill chunks need one flag | `MAX_NUM_BATCHED_TOKENS` must stay at 8224: the server README documents a locked-workspace crash below it. The flag to change is `--long-prefill-token-threshold`. With `MAX_NUM_SEQS=1`, no other request can starve | Raise the threshold to 8224. Test a deep warm turn, because chunks above 1024 never ran on the live server |
 | The memory is about 85 GiB: 74 weights, 8 KV, 3 draft | The 74.09 GiB of the boot log includes the draft (one load). The runtime adds 9.55 GiB | The sum is about 91.6 GiB (§11) |
 | The bot may send strict JSON schemas | The bot plugin and the Hermes chat path send no `response_format`. Tool calls use the default `tool_choice`, auto, which applies no grammar mask | The grammar risk is small. The plan keeps a fixed depth, and each new depth gets a JSON-schema smoke test |
+
+**A sixth fact (found on 2026-11-10, before the window).** A shorter draft (#1) cannot run with the live draft. The
+image's `vllm/config/speculative.py` refuses `num_speculative_tokens` below the draft's `dspark_block_size`, which is
+5 in `dspark-draft-k64-bot/config.json`: "DSpark requires num_speculative_tokens >= dspark_block_size ... Smaller
+values produce incorrect output." DSpark drafts a block of 5 tokens, so depths 3 and 4 do not boot. The window of §6
+therefore runs T0, T3 and T4 only (about 2 h 15 min), and `tune_night.sh` keeps T1 and T2 for a draft with a smaller
+block size. A depth above 5 boots, but each extra position adds less than the 5th (0.14 accepted tokens), so it
+cannot be faster by the estimate of §6.1.
 
 One addition: the fork's `dspark.py` can compute the draft logits with a rowwise-FP8 copy of the head
 (`DSPARK_FP8_DRAFT_HEAD=1`). The verify pass stays BF16, so the output does not change. The source list does not
@@ -265,6 +273,51 @@ acceptance:
 - a deploy from `PLAN_FEWER_EXPERTS.md` (the draft then runs at top-k 6);
 - a wider draft (#7);
 - suffix drafts (#6).
+
+Since 2026-11-10 this applies only to depths of 5 and more, because the draft cannot go below its block size (§3).
+
+### 6.7 Result (2026-11-10, 14:13 to 16:03)
+
+You moved the start from 20:00 to 14:13. `tune_night.sh` ran T0, T3 and T4 (T1 and T2 cannot boot, §3). The live
+server was down from 14:13 to 16:03 (1 h 50 min). The restore was healthy at 16:03 (reply "OK.", gateway active).
+Logs: `logs/tune-night.log`, `results/boot-tune-t*.log`, `results/probe-tune-t*.json`, `results/speed-*-tune-t*`.
+
+| Point | Settings | Boot | Bot decode (runs) | Accepted per step | Code decode |
+|---|---|---|---|---|---|
+| T0 | The live settings | 180 s, 74.09 GiB, 292,952 KV tokens, 1.14x | **35.00** tok/s (33.39–35.30) | 2.20 | 40.90 tok/s |
+| T3 | + FP8 draft head | 180 s, **74.58 GiB**, 292,952, 1.14x | 34.27 tok/s (33.39–38.75) | 2.10 | 41.75 tok/s |
+| T4 | KV pin 7.25 GiB, prefill chunk 8,224 | 165 s, 74.09 GiB, **265,498**, **1.04x** | 35.36 tok/s (3 runs, 35.02–36.65) | 2.21 | 40.84 tok/s |
+
+The graph check passed on all three points. The smoke requests of T4 passed (the JSON schema and both tool choices),
+and no point logged an assertion.
+
+| Prefill probe | T0 (chunk 1,024) | T4 (chunk 8,224) | Change |
+|---|---|---|---|
+| Cold 8k | 6.0 s, 1,338 tok/s | 5.8 s, 1,378 tok/s | +3.0% |
+| Cold 32k | 23.9 s, 1,338 tok/s | 22.8 s, 1,400 tok/s | +4.7% |
+| Cold 128k | 103.8 s, 1,233 tok/s | 102.1 s, 1,254 tok/s | +1.7% |
+| Warm turn: 8k new tokens on 200k | 196,608 tokens from the cache, 12.2 s, pass | 196,608, 12.5 s, pass | — |
+| Available memory: before the probe, lowest | 22.6 GiB, 22.6 GiB | 24.3 GiB, **20.8 GiB** | −3.4 GiB under load |
+
+The gates of §6.4:
+
+- **#1 depth: closed.** Depths 3 and 4 do not boot with the live draft (§3). No deploy.
+- **FP8 draft head: fails.** T3 is 2.1% slower than T0 (34.27 against 35.00 tok/s). The FP8 logits change the draft
+  choices, and the accepted tokens per step fall from 2.20 to 2.10 at every position. The code decode gains 2.1%,
+  inside the noise. The head costs 0.49 GiB (74.58 against 74.09 GiB). Keep it off.
+- **#2 KV pin: passes.** T4 boots with 7.25 GiB, and the boot log gives 1.04x for 256,000 tokens per request (the
+  gate is 1.02x). The pool falls from 292,952 to 265,498 tokens. The bot decode does not fall (35.36 tok/s).
+- **#3 prefill chunk: fails.** The cold 32k and 128k prompts are only 4.7% and 1.7% faster (the gate is 10%). The
+  warm turn passes, and the lowest available memory stays above 15 GiB. But after a long prefill the larger chunk
+  holds about 3.4 GiB more memory (24.3 GiB available at idle, 20.8 GiB during and after the 128k prompt; T0 did not
+  fall). Keep 1024.
+
+**Deploy recommendation (your decision): #2 only.** Change `--kv-cache-memory-bytes 8589934592` to `7784628224` in
+`compose-k160t5.yml`, and keep `--long-prefill-token-threshold 1024`, the depth 5 and no FP8 draft head. Follow the
+steps of §6.5. The graph sizes do not change, so the boot needs no new compile (about 3 min). The gain is 0.75 GiB of
+memory and no output change. The risk: the margin over the 256k need falls from 14% to 4%, and the pool holds 9%
+fewer warm tokens. §5.1 saw no prompt above 50,000 tokens. Do not take the 160k option of §6.4 before the 24-hour
+data of §5.1 exists.
 
 ## 7. Step 2: the replay window (#4, #5)
 
