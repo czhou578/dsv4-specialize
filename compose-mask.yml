@@ -4,7 +4,7 @@
 #   symlinks resolve; the draft is mounted read-only. Nothing of the main server is writable.
 # - Port 8890, so the bot (port 8888) fails instead of using a test model.
 # - The no-download entrypoint with SKIP_DOWNLOAD=1: a folder without a manifest stops the boot.
-# - Its own copy of ./cache (README step 3).
+# - Its own copy of ./cache (RUNBOOK.md, "One mask test by hand", step 3).
 # - DRAFT_DIR mounts another DSpark draft folder (default: the stock draft); PLAN_PHYSICAL_PRUNE.md §7.
 # - MASK_EXTRA_ARGS adds vLLM flags. (The §5.2 capture needs compose-capture.yml: V2 rejects the flag.)
 # - MASK_NAME=botmask boots tp1-botmask-k${MASK_K} (bot rank, mask_checkpoint.py --rank); default mask (REAP).
