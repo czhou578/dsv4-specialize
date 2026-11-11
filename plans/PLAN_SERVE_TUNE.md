@@ -483,7 +483,8 @@ the speed reference H0. Every point booted with `compose-tune.yml` at the live s
   over a uniform K.
 - So the weight share of the router alone does not predict the cost of a cut in a layer. A better allocation needs
   a measured cost per layer (one replay per layer cut), which is outside this plan.
-- No new prune plan follows. K 160 stays the floor (`PLAN_BETTER_RANK.md` §6.3). The folders `tp1-klg5-k144`,
+- No new prune plan follows. K 160 stays the floor (`PLAN_BETTER_RANK.md` §6.3). No point passed, so the prune with
+  a different K in each layer, its full runs and your blind review do not apply. The folders `tp1-klg5-k144`,
   `tp1-kle5-k144`, `tp1-klg5-k152` and `tp1-kle5-k152` are deleted.
 
 ## 8. Step 3: offline studies, then builds (#6, #7)
