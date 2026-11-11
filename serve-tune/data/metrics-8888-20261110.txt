@@ -1,0 +1,25 @@
+# port 8888, 2026-11-10 13:47 PST; the server started at 07:23 (PLAN_SERVE_TUNE.md §5.1)
+vllm:prefix_cache_queries_total{engine="0",model_name="deepseek-v4-flash-0731-k160t5"} 2.067008e+06
+vllm:prefix_cache_hits_total{engine="0",model_name="deepseek-v4-flash-0731-k160t5"} 20480.0
+vllm:num_preemptions_total{engine="0",model_name="deepseek-v4-flash-0731-k160t5"} 0.0
+vllm:prompt_tokens_total{engine="0",model_name="deepseek-v4-flash-0731-k160t5"} 2.067008e+06
+vllm:request_prompt_tokens_bucket{engine="0",le="1.0",model_name="deepseek-v4-flash-0731-k160t5"} 0.0
+vllm:request_prompt_tokens_bucket{engine="0",le="2.0",model_name="deepseek-v4-flash-0731-k160t5"} 0.0
+vllm:request_prompt_tokens_bucket{engine="0",le="5.0",model_name="deepseek-v4-flash-0731-k160t5"} 0.0
+vllm:request_prompt_tokens_bucket{engine="0",le="10.0",model_name="deepseek-v4-flash-0731-k160t5"} 1.0
+vllm:request_prompt_tokens_bucket{engine="0",le="20.0",model_name="deepseek-v4-flash-0731-k160t5"} 1.0
+vllm:request_prompt_tokens_bucket{engine="0",le="50.0",model_name="deepseek-v4-flash-0731-k160t5"} 1.0
+vllm:request_prompt_tokens_bucket{engine="0",le="100.0",model_name="deepseek-v4-flash-0731-k160t5"} 1.0
+vllm:request_prompt_tokens_bucket{engine="0",le="200.0",model_name="deepseek-v4-flash-0731-k160t5"} 1.0
+vllm:request_prompt_tokens_bucket{engine="0",le="500.0",model_name="deepseek-v4-flash-0731-k160t5"} 7.0
+vllm:request_prompt_tokens_bucket{engine="0",le="1000.0",model_name="deepseek-v4-flash-0731-k160t5"} 7.0
+vllm:request_prompt_tokens_bucket{engine="0",le="2000.0",model_name="deepseek-v4-flash-0731-k160t5"} 13.0
+vllm:request_prompt_tokens_bucket{engine="0",le="5000.0",model_name="deepseek-v4-flash-0731-k160t5"} 31.0
+vllm:request_prompt_tokens_bucket{engine="0",le="10000.0",model_name="deepseek-v4-flash-0731-k160t5"} 41.0
+vllm:request_prompt_tokens_bucket{engine="0",le="20000.0",model_name="deepseek-v4-flash-0731-k160t5"} 175.0
+vllm:request_prompt_tokens_bucket{engine="0",le="50000.0",model_name="deepseek-v4-flash-0731-k160t5"} 181.0
+vllm:request_prompt_tokens_bucket{engine="0",le="100000.0",model_name="deepseek-v4-flash-0731-k160t5"} 181.0
+vllm:request_prompt_tokens_bucket{engine="0",le="200000.0",model_name="deepseek-v4-flash-0731-k160t5"} 181.0
+vllm:request_prompt_tokens_bucket{engine="0",le="+Inf",model_name="deepseek-v4-flash-0731-k160t5"} 181.0
+vllm:request_prompt_tokens_count{engine="0",model_name="deepseek-v4-flash-0731-k160t5"} 181.0
+vllm:request_prompt_tokens_sum{engine="0",model_name="deepseek-v4-flash-0731-k160t5"} 2.067008e+06

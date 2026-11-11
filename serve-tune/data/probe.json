@@ -1,0 +1,20 @@
+{
+ "reference": {"baseline": {"decisions": 41, "tool_names": 77}, "live_summed_nll_vs_baseline_pct": 1.89},
+ "t0": {
+  "cold": [
+   {"target": 8000, "prompt_tokens": 7999, "ttft_s": 5.978, "prefill_tok_s": 1338.0, "min_avail_mib": 22619, "pass": true},
+   {"target": 32000, "prompt_tokens": 31993, "ttft_s": 23.919, "prefill_tok_s": 1337.6, "min_avail_mib": 23053, "pass": true},
+   {"target": 128000, "prompt_tokens": 127970, "ttft_s": 103.817, "prefill_tok_s": 1232.7, "min_avail_mib": 23007, "pass": true}
+  ],
+  "warm": {"prompt_tokens": 207950, "cached_tokens": 196608, "ttft_s": 12.22, "pass": true}
+ },
+ "t4": {
+  "cold": [
+   {"target": 8000, "prompt_tokens": 7999, "ttft_s": 5.805, "prefill_tok_s": 1378.0, "min_avail_mib": 21059, "pass": true},
+   {"target": 32000, "prompt_tokens": 31993, "ttft_s": 22.843, "prefill_tok_s": 1400.5, "min_avail_mib": 20926, "pass": true},
+   {"target": 128000, "prompt_tokens": 127970, "ttft_s": 102.07, "prefill_tok_s": 1253.7, "min_avail_mib": 20866, "pass": true}
+  ],
+  "warm": {"prompt_tokens": 207950, "cached_tokens": 196608, "ttft_s": 12.524, "pass": true},
+  "smoke": {"json_schema": true, "tool_auto": true, "tool_required": true}
+ }
+}
