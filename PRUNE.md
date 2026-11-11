@@ -116,5 +116,5 @@ Yao 2026, https://arxiv.org/abs/2609.04575). `compose-drop.yml` mounts it on a t
 elsewhere (a longer draft, or the second, fast model of `PLAN_MODEL_ROUTER.md` in the bot repo). The anchored top-5
 is a little better on the replay (0.71 points of NLL), but the judge does not see a gain in the full runs. A deploy
 would need a top-k 6 prune of the mask and the patch on the live server.
-On 2026-11-10 you decided: no deploy (`plans/PLAN_FEWER_EXPERTS.md` §9.2). The live model did not change, and the
+On 2026-11-10 the user decided: no deploy (`plans/PLAN_FEWER_EXPERTS.md` §9.2). The live model did not change, and the
 test folders were deleted.
