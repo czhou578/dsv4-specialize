@@ -1,10 +1,13 @@
 # weight folders (12-73 GB each): built by mask_checkpoint.py, topk_checkpoint.py, prune_experts.py
 tp1-*/
 tp1-*
-# the kernel cache copy (README step 3), the capture output, logs, backups, bytecode
+# the kernel cache copy (RUNBOOK.md, "One mask test by hand", step 3), the capture output, logs, backups, bytecode
 cache/
 capture-out/
 *.log
+# the logs folder holds the run logs and the cron backups of the test windows; only its placeholder is in git
+logs/*
+!logs/.gitkeep
 script-backup-*/
 __pycache__/
 # the result files of the test points: replay rows, speed files, boot logs, reports (moved from the bot repo's

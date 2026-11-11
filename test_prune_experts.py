@@ -15,6 +15,7 @@ from test_topk_checkpoint import bf16, save, write_manifest
 
 VOCAB, HIDDEN, EXPERTS, LAYERS = 10, 4, 8, 4
 DROP = {0: [1, 4], 1: [0, 7], 2: [2, 3], 3: [5, 6]}
+VARIED = {0: [1], 1: [0], 2: [2, 3, 6], 3: [5, 6]}  # K 7, 7, 5, 6: a different K per layer
 ORIGINAL = [0, 1, 3, 4, 5, 7, 8, 9]  # the 8 experts kept from 10 by the first prune
 
 
@@ -28,17 +29,17 @@ def expert_tensors(layer):
     return out
 
 
-def checkpoint(base):
+def checkpoint(base, drop=DROP):
     rng = np.random.default_rng(0)
     carried = {"embed.weight": ("BF16", bf16(rng.standard_normal((VOCAB, HIDDEN))))}
     for i in range(LAYERS):
         carried[f"layers.{i}.ffn.gate.weight"] = ("BF16", bf16(rng.standard_normal((EXPERTS, HIDDEN))))
         if i < mc.HASH_LAYERS:
-            kept = [e for e in range(EXPERTS) if e not in DROP[i]]
+            kept = [e for e in range(EXPERTS) if e not in drop[i]]
             carried[f"layers.{i}.ffn.gate.tid2eid"] = (
                 "I64", np.array([rng.permutation(kept)[:5] for _ in range(VOCAB)], np.int64))
     bias = rng.standard_normal(EXPERTS).astype(np.float32)
-    bias[DROP[3]] = mc.MASK_BIAS
+    bias[drop[3]] = mc.MASK_BIAS
     carried["layers.3.ffn.gate.bias"] = ("F32", bias)
     carried["mtp.0.ffn.gate.weight"] = ("BF16", bf16(rng.standard_normal((EXPERTS, HIDDEN))))
     carried["hc_head_base"] = ("F32", np.arange(3, dtype=np.float32))  # 12 bytes: later offsets not 8-aligned
@@ -69,7 +70,7 @@ def checkpoint(base):
     (base / pe.MANIFEST).write_text(json.dumps(manifest))
 
 
-def mask_folder(base, mask):
+def mask_folder(base, mask, drop=DROP):
     """Like the pick: a real carried-001 (the mask edits), a real config, symlinks to the rest."""
     mask.mkdir()
     for p in sorted(base.iterdir()):
@@ -78,7 +79,7 @@ def mask_folder(base, mask):
         else:
             (mask / p.name).symlink_to(p)
     (mask / "MASK.json").write_text(json.dumps({"keep": 6, "layers": {
-        str(i): {"drop": d, "drop_original": [ORIGINAL[e] for e in d]} for i, d in DROP.items()}}))
+        str(i): {"drop": d, "drop_original": [ORIGINAL[e] for e in d]} for i, d in drop.items()}}))
     (mask / "TOPK.json").write_text('{"top_k": 5}')
 
 
@@ -138,6 +139,7 @@ class PruneTest(unittest.TestCase):
         cfg = json.loads((self.out / "config.json").read_text())
         self.assertEqual((cfg["n_routed_experts"], cfg["hybrid_tr3_tail"]["experts_per_layer"],
                           cfg["reap_pruning"]["kept_experts_per_layer"], cfg["num_experts_per_tok"]), (6, 6, 6, 5))
+        self.assertNotIn("n_routed_experts_per_layer", cfg)  # a uniform folder loads in the stock image
         quant = json.loads((self.out / "quantization_config.json").read_text())
         self.assertEqual(quant["rank_sliced"]["experts_per_layer"], cfg["n_routed_experts"])  # the vLLM rule
         index = json.loads((self.out / pe.INDEX).read_text())
@@ -170,6 +172,39 @@ class PruneTest(unittest.TestCase):
         self.assertEqual(prune["self_check"]["router_tensors"], LAYERS * 2)
         with self.assertRaises(FileExistsError):
             self.build()
+
+    def test_a_different_k_per_layer_writes_the_lists_of_the_loader_patch(self):
+        base, mask, out = self.root / "tp1-varied", self.root / "mask-varied", self.root / "prune-varied"
+        base.mkdir()
+        checkpoint(base, VARIED)
+        mask_folder(base, mask, VARIED)
+        record = pe.build(mask, out, base=base)
+        ks = [7, 7, 5, 6]
+        self.assertEqual(record["kept_experts"], ks)
+        self.assertEqual(record["tensors_removed"], 7 * 2 * 2)
+        cfg = json.loads((out / "config.json").read_text())
+        self.assertEqual((cfg["n_routed_experts"], cfg["n_routed_experts_per_layer"]), (7, ks))
+        self.assertEqual((cfg["hybrid_tr3_tail"]["experts_per_layer"], cfg["reap_pruning"]["kept_experts_per_layer"]),
+                         (ks, ks))
+        self.assertEqual(json.loads((out / "quantization_config.json").read_text())["rank_sliced"]["experts_per_layer"],
+                         ks)
+        tiers = json.loads((out / pe.TIERS).read_text())
+        self.assertEqual((tiers["experts_per_layer"], tiers["total_expert_triplets"], len(tiers["2"]["k"])),
+                         (ks, 25, 5))
+        plan = json.loads((out / "REAP_K6_PLAN.json").read_text())  # the rounded mean of 6.25
+        self.assertEqual((plan["kept_experts_per_layer"], plan["keep_maps"]["keep_count"]), (ks, ks))
+        self.assertEqual(plan["keep_maps"]["keep_by_layer"]["2"], [ORIGINAL[e] for e in (0, 1, 4, 5, 7)])
+        _, table = mc.header(out / "exl3-layer-002-tp1-rank0.safetensors")
+        self.assertEqual(len(table) - 1, 5 * 4)
+        self.assertEqual(int(mc.read_tensor(out / "exl3-layer-002-tp1-rank0.safetensors",
+                                            "layers.2.ffn.experts.4.w1.rank0.mcg")), 7)
+        gate = mc.read_tensor(out / "carried-001.safetensors", "layers.1.ffn.gate.weight")
+        self.assertEqual(gate.shape, (7, HIDDEN))
+        self.assertEqual(record["self_check"]["experts_same_bytes"], sum(ks) * 4)
+        cfg["n_routed_experts_per_layer"] = [7, 7, 6, 5]
+        (out / "config.json").write_text(json.dumps(cfg))
+        with self.assertRaisesRegex(ValueError, "expert counts do not match"):
+            pe.self_check(mask, out)
 
     def test_a_dropped_id_in_tid2eid_stops_the_tool(self):
         path = self.mask / "carried-001.safetensors"
