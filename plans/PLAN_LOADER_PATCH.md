@@ -1,6 +1,6 @@
 # Plan: a different expert count in each layer (the loader patch)
 
-**Status:** 2026-11-11: the work before the window is done (§5.5). The window of §6 waits for your go · **Author:** colin-spark · **Date:** 2026-11-11
+**Status:** 2026-11-11: done. The MD prune passes every gate of the window (§6.2): 69.79 GiB loaded, 4.18 GiB more free memory, the replay of the mask, the bot speed. Next: the deploy chain (§7.1). No deploy · **Author:** colin-spark · **Date:** 2026-11-11
 **Source:** `PLAN_COLD_EXPERTS.md` §5.5. MD, the cut of 486 cold experts, has no measurable cost on the replay in two
 windows (+0.18% against R0). A prune of MD frees about 4.29 GiB, but each layer then keeps a different number of
 experts (140 to 160). The runtime accepts one number for all layers. This plan patches the runtime.
@@ -16,8 +16,8 @@ experts (140 to 160). The runtime accepts one number for all layers. This plan p
 | §5.2 The patch, its build script and the test compose file (no downtime) | ✅ 2026-11-11 (#26, #27): the diff applies to the pinned image; 5 tests pass in the image |
 | §5.3 The kernel check on the GPU (no downtime, about 30 min) | ✅ 2026-11-11 (#27): MD equals K 160 bit for bit; no cross-talk on the pool; one arena for all counts |
 | §5.4 The prune of MD (no downtime, about 15 min) | ✅ 2026-11-11 10:48–10:58: `tp1-prunemd5-k149`, 4.29 GiB less, the self-check passes |
-| §6 The test window (about 2 h 30 min downtime) | ⬜ `loader_window.sh` is ready (#28); it waits for your go |
-| §7 The decision | ⬜ |
+| §6 The test window (about 2 h 30 min downtime) | ✅ 2026-11-11 11:10–13:44 (§6.2): P0 and P1 pass every gate. The code decode test of P1 is 4.9% slower |
+| §7 The decision | ✅ 2026-11-11 (§7.1): the deploy chain of `PLAN_FINAL_REVIEW.md` next; the code result goes into it. No deploy |
 
 ---
 
@@ -248,6 +248,47 @@ not run it during another test.
 | Quality | — | The mean of the two replays is within 0.6% of the mean of the two MD mask replays (`PLAN_COLD_EXPERTS.md` §5.5). 0.6% is the noise of one folder between windows. The baseline gate also passes (NLL ≤ +3% and tool names ≥ 98% against K 216) |
 | Speed | The bot decode test within 4.2% of the live server | The bot decode test within 4.2% of P0; the draft acceptance within the same noise |
 
+### 6.2 Result (2026-11-11, 11:10 to 13:44)
+
+**The start, on your go.** The Hermes cron jobs were still paused from `PLAN_COLD_EXPERTS.md` §7.3. The guard of that
+window was set for 11:50, inside this window, so it was stopped; a new guard (`GUARD_AT=14:30 RECHECK_AT=14:50`)
+took its place. The window ran with `START_AFTER='2026-11-11 11:10' BOOT_BY='2026-11-11 12:25'
+SPEED_BY='2026-11-11 13:50' RESTORE_AT='2026-11-11 14:10'`.
+
+The live server stopped at 11:10:27 and was down for 2 h 34 min. The restore was healthy at 13:44 (reply "OK.",
+gateway active), with the 7.25 GiB pin. Logs: `logs/loader-window.log` and `logs/memory-lp-*.log`; result files:
+`results/*lp-p*`, not in git.
+
+| Gate | P0: `tp1-prune5-k160` | P1: `tp1-prunemd5-k149` | Result |
+|---|---|---|---|
+| Boot | 210 s; 74.09 GiB; one runtime, arena 1277.1 MiB; no pool line | 211 s; **69.79 GiB**; 15 counts share one pool (decode 10.9 MiB, prefill 1277.1 MiB) | Pass |
+| Memory after the boot | 23,944 MB available | 28,228 MB: **4.18 GiB more** | Pass (the gate is 4 GiB) |
+| Smoke | Pass | Pass | Pass |
+| Quality | — | The two replays: +2.84% and +2.66% against K 216, tool names 94.0% and 96.4%. The mean is **+0.13%** against the mean of the two MD mask replays | Pass (the gate is 0.6%) |
+| Bot decode test (5 runs) | 34.81 tok/s; 2.201 tokens per draft | 34.35 tok/s (**−1.3%**); 2.187 tokens per draft | Pass (the gate is 4.2%) |
+
+Over two replays each, against R0 of `PLAN_COLD_EXPERTS.md` §7 (the live set as a mask):
+
+| Folder | NLL against R0 | Decisions (of 120) | Tool names (of 166) |
+|---|---|---|---|
+| R0 | — | 81 | 155 |
+| MD mask | +0.18% | 82 | 157 |
+| P1, the MD prune | +0.30% | 79 | 158 |
+
+- **The patch does not change the uniform path.** P0 boots like the live server, and its bot decode rate is within
+  0.5% of the live settings (35.0 tok/s on 2026-11-10).
+- **The 15 counts cost no boot time and no memory.** The boot took 211 s, as P0 did, and the pool holds one arena.
+- **The memory gain is 4.18 GiB,** a little less than the 4.29 GiB of tensors. The lowest free memory in a P1
+  replay was 26.6 GB, against 1.3 to 1.8 GB for the masks of 216 experts.
+- **The prefill is 1% to 2% slower:** 1356, 1313 and 1214 tok/s at 8k, 32k and 128k tokens, against 1370, 1338 and
+  1231 for P0. The warm prefix cache works on both. No gate covers the prefill.
+- **The code decode test is 4.9% slower, and this is more than its noise.** P1 gives 37.98 tok/s (runs 37.17 to
+  38.11) and 2.376 tokens per draft. P0 gives 39.94 tok/s (39.43 to 40.40) and 2.568 tokens per draft. The difference
+  of 1.96 tok/s is above the noise floor of 1.65 tok/s of `speed_result.py`. So on code prompts the draft agrees less
+  often with the pruned model: the removed experts are cold on the bot's traffic, not on code. Code is not the bot's
+  traffic, and no gate covers this test. The test exits 1 on every point, P0 and the live settings too: that is its
+  own fixed decode limit, not a failure of the run.
+
 ## 7. The decision
 
 | Result | Next step |
@@ -259,6 +300,22 @@ not run it during another test.
 
 After a pass, the larger cut of `PLAN_COLD_EXPERTS.md` §5.5 (all experts below 0.2%, 7.89 GiB) needs no new code.
 Each of its points needs two replays.
+
+### 7.1 The decision (2026-11-11)
+
+P0 and P1 pass every gate of §6.1, so the first row of the table applies:
+
+1. **The patch works.** A folder with a different expert count in each layer loads, frees its memory (4.18 GiB),
+   and gives the replay of its mask. The uniform path does not change.
+2. **Next: the deploy chain of `PLAN_FINAL_REVIEW.md`** for `tp1-prunemd5-k149`: the full runs, the LLM judge and your
+   blind review, against the live model.
+3. **Put the code result into that review.** The code decode test is 4.9% slower, with 7.5% fewer draft tokens
+   accepted. If the full runs or the review show a loss on tasks that write code (for example in the quant skill),
+   that is the first place to look.
+4. **Decide the use of the 4.18 GiB with the deploy:** KV room, or the second model of the router plan.
+5. **A deploy also needs the patch in the server repo:** the two built files of `image-patch/perlayer/` as mounts in
+   its compose file. Make that change only with the deploy.
+6. **No deploy now.** The live server runs `tp1-k160t5` on the stock image, as before.
 
 ## 8. Risks
 

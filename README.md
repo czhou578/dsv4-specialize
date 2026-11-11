@@ -135,7 +135,7 @@ these tool experts, without the coldest ordinary experts, and without both. The 
 - Tools: [cold_sets.py](cold_sets.py) and `mask_checkpoint.py --drop-file`.
 - Run script: [cold_replay.sh](cold_replay.sh).
 
-### 6. Prune the cold experts with a loader patch (2026-11-11): in progress
+### 6. Prune the cold experts with a loader patch (2026-11-11): done, not deployed
 
 **Question:** can the runtime load a prune with a different number of experts in each layer? The cut of stage 5
 keeps 140 to 160 experts per layer, but the runtime accepts one number for all layers. The plan patches the config,
@@ -144,7 +144,9 @@ counts: one buffer for each count would use more memory than the prune frees. Th
 experts at about 69.80 GiB, with the replay result and the speed of the mask. The first step is done:
 `prune_experts.py` builds a folder with a different K in each layer. The patch, its tests and the prune of MD are
 done too: on the GPU, a layer of the MD prune gives the same output as the same experts of the K 160 prune, bit for
-bit, and all expert counts share one scratch buffer. The test window waits.
+bit, and all expert counts share one scratch buffer. In the test window, the MD prune loaded 69.79 GiB, left
+4.18 GiB more memory free, matched the mask on two replays (+0.13%) and kept the bot speed (−1.3%). The code decode
+test is 4.9% slower. The next step is the deploy review.
 
 - Plan: [PLAN_LOADER_PATCH.md](plans/PLAN_LOADER_PATCH.md).
 - Tools: [prune_experts.py](prune_experts.py) (§5.1 of the plan), and the patch (§5.2):
