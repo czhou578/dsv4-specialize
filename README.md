@@ -142,12 +142,15 @@ keeps 140 to 160 experts per layer, but the runtime accepts one number for all l
 the router, the weight loader and the MoE runtime. The MoE runtime must share one scratch buffer across all expert
 counts: one buffer for each count would use more memory than the prune frees. The goal is the prune of the 486 cold
 experts at about 69.80 GiB, with the replay result and the speed of the mask. The first step is done:
-`prune_experts.py` builds a folder with a different K in each layer.
+`prune_experts.py` builds a folder with a different K in each layer. The patch, its tests and the prune of MD are
+done too: on the GPU, a layer of the MD prune gives the same output as the same experts of the K 160 prune, bit for
+bit, and all expert counts share one scratch buffer. The test window waits.
 
 - Plan: [PLAN_LOADER_PATCH.md](plans/PLAN_LOADER_PATCH.md).
 - Tools: [prune_experts.py](prune_experts.py) (§5.1 of the plan), and the patch (§5.2):
   [image-patch/per-layer-experts.diff](image-patch/per-layer-experts.diff),
   [image-patch/build_perlayer.sh](image-patch/build_perlayer.sh) and [compose-perlayer.yml](compose-perlayer.yml).
+- Checks: [loader_kernel_check.py](loader_kernel_check.py). Run script: [loader_window.sh](loader_window.sh).
 
 ### 7. Remove whole layers (planned)
 
@@ -283,6 +286,7 @@ safety rules in [RUNBOOK.md](RUNBOOK.md) before you start one.
 | [fewer_night.sh](fewer_night.sh) | The test night of `plans/PLAN_FEWER_EXPERTS.md`: the routing profile (Phase A), then the replay points C1–C5 and C0 on `tp1-botmask-k160` with `compose-drop.yml` (Phase C), then 5 bot decode runs on the chosen point and 5 on the live server (Phase D). `BOOT_MIN_GIB` makes each boot wait for that much available memory |
 | [fewer_stepf.sh](fewer_stepf.sh) | Step F of `plans/PLAN_FEWER_EXPERTS.md` §9 on one point (`POINT`, `MOE_DROP`, `MOE_NORM`; `MASK_NAME=prune5` boots the live folder): optional replay (`REPLAY=1`) and speed tests (`SPEED=1`, gate `SPEED_MIN`), the 19 held-out prompts end to end, the restore, the checks, the judge and the blind page |
 | [cold_replay.sh](cold_replay.sh) | The replay window of `plans/PLAN_COLD_EXPERTS.md` §7: the masks R0, M1, D1 and MD (`cold_sets.py`), each with the smoke requests, the replay and the comparisons against R0 and the baseline. It stops after R0 if R0 does not match the earlier K 160 mask. The test boots pin the KV at 7.25 GiB |
+| [loader_window.sh](loader_window.sh) | The test window of `plans/PLAN_LOADER_PATCH.md` §6: the patched image (`compose-perlayer.yml`) on the K 160 prune (P0: smoke, speed, prefill probe) and on the MD prune (P1: also two replays). After the restore it logs the gates of §6.1: the loaded GiB, the free memory, the speed of P1 against P0, and the mean NLL of P1 against the MD mask |
 | [overnight_guard.sh](overnight_guard.sh) | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-k160t5.yml`) if port 8888 is down. `DRY_RUN=1` logs the actions only |
 
 **Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output
