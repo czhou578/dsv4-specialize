@@ -11,8 +11,8 @@ K 144 failure), `PLAN_FINAL_REVIEW.md` (the deploy chain), `PRUNE.md` (the live 
 | Step | Status |
 |---|---|
 | §3 The data check (no downtime) | ✅ 2026-11-10: the cold tail is mostly mandatory tool experts |
-| §6 The tools and the folders (no downtime, about half a day) | ⬜ |
-| §7 The replay window (about 3 h 15 min downtime) | ⬜ |
+| §6 The tools and the folders (no downtime, about half a day) | ✅ 2026-11-10 23:20–23:35: the tools pass their tests; the four folders are built and checked (§6.1) |
+| §7 The replay window (about 3 h 15 min downtime) | 🟨 2026-11-10: started at 23:33, on your go; the Hermes cron jobs are paused for the morning of 2026-11-11 (§7.1) |
 | §5 The decision | ⬜ |
 
 ---
@@ -170,6 +170,39 @@ Make a branch from `tune-2b-klayer`, because it holds `mask_checkpoint.py --keep
 
 The code is about 300 lines with the tests, so it fits in one pull request.
 
+### 6.1 Result (2026-11-10, 23:20 to 23:35)
+
+The work is on the branch `cold-experts`, made from `main`: `tune-2b-klayer` is merged into `main` since 2026-11-10.
+The code went into two pull requests (the tools, then the window script), so that each stays small.
+
+1. **The rank file** `results/expert_rank_k160.json`: 63 segments, 2,838,972 prompt tokens, no NaN slot. At K 160, its
+   drop order gives exactly the 56 live drops of each layer (checked against the live `MASK.json`).
+2. **`mask_checkpoint.py --drop-file FILE`**, as specified. The rule for the mandatory experts is now one function,
+   `mandatory()`, which `drop_order` and `cold_sets.py` both use.
+3. **`cold_sets.py`** wrote `results/cold-{r0,m1,d1,md}.json`. Its check table equals the table of §4 in every number:
+
+   | Point | Experts | Mandatory | GiB | Weight share lost per layer, mean (max) | K in layers 3–42 | Mean K |
+   |---|---|---|---|---|---|---|
+   | R0 | 0 | 0 | 0 | 0 | 160 | 160 |
+   | M1 | 257 | 257 | 2.27 | 0.33% (0.73%) | 145–159 | 154 |
+   | D1 | 229 | 0 | 2.02 | 0.92% (1.00%) | 151–156 | 155 |
+   | MD | 486 | 257 | 4.29 | 1.25% (1.72%) | 140–154 | 149 |
+
+   The R0 file equals the live drops and the drops of `--keep 160` with the rank file of step 1, in all 43 layers. Each
+   file holds the live drops, and layers 0–2 hold only the live drops.
+4. **The tests:** `test_cold_sets.py` (4 tests: the M1 and D1 rules, the union of MD, the live drops in every file,
+   layers 0–2 untouched, the report) and one more test in `test_mask_checkpoint.py` (a drop file drops a mandatory
+   expert; a drop file with the drops of `--keep 6` gives the same mask). `python -m unittest`: OK.
+5. **The folders** `tp1-coldr05-k160`, `tp1-coldm15-k154`, `tp1-coldd15-k155` and `tp1-coldmd5-k149`: each build took
+   45 to 55 s and holds 12 GB. `topk_checkpoint.py --check` passes on each, and no link is broken. The hash tables of
+   R0 got the same remap as the live mask (166,409, 170,172 and 166,531 entries in layers 0–2). The intermediate mask
+   folders are deleted.
+6. **`cold_replay.sh`**, with the point flow of `serve-tune/tune_replay.sh`. A dry run with a stub `run_lib.sh`
+   checked the point order, the smoke and report lines, and the stop after a failed R0 check. One change against the
+   plan: the test boots pin the KV cache at 7.25 GiB, as the live server does since 2026-11-10 23:04. A mask of 216
+   experts left only 1.2 to 4 GiB free on 2026-11-10 (`serve-tune/PLAN_SERVE_TUNE.md` §7.4), and the smaller pin
+   adds 0.75 GiB. The KV size does not change the NLL.
+
 ## 7. The replay window (about 3 h 15 min downtime)
 
 CAUTION: this window stops the bot's model server for about 3 h 15 min. Start it only with your go. Do not start it
@@ -192,6 +225,21 @@ tmux new -d -s cold "START_AFTER=... BOOT_BY=... RESTORE_AT=... ~/Projects/dsv4-
 
 A mask of `data/tp1` loads 95.4 GiB. The N1 point of `PLAN_SERVE_TUNE.md` booted such a mask on 2026-11-10 and had
 4 GiB free after the boot. The memory watch of `run_lib.sh` stops a point that runs short.
+
+### 7.1 Before the window (2026-11-10, 23:24 to 23:33)
+
+- **The cron jobs, on your go.** Both Hermes cron jobs use DeepSeek through port 8888: `daily-followups` (every 20 min,
+  05:00 to 09:40 on weekdays) and `daily-report` (05:30 on weekdays). Both are paused with `hermes cron pause` since
+  23:24. The tmux session `cron-resume` runs `logs/cron-resume-20261111.sh`: at 10:05 on 2026-11-11 it resumes both
+  jobs (`hermes cron resume`), so the next runs are on Thursday morning. The backup of `~/.hermes/cron/jobs.json` is
+  `logs/hermes-jobs.json.bak.20261110_cold`. `daily-report` still needs a pin to the renamed model (`PRUNE.md` §5).
+- **The memory.** Before each boot, `run_lib.sh` waits for 110 GiB free (vLLM's boot check at util 0.90 needs 109.5).
+  The live server alone left 25 GiB free; after its stop, 115 GiB. The 7.25 GiB pin gives each mask 0.75 GiB more
+  room. The memory watch stops a client below 1 GiB. The overnight guard (tmux `guard`) restores the live server at
+  04:15 if it is down.
+- **The start:** `tmux new -d -s cold "START_AFTER=<now> BOOT_BY='2026-11-11 02:40' SPEED_BY='2026-11-11 02:50'
+  RESTORE_AT='2026-11-11 03:30' ~/Projects/dsv4-specialize/cold_replay.sh"` at 23:33. The bot was idle, and the live
+  server stopped at 23:33:01.
 
 ## 8. What a pass does not give
 
