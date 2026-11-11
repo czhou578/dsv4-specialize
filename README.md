@@ -5,7 +5,7 @@ removes the routed experts that the bot's own traffic rarely uses. The pruned mo
 and the tests found no loss of quality. The bot uses the pruned model since 2026-11-06.
 
 The repo holds the weight tools, the test boots, the run scripts, the plans and the results. It is the record of one
-project on one machine. The [timeline](#timeline-of-the-work) shows the six stages of the work and the files of each
+project on one machine. The [timeline](#timeline-of-the-work) shows the seven stages of the work and the files of each
 stage. Read [Scope and requirements](#scope-and-requirements) before you try to run it elsewhere.
 
 ## Results
@@ -47,7 +47,7 @@ review. The [glossary](#glossary) defines each test.
 
 ## Timeline of the work
 
-The work ran in six stages, in this order. Each stage asked one question about the model or the server. The live
+The work ran in seven stages, in this order. Each stage asked one question about the model or the server. The live
 model comes from stage 1. The other stages are experiments, and their files stay in the repo as the record.
 
 ```mermaid
@@ -56,9 +56,10 @@ flowchart LR
     S2["2. Better rank<br/>11-06 to 11-07<br/>K 144 fails"]
     S3["3. Fewer experts per token<br/>11-09 to 11-10<br/>no deploy"]
     S4["4. Serving settings<br/>11-10<br/>KV pin: live"]
-    S5["5. Cold experts<br/>11-10 to 11-11<br/>repeat test open"]
-    S6["6. Fewer layers<br/>planned"]
-    S1 --> S2 --> S3 --> S4 --> S5 --> S6
+    S5["5. Cold experts<br/>11-10 to 11-11<br/>486 experts not needed"]
+    S6["6. Loader patch<br/>11-11<br/>in progress"]
+    S7["7. Fewer layers<br/>planned"]
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
 ```
 
 **Start here.** The live model comes from the three weight tools of stage 1: [mask_checkpoint.py](mask_checkpoint.py),
@@ -122,19 +123,31 @@ is not deployed. The other ideas fail their gates or cannot run on this stack.
 - All files: [serve-tune/](serve-tune/README.md), with its own plan, tools, data and write-up.
 - Also: `mask_checkpoint.py --keep-per-layer`, for a different K in each layer.
 
-### 5. Drop the cold experts (2026-11-10 to 11-11): the bot does not need the cold tool experts
+### 5. Drop the cold experts (2026-11-10 to 11-11): the bot does not need them
 
 **Question:** does the bot need the experts that its traffic rarely uses? The default mask rule keeps 257 "mandatory"
-tool experts, and each gets less than 0.1% of the routing weight of its layer. A replay window dropped them with no
-measurable cost: +0.42% NLL against the live set, under the limit of 0.5%. The result for the cold ordinary experts
-is not clear, and a repeat test is open. A mask frees no memory, so a prune with a different K in each layer needs a
-loader patch first.
+tool experts, and each gets less than 0.1% of the routing weight of its layer. Two replay windows tested masks without
+these tool experts, without the coldest ordinary experts, and without both. The cut of both sets, 486 experts, costs
++0.18% NLL against the live set over two replays, under the limit of 0.5%. A prune of these experts would free about
+4.29 GiB. But a mask frees no memory, and after the cut each layer keeps a different number of experts.
 
 - Plan: [PLAN_COLD_EXPERTS.md](plans/PLAN_COLD_EXPERTS.md).
 - Tools: [cold_sets.py](cold_sets.py) and `mask_checkpoint.py --drop-file`.
 - Run script: [cold_replay.sh](cold_replay.sh).
 
-### 6. Remove whole layers (planned)
+### 6. Prune the cold experts with a loader patch (2026-11-11): in progress
+
+**Question:** can the runtime load a prune with a different number of experts in each layer? The cut of stage 5
+keeps 140 to 160 experts per layer, but the runtime accepts one number for all layers. The plan patches the config,
+the router, the weight loader and the MoE runtime. The MoE runtime must share one scratch buffer across all expert
+counts: one buffer for each count would use more memory than the prune frees. The goal is the prune of the 486 cold
+experts at about 69.80 GiB, with the replay result and the speed of the mask. The first step is done:
+`prune_experts.py` builds a folder with a different K in each layer.
+
+- Plan: [PLAN_LOADER_PATCH.md](plans/PLAN_LOADER_PATCH.md).
+- Tools: [prune_experts.py](prune_experts.py) (§5.1 of the plan).
+
+### 7. Remove whole layers (planned)
 
 **Question:** can the model skip whole layers, or one half of a layer? The plan ranks the layers by Block Influence,
 measures the best cuts on calibration data, confirms them with the replay gate, and heals each cut with a linear map.
@@ -223,7 +236,7 @@ Run the Python files with the stock-research venv: `~/.hermes/stock-research/.ve
 | [mask_checkpoint.py](mask_checkpoint.py) | Builds `tp1-mask-k{K}/`: K of 216 experts per layer stay (`PLAN_MODEL_SPECIALIZE.md` §5.3). With `--rank <rank file>`, the bot rank decides the dropped experts (§6.5); the folder is then `tp1-botmask-k{K}/`. With `--keep-per-layer FILE` (a JSON list from `serve-tune/alloc_k.py`), each layer keeps its own K; `--out` is then needed. With `--drop-file FILE` (from `cold_sets.py`), it drops exactly the listed ids, a mandatory expert too |
 | [cold_sets.py](cold_sets.py) | The drop files of `plans/PLAN_COLD_EXPERTS.md` §4: R0 (the live set as a mask), M1 (cold tool experts), D1 (cold ordinary experts) and MD (both). `--report R0.jsonl POINT.jsonl` compares a replay with R0 (§5.2) |
 | [topk_checkpoint.py](topk_checkpoint.py) | Builds a top-k copy of a tp1 folder (§8): `--source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`. `--check` runs the self-check only |
-| [prune_experts.py](prune_experts.py) | Builds a physically pruned copy of a mask folder (`PLAN_PHYSICAL_PRUNE.md` §3): the dropped experts leave the files, and the kept experts get the new ids 0 … K−1. `--check` runs the self-check only |
+| [prune_experts.py](prune_experts.py) | Builds a physically pruned copy of a mask folder (`PLAN_PHYSICAL_PRUNE.md` §3): the dropped experts leave the files, and the kept experts get the new ids 0 … K−1. A mask with a different K in each layer gives a folder for the loader patch (`plans/PLAN_LOADER_PATCH.md` §4.1). `--check` runs the self-check only |
 | [prune_run.sh](prune_run.sh) | Runs `prune_experts.py` in a root container from the server image, because the 43 expert files of `data/tp1` are `root:600`. The main server stays up |
 | [check_routed.py](check_routed.py) | The `PLAN_MODEL_SPECIALIZE.md` §5.2 check: no dropped expert in the routing of a test boot |
 | [speed_result.py](speed_result.py) | The §4.4 speed result of one test point, from the files in `results/` |
