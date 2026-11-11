@@ -361,6 +361,23 @@ the same window.
 **Gate.** The replay gate of §7.1. The speed gain (an estimated +2% to +3%) is inside the noise. The reason to deploy
 is the memory.
 
+**The patch (2026-11-10).** It differs from steps 1 to 6 in one point: the draft needs no change.
+
+- `image-patch/fp8_target_head.py`: after the load, `install` quantizes the head with `quantize_draft_head`, puts an
+  FP8 method in place of the head's `quant_method`, and frees the BF16 weight. `LogitsProcessor` calls
+  `lm_head.quant_method.apply`, so the target logits use `fp8_draft_head_logits`. The DSpark draft has no head of its
+  own (`has_own_lm_head = False`), and `load_dspark_model` gives it the head module of the target. So the draft reads
+  the same FP8 tensor, and `dspark.py` (a file of the server repo) does not change.
+- `image-patch/head-fp8.diff`: 5 lines at the end of `load_weights` in the image's `model.py`. `FP8_TARGET_HEAD=1`
+  turns the patch on. `image-patch/build_head.sh` builds the patched file (not in git).
+- `compose-head.yml`: an override on top of `compose-mask.yml` and `compose-tune.yml`. It mounts the two files and
+  keeps `DSPARK_FP8_DRAFT_HEAD` at 0: the FP8 draft head reads the BF16 weight, and `install` stops with an error if
+  that flag is on.
+- `test_fp8_head.py` (`./test_fp8_head.sh`, in the server image on the GB10): 4 tests pass with a real
+  `ParallelLMHead` and `LogitsProcessor`. The FP8 logits match BF16 (cosine above 0.999; the same top-1 on 256 of 256
+  rows). The BF16 weight leaves the memory, and the draft reads the same FP8 tensor. A CUDA graph replay equals an
+  eager call. So `torch._scaled_mm` runs on the GB10, and step 3 needs no other kernel.
+
 ### 7.3 #5: a different K in each layer (mask test only)
 
 Uniform K 144 fails the NLL gate with every rank (+3.29% to +3.90%, `PLAN_BETTER_RANK.md` §6). One K step on all

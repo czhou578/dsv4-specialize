@@ -54,9 +54,10 @@ moved here from the bot repo's `model_eval/` on 2026-11-08.
 | `compose-mem073.yml` | Override for `compose-mask.yml`: `GPU_MEMORY_UTILIZATION` 0.73 and 128k context (`PLAN_MODEL_ROUTER.md` §3) |
 | `compose-drop.yml` | Override for `compose-mask.yml`: the router patch with its rule (`MOE_DROP`, `MOE_NORM`, `MOE_LAYERS`) and an 8 GiB KV cache (`plans/PLAN_FEWER_EXPERTS.md` §6) |
 | `compose-tune.yml` | Override for `compose-mask.yml`: the draft depth and its graph sizes, the FP8 draft head, the KV pin and the prefill chunk (`plans/PLAN_SERVE_TUNE.md` §6.1). The defaults are the live settings |
+| `compose-head.yml` | Override on top of `compose-mask.yml` and `compose-tune.yml`: the FP8 head of the target (`FP8_TARGET_HEAD=1`, `plans/PLAN_SERVE_TUNE.md` §7.2). Build the model file first: `image-patch/build_head.sh` |
 | `compose-capture.yml` | The expert capture: the stock model with Model Runner V1, no DSpark, `--enable-return-routed-experts` and the weights patch. `ROUTING_PROFILE=1` adds the routing profile; `CAPTURE_UTIL` and `CAPTURE_EXTRA_ARGS` change the boot check and add vLLM flags |
 | `serve-v1.sh` | Runs the server's serve script with Model Runner V1 (for `compose-capture.yml` only) |
-| `image-patch/` | The weights patch (`PLAN_BETTER_RANK.md` §4.1): the patched `base_router.py` and `routed_experts_capturer.py`, and `capture-weights.diff`, the change against the image. `patch -R -p1` with the diff gives back the original files. The router patch (`PLAN_FEWER_EXPERTS.md` §6): `moe_drop.py` (the drop rule and the gain anchor) and `router-drop.diff`; `build_router.sh` applies the diff to the image's router file (not in git) |
+| `image-patch/` | The weights patch (`PLAN_BETTER_RANK.md` §4.1): the patched `base_router.py` and `routed_experts_capturer.py`, and `capture-weights.diff`, the change against the image. `patch -R -p1` with the diff gives back the original files. The router patch (`PLAN_FEWER_EXPERTS.md` §6): `moe_drop.py` (the drop rule and the gain anchor) and `router-drop.diff`; `build_router.sh` applies the diff to the image's router file (not in git). The FP8 head of the target (`PLAN_SERVE_TUNE.md` §7.2): `fp8_target_head.py` and `head-fp8.diff`; `build_head.sh` applies the diff to the image's model file (not in git) |
 
 **Run scripts.** Each script stops the live server, runs its test boots and restores the live server.
 
@@ -77,7 +78,7 @@ moved here from the bot repo's `model_eval/` on 2026-11-08.
 
 **Tests.** `test_mask_checkpoint.py`, `test_topk_checkpoint.py` and `test_prune_experts.py` run each tool on a small
 synthetic checkpoint; `test_check_routed.py` uses synthetic routing data; `test_capture.py` and `test_rank.py` use a fake server and
-synthetic sums. Run all of them with `python -m unittest`. `test_profile_report.py` uses synthetic profile rows. `test_prefill_probe.py` uses a fake server. `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM: `./test_moe_drop.sh` runs it in the server image.
+synthetic sums. Run all of them with `python -m unittest`. `test_profile_report.py` uses synthetic profile rows. `test_prefill_probe.py` uses a fake server. `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM: `./test_moe_drop.sh` runs it in the server image. `test_fp8_head.py` (the FP8 head of the target) needs a GPU: `./test_fp8_head.sh` runs it in the server image.
 
 **Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output (`capture-out/`),
 the result files (`results/`, except `results/expert_rank_bot.json`), the logs (`logs/`) and `history/hermes-e2e/`: the
