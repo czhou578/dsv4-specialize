@@ -10,6 +10,8 @@ change, so the section numbers that the scripts cite are still correct.
 | `PLAN_FINAL_REVIEW.md` | The final review of bot K 160 at top-k 5: the LLM judge and the blind review |
 | `PLAN_PHYSICAL_PRUNE.md` | Phase 3: the prune tool, the test boot, the bot-rank draft and the deploy |
 | `PLAN_BETTER_RANK.md` | The weighted rank and the capture patch. K 144 fails with every rank, so K 160 is the floor |
+| `PLAN_COLD_EXPERTS.md` | Do the cold experts matter: can the experts that the bot's traffic rarely uses go, with no cost on the replay (2026-11-10: plan written; the data check of §3 is done; nothing built) |
+| `PLAN_FEWER_LAYERS.md` | Fewer layers (depth pruning): rank the layers by Block Influence, confirm them with the replay gate, heal the cut with a linear map (2026-11-10: plan written; nothing built) |
 | `PLAN_FEWER_EXPERTS.md` | Fewer experts per token: a top-k 6 runtime with a drop rule and an anchored gain (2026-11-09 to 2026-11-10: no faster point; the anchored top-5 is a little better on the replay only; no deploy) |
 | `../serve-tune/PLAN_SERVE_TUNE.md` | A faster decode and less memory from the serving settings: draft depth, KV pin, prefill chunk, FP8 head. It moved to `serve-tune/` with its tools, results and write-up (2026-11-10: done; the KV pin of 7.25 GiB is live; the 128-expert draft passes but is skipped for now; the 24-hour metrics and the KV tier study are blocked) |
 | `PLAN_COLD_EXPERTS.md` | Do the cold experts matter? Four masks in one replay window: the cold tool experts, the cold ordinary experts, and both (2026-11-10, plan only) |
