@@ -1,7 +1,8 @@
 # Plan: do the cold experts matter?
 
-**Status:** 2026-11-11: done. The bot does not need the 257 cold tool experts (M1, +0.42%). The cold ordinary experts
-(D1, MD) sit at the noise limit: one more window decides (§5.4). No deploy · **Author:** colin-spark ·
+**Status:** 2026-11-11: done. The bot does not need the 257 cold tool experts (M1, +0.42%). The repeat window shows
+that MD, both cold sets (486 experts, 4.29 GiB after a prune), has no measurable cost: +0.18% against R0 over two
+replays. Next: the loader-patch plan (§5.5). No deploy · **Author:** colin-spark ·
 **Date:** 2026-11-10
 **Source:** the question "of the 74 GiB of weights, how much does the bot not need?" The routed experts hold
 60.71 GiB of the 74.09 GiB that the live server loads. The other parts are on the path of every token.
@@ -15,6 +16,8 @@ K 144 failure), `PLAN_FINAL_REVIEW.md` (the deploy chain), `PRUNE.md` (the live 
 | §6 The tools and the folders (no downtime, about half a day) | ✅ 2026-11-10 23:20–23:35: the tools pass their tests; the four folders are built and checked (§6.1) |
 | §7 The replay window (about 3 h 15 min downtime) | ✅ 2026-11-10 23:33 to 2026-11-11 02:11 (§7.2): the R0 check passes; the memory held; all smoke tests pass. The Hermes cron jobs are paused for the morning of 2026-11-11 (§7.1) |
 | §5 The decision | ✅ 2026-11-11 (§5.4): M1 has no measurable cost (+0.42%): the bot does not need the cold tool experts. D1 (+0.70%) and MD (+0.46%) contradict each other: repeat them before the loader-patch plan. No deploy |
+| §7.3 The repeat window (R0, D1, MD) | ✅ 2026-11-11 08:30 to 10:29 (§7.3): the R0 check passes (+0.22%); D1 +0.03% and MD −0.10% against R0; the memory held. The Hermes cron jobs stay paused |
+| §5.5 The decision after the repeat | ✅ 2026-11-11: the conflict of D1 and MD was replay noise (up to 0.56% for one folder). MD passes in both replays: write the loader-patch plan of §8. No deploy |
 
 ---
 
@@ -99,6 +102,13 @@ The rules for all points:
 |---|---|---|---|
 | `baseline-k216` against its repeat | 0.23% | 0 calls | 1 of 60 |
 | The K 160 mask against the K 160 prune (`prune5-k160-vs-botmask5-k160.txt`) | 0.37% | 1 call (1.2 points) | 0 |
+| R0 against its repeat (§7.3, added 2026-11-11) | 0.12% | 1 call (1 target changes) | 1 (5 targets change) |
+| D1 against its repeat (§7.3) | 0.56% | 0 calls (2 targets change) | 4 (4 targets change) |
+| MD against its repeat (§7.3) | 0.44% | 1 call (3 targets change) | 2 (6 targets change) |
+
+The repeat window of §7.3 shows that the first two rows were too small for the masks. No target gives the same NLL
+twice for the same folder. One target moves by up to 25% of its NLL, and 4 to 6 decisions change in each repeat. The
+net counts hide this, because the changes go both ways.
 
 ### 5.2 The comparisons
 
@@ -157,6 +167,29 @@ The decision:
    stay on disk for that window (48 GB).
 3. **No deploy.** A mask frees no memory (§8), and nothing changed on the live server, except the KV pin of
    `serve-tune/PLAN_SERVE_TUNE.md` §6.8.
+
+### 5.5 The decision after the repeat (2026-11-11)
+
+With the two windows of §7.2 and §7.3:
+
+| Point | Against R0, first window | Against R0, repeat | Mean of both | Decisions over both, against R0 | Baseline gate |
+|---|---|---|---|---|---|
+| M1 | +0.42% | — | — | +2 (one window) | pass |
+| D1 | +0.70% | +0.03% | +0.36% | −3 | fail, then pass |
+| MD | +0.46% | −0.10% | **+0.18%** | +1 | pass, pass |
+
+1. **The conflict of D1 and MD was replay noise.** The same folder moves by up to 0.56% between two windows (§5.1),
+   so the 0.24-point gap between D1 and MD in the first window says nothing.
+2. **MD passes.** It stays at or under +0.5% against R0 in both replays, which is the condition of §5.4. Its smoke test
+   passes twice, and it passes the baseline gate twice. So the bot does not need the 486 cold experts of MD on this
+   traffic, and a prune of them frees about 4.29 GiB.
+3. **Next: the loader-patch plan of §8.** A prune with a different K in each layer needs it, and without it no cut
+   frees memory. M1 needs no repeat, because MD contains M1 and passes twice.
+4. **The gate needs two replays for a small cut.** One replay moves by up to 0.56%, more than the 0.5% limit. For the
+   next cut, compare the mean of two replays per point, each against an R0 of the same window.
+5. **A larger cut is open.** By §5.3, all three points have no measurable cost (D1 on the mean), so the cut can grow:
+   all experts below 0.2% (894 experts, 7.89 GiB). Plan it after the loader patch, with two replays per point.
+6. **No deploy.** A deploy also needs the full runs, the judge and the blind review (§8).
 
 ## 6. The tools and the folders (no downtime, about half a day)
 
@@ -271,7 +304,8 @@ A mask of `data/tp1` loads 95.4 GiB. The N1 point of `PLAN_SERVE_TUNE.md` booted
 ### 7.2 Result (2026-11-10 23:33 to 2026-11-11 02:11)
 
 The live server was down for 2 h 38 min. The restore was healthy at 02:11 (reply "OK.", gateway active), with the
-7.25 GiB pin. Logs: `logs/cold-replay.log`; result files: `results/cold-*`, not in git.
+7.25 GiB pin. Logs: `logs/cold-w1/` (`cold-replay.log` and the memory logs); result files: `results/cold-w1/`, not in
+git. They moved there before the repeat of §7.3, because the replay skips the targets that its output file holds.
 
 | Point | Boot | Free memory after the boot, lowest in the replay | Smoke | Summed NLL against K 216 | Against R0 | Decisions (K 216: 41) | Tool names (K 216: 77 of 83) |
 |---|---|---|---|---|---|---|---|
@@ -302,6 +336,38 @@ The NLL change against R0 for each skill (a diagnostic, not a gate; 7 or 8 targe
 | watchlist | +1.41% | +1.64% | +1.15% |
 
 Quant and watchlist pay most at every point.
+
+### 7.3 The repeat window (2026-11-11, 08:24 to 10:29)
+
+**The start, on your go:** the decision of §5.4 asked for a repeat of R0, D1 and MD.
+
+1. The Hermes cron jobs were still paused from §7.1. The tmux session `cron-resume` stopped at 08:23, so the jobs
+   stay paused after this window too. Resume them with `hermes cron resume 0983231e9695` and
+   `hermes cron resume 89988a054346`.
+2. The first window's files moved to `results/cold-w1/` and `logs/cold-w1/` (§7.2).
+3. The window started with:
+   `tmux new -d -s cold2 "POINTS='r0 d1 md' LOG=.../logs/cold-replay-2.log START_AFTER='2026-11-11 08:30'
+   BOOT_BY='2026-11-11 10:45' SPEED_BY='2026-11-11 10:45' RESTORE_AT='2026-11-11 11:30' .../cold_replay.sh"`.
+4. A guard (`GUARD_AT=11:50 RECHECK_AT=12:10 overnight_guard.sh`, tmux `guard`) restarts the live server if it is
+   down after the window.
+
+The live server stopped at 08:30:08 and was down for 2 h 0 min. The restore was healthy at 10:29 (reply "OK.",
+gateway active), with the 7.25 GiB pin. Logs: `logs/cold-replay-2.log` and `logs/memory-cold-*.log`; result files:
+`results/cold-*`, not in git.
+
+| Point | Boot | Free memory after the boot, lowest in the replay | Smoke | Summed NLL against K 216 | Against R0 | Decisions (K 216: 41) | Tool names (K 216: 77 of 83) |
+|---|---|---|---|---|---|---|---|
+| R0 | 226 s | 2 GiB, 1.29 GiB | pass | +2.50% | — | 40 | 78 |
+| D1 | 226 s | 2 GiB, 1.38 GiB | pass | +2.52% | **+0.03%** | 41 | 79 |
+| MD | 211 s | 2 GiB, 1.46 GiB | pass | +2.39% | **−0.10%** | 40 | 78 |
+
+- **The R0 check passes:** R0 is +0.22% against `botmask5-k160`, and +0.12% against the R0 of §7.2.
+- **The memory held.** Every boot found 115 GiB free, and no replay came near the 1 GiB stop.
+- **All three points pass the baseline gate.** D1 failed it in §7.2 (+3.10%), and passes now (+2.52%).
+- **The tool-name change of §7.2 was noise.** The subagent target `20260809_172245_54cf37` that improved at every point
+  of §7.2 also improves at R0 here, with no drop.
+- **The NLL per skill is noise at this size.** For example, filings at MD went from −0.24% to +2.17%. Do not read a
+  skill from one replay of 7 or 8 targets.
 
 ## 8. What a pass does not give
 
@@ -339,3 +405,4 @@ Read N1 to N3 before this window. If N3 passes, D1 will probably pass too. M1 as
 | §6: the tools, the tests and the folders | About half a day | None |
 | §7: the window | About 3 h 15 min | About 3 h 15 min |
 | §5: the report and the decision | About 30 min | None |
+| §7.3: the repeat window (R0, D1, MD) | About 2 h 10 min | About 2 h 10 min |

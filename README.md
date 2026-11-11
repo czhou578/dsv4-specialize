@@ -5,7 +5,8 @@ DGX Spark. The result runs since 2026-11-06: 160 of 216 routed experts per layer
 loaded in place of 95 GiB. An extension on 2026-11-09 and 2026-11-10 tested fewer experts per token with a router
 patch (`PRUNE.md` §6, `plans/PLAN_FEWER_EXPERTS.md`). A round on 2026-11-10 tuned the serving settings of the live
 server; it has its own folder, `serve-tune/`, with its plan, tools, results and a write-up (`serve-tune/README.md`). A test on the night of 2026-11-10 asked
-whether the bot needs its coldest experts (`plans/PLAN_COLD_EXPERTS.md`): it does not need the cold tool experts.
+whether the bot needs its coldest experts (`plans/PLAN_COLD_EXPERTS.md`). After a second window on 2026-11-11, the
+answer is no: 486 cold experts (4.29 GiB after a prune) have no measurable cost on the replay.
 
 Start with `PRUNE.md`: why, the grid, the final review, the physical prune and the open items. The details are in
 `plans/`: `PLAN_OVERNIGHT_MASK_GRID.md`, `PLAN_OVERNIGHT_TOPK.md`, `PLAN_FINAL_REVIEW.md`, `PLAN_PHYSICAL_PRUNE.md` and
