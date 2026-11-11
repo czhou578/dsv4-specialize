@@ -17,3 +17,5 @@ history/
 image-patch/fused_topk_bias_router.py
 # the patched model file of the FP8 head, built from the image by image-patch/build_head.sh (PLAN_SERVE_TUNE.md §7.2)
 image-patch/deepseek_v4_model.py
+# the wide DSpark drafts of PLAN_SERVE_TUNE.md §8.2 (4-6 GB each), built from the image with the plan file in results/
+dspark-draft-*/

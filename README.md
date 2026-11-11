@@ -35,6 +35,7 @@ Run the Python files with the stock-research venv: `~/.hermes/stock-research/.ve
 | `speed_result.py` | The §4.4 speed result of one test point, from the files in `results/` |
 | `fewer_report.py` | The replay table of the points of `plans/PLAN_FEWER_EXPERTS.md` §7 against the baseline, and the decision for Phase D (`--decide`) |
 | `prefill_probe.py` | The prefill probe of `plans/PLAN_SERVE_TUNE.md` §6.3: cold prompts (`--cold`), the deep warm turn (`--warm`) and the smoke requests (`--smoke`), with the time to the first token and the lowest available memory |
+| `suffix_match.py` | The suffix-match study of `plans/PLAN_SERVE_TUNE.md` §8.1: the share of the output positions with a match in the session history, and the gate estimate. Run it in the server image (it needs `tokenizers`) |
 
 **Rank tools.** They need the bot repo's eval worktree, `~/Projects/stock-research-model-eval`: `capture.py` and
 `rank_data.py` import its `model_eval/replay.py`, and the rank data is its `model_eval/data/rank/` (out of git). They
@@ -76,13 +77,14 @@ moved here from the bot repo's `model_eval/` on 2026-11-08.
 | `fewer_stepf.sh` | Step F of `plans/PLAN_FEWER_EXPERTS.md` §9 on one point (`POINT`, `MOE_DROP`, `MOE_NORM`; `MASK_NAME=prune5` boots the live folder): optional replay (`REPLAY=1`) and speed tests (`SPEED=1`, gate `SPEED_MIN`), the 19 held-out prompts end to end, the restore, the checks, the judge and the blind page |
 | `tune_night.sh` | The lossless window of `plans/PLAN_SERVE_TUNE.md` §6: points T0, T3 and T4 (the default; T1 and T2 need a draft with a block size below 5) on the live folder with `compose-tune.yml` (the draft depth, the FP8 draft head, the KV pin and the prefill chunk), with the graph, head, smoke and prefill checks and the speed tests |
 | `tune_replay.sh` | The replay window of `plans/PLAN_SERVE_TUNE.md` §7: the FP8 head of the target (H1: replay and speed), the masks with a K per layer (N1–N3: replay) and the speed reference (H0). A point that cannot end before `RESTORE_AT` is skipped |
+| `tune_draft.sh` | The wide-draft window of `plans/PLAN_SERVE_TUNE.md` §8.2: the live draft and the 96- and 128-expert drafts at depths 5 and 6, with the graph check and the speed tests |
 | `overnight_guard.sh` | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-k160t5.yml`) if port 8888 is down. `DRY_RUN=1` logs the actions only |
 
 **Tests.** `test_mask_checkpoint.py`, `test_topk_checkpoint.py` and `test_prune_experts.py` run each tool on a small
 synthetic checkpoint; `test_check_routed.py` uses synthetic routing data; `test_capture.py` and `test_rank.py` use a fake server and
-synthetic sums. Run all of them with `python -m unittest`. `test_profile_report.py` uses synthetic profile rows. `test_prefill_probe.py` uses a fake server. `test_alloc_k.py` uses a synthetic plan and rank. `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM: `./test_moe_drop.sh` runs it in the server image. `test_fp8_head.py` (the FP8 head of the target) needs a GPU: `./test_fp8_head.sh` runs it in the server image.
+synthetic sums. Run all of them with `python -m unittest`. `test_profile_report.py` uses synthetic profile rows. `test_prefill_probe.py` uses a fake server. `test_alloc_k.py` uses a synthetic plan and rank. `test_suffix_match.py` uses synthetic token lists. `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM: `./test_moe_drop.sh` runs it in the server image. `test_fp8_head.py` (the FP8 head of the target) needs a GPU: `./test_fp8_head.sh` runs it in the server image.
 
-**Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output (`capture-out/`),
+**Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output (`capture-out/`), the wide drafts (`dspark-draft-*/`),
 the result files (`results/`, except `results/expert_rank_bot.json`), the logs (`logs/`) and `history/hermes-e2e/`: the
 step scripts of the full runs and their logs, moved from `~/.hermes-e2e/` on 2026-11-08. The step scripts keep their old
 paths, so they do not run as they are. Since 2026-11-07, only two symlinks to the live folder remain: `tp1-prune5-k160` and `tp1-prune5b-k160`.

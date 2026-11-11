@@ -11,7 +11,9 @@ change, so the section numbers that the scripts cite are still correct.
 | `PLAN_PHYSICAL_PRUNE.md` | Phase 3: the prune tool, the test boot, the bot-rank draft and the deploy |
 | `PLAN_BETTER_RANK.md` | The weighted rank and the capture patch. K 144 fails with every rank, so K 160 is the floor |
 | `PLAN_FEWER_EXPERTS.md` | Fewer experts per token: a top-k 6 runtime with a drop rule and an anchored gain (2026-11-09 to 2026-11-10: no faster point; the anchored top-5 is a little better on the replay only; no deploy) |
-| `PLAN_SERVE_TUNE.md` | A faster decode and less memory from the serving settings: draft depth, KV pin, prefill chunk, FP8 head (2026-11-09, Step 0 in progress) |
+| `PLAN_SERVE_TUNE.md` | A faster decode and less memory from the serving settings: draft depth, KV pin, prefill chunk, FP8 head (2026-11-10: done; the KV pin of 7.25 GiB is live; the 128-expert draft passes but is skipped for now; the 24-hour metrics and the KV tier study are blocked) |
+| `PLAN_COLD_EXPERTS.md` | Do the cold experts matter? Four masks in one replay window: the cold tool experts, the cold ordinary experts, and both (2026-11-10, plan only) |
+| `PLAN_FEWER_LAYERS.md` | Fewer layers: skip whole layers or layer halves, ranked by Block Influence and screened on calibration NLL; heal maps; the removal from the files (2026-11-10, plan only) |
 
 The plans give paths as they were in the bot's repo. Read them as follows:
 
