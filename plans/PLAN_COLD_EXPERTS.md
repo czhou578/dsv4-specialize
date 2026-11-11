@@ -1,6 +1,7 @@
 # Plan: do the cold experts matter?
 
-**Status:** 2026-11-10: plan written; the data check of §3 is done; nothing built · **Author:** colin-spark ·
+**Status:** 2026-11-11: done. The bot does not need the 257 cold tool experts (M1, +0.42%). The cold ordinary experts
+(D1, MD) sit at the noise limit: one more window decides (§5.4). No deploy · **Author:** colin-spark ·
 **Date:** 2026-11-10
 **Source:** the question "of the 74 GiB of weights, how much does the bot not need?" The routed experts hold
 60.71 GiB of the 74.09 GiB that the live server loads. The other parts are on the path of every token.
@@ -12,8 +13,8 @@ K 144 failure), `PLAN_FINAL_REVIEW.md` (the deploy chain), `PRUNE.md` (the live 
 |---|---|
 | §3 The data check (no downtime) | ✅ 2026-11-10: the cold tail is mostly mandatory tool experts |
 | §6 The tools and the folders (no downtime, about half a day) | ✅ 2026-11-10 23:20–23:35: the tools pass their tests; the four folders are built and checked (§6.1) |
-| §7 The replay window (about 3 h 15 min downtime) | 🟨 2026-11-10: started at 23:33, on your go; the Hermes cron jobs are paused for the morning of 2026-11-11 (§7.1) |
-| §5 The decision | ⬜ |
+| §7 The replay window (about 3 h 15 min downtime) | ✅ 2026-11-10 23:33 to 2026-11-11 02:11 (§7.2): the R0 check passes; the memory held; all smoke tests pass. The Hermes cron jobs are paused for the morning of 2026-11-11 (§7.1) |
+| §5 The decision | ✅ 2026-11-11 (§5.4): M1 has no measurable cost (+0.42%): the bot does not need the cold tool experts. D1 (+0.70%) and MD (+0.46%) contradict each other: repeat them before the loader-patch plan. No deploy |
 
 ---
 
@@ -131,6 +132,32 @@ folders or the image changed. Then stop, and do not use the other points.
 | MD costs more than M1 and D1 together | The two costs interact | Prune only the better single set |
 | All three points have no measurable cost | The cut can grow | A second window: all experts below 0.2% (894 experts, 7.89 GiB), and then a cut between MD and that |
 
+### 5.4 The decision (2026-11-11)
+
+By the table of §5.3, with the results of §7.2:
+
+- **M1 has no measurable cost** (+0.42% against R0, decisions +2, tool names +1, the smoke test passes). It also
+  passes the baseline gate (+2.80%). So the bot does not need the 257 cold tool experts on this traffic, and the
+  mandatory rule protects 2.27 GiB that the bot does not use.
+- **D1 has a cost** (+0.70% against R0, decisions −4), and it fails the baseline gate (+3.10% against +3%).
+- **MD has no measurable cost** (+0.46%, decisions +1), and it passes the baseline gate (+2.84%).
+
+**D1 and MD contradict each other.** MD drops every expert that D1 drops, plus the experts of M1. A larger cut cannot
+cost less. Yet MD scores better than D1: 0.24 points less NLL and 5 more correct decisions. So the difference between
+the two is the noise of one replay, and both sit at the 0.5% limit: D1 just above it, MD just below it. The noise of
+§5.1 (0.23% to 0.37% NLL, 1 decision) is smaller than what this window shows between two nested sets.
+
+The decision:
+
+1. **M1 is the clear result.** Its NLL is the lowest of the three points, its decisions rose, and its smoke test passed.
+   For this bot, protect a tool expert only if it is warm in the bot's capture. The next K plan must use that rule.
+2. **D1 and MD give no decision from one window.** Do not write the loader-patch plan of §8 yet. First repeat R0, D1
+   and MD in one window, so that each point has two replays: `POINTS="r0 d1 md"` with `cold_replay.sh`, about 2 h 15
+   min. Write the loader-patch plan only if MD stays at or under +0.5% against R0 in both replays. The four folders
+   stay on disk for that window (48 GB).
+3. **No deploy.** A mask frees no memory (§8), and nothing changed on the live server, except the KV pin of
+   `serve-tune/PLAN_SERVE_TUNE.md` §6.8.
+
 ## 6. The tools and the folders (no downtime, about half a day)
 
 CAUTION: the Step 2 window of `PLAN_SERVE_TUNE.md` runs `tune_replay.sh` and `run_lib.sh`. Bash reads a script while it
@@ -240,6 +267,41 @@ A mask of `data/tp1` loads 95.4 GiB. The N1 point of `PLAN_SERVE_TUNE.md` booted
 - **The start:** `tmux new -d -s cold "START_AFTER=<now> BOOT_BY='2026-11-11 02:40' SPEED_BY='2026-11-11 02:50'
   RESTORE_AT='2026-11-11 03:30' ~/Projects/dsv4-specialize/cold_replay.sh"` at 23:33. The bot was idle, and the live
   server stopped at 23:33:01.
+
+### 7.2 Result (2026-11-10 23:33 to 2026-11-11 02:11)
+
+The live server was down for 2 h 38 min. The restore was healthy at 02:11 (reply "OK.", gateway active), with the
+7.25 GiB pin. Logs: `logs/cold-replay.log`; result files: `results/cold-*`, not in git.
+
+| Point | Boot | Free memory after the boot, lowest in the replay | Smoke | Summed NLL against K 216 | Against R0 | Decisions (K 216: 41) | Tool names (K 216: 77 of 83) |
+|---|---|---|---|---|---|---|---|
+| R0 | 225 s | 3 GiB, 1.79 GiB | pass | +2.38% | — | 41 | 77 |
+| M1 | 210 s | 3 GiB, 1.53 GiB | pass | +2.80% | **+0.42%** | 43 | 78 |
+| D1 | 211 s | 3 GiB, 1.33 GiB | pass | **+3.10%** | **+0.70%** | **37** | 79 |
+| MD | 225 s | 3 GiB, 1.57 GiB | pass | +2.84% | **+0.46%** | 42 | 79 |
+
+- **The R0 check passes:** R0 is +0.09% against `botmask5-k160` (the limit is 0.5%). The folders and the image did not
+  change, so the other points can be read against R0.
+- **The memory held.** Every boot found at least 114 GiB free, and no replay came near the 1 GiB stop.
+- **The smoke requests passed on all four points** (the JSON schema and both tool choices, no assertion). So even
+  without the 257 cold tool experts, the model still writes valid tool calls and valid JSON.
+- **No tool name got worse at any point.** Three targets improved (one subagent target in all three points, one
+  earnings target in D1).
+
+The NLL change against R0 for each skill (a diagnostic, not a gate; 7 or 8 targets per skill):
+
+| Skill | M1 | D1 | MD |
+|---|---|---|---|
+| earnings | −0.00% | +0.70% | +0.62% |
+| filings | +0.48% | +0.45% | −0.24% |
+| other | +0.16% | +1.88% | +0.64% |
+| quant | +1.01% | +1.62% | +1.90% |
+| research | −0.53% | −0.18% | −0.46% |
+| stock-update | +0.86% | +0.20% | +0.43% |
+| subagent | +0.31% | +0.28% | −0.50% |
+| watchlist | +1.41% | +1.64% | +1.15% |
+
+Quant and watchlist pay most at every point.
 
 ## 8. What a pass does not give
 
