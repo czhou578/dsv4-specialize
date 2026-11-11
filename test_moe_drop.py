@@ -5,7 +5,11 @@ which runs them in the server image (the CUDA graph test needs a few MB of GPU m
 import sys
 from pathlib import Path
 
-import pytest
+try:
+    import pytest
+except ImportError:   # python -m unittest in the venv: the image of ./test_moe_drop.sh has pytest and torch
+    import unittest
+    raise unittest.SkipTest("needs pytest and torch: run ./test_moe_drop.sh")
 
 torch = pytest.importorskip("torch")
 import torch.nn.functional as F  # noqa: E402

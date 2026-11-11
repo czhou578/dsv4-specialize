@@ -33,6 +33,7 @@ Run the Python files with the stock-research venv: `~/.hermes/stock-research/.ve
 | `check_routed.py` | The `PLAN_MODEL_SPECIALIZE.md` §5.2 check: no dropped expert in the routing of a test boot |
 | `speed_result.py` | The §4.4 speed result of one test point, from the files in `results/` |
 | `fewer_report.py` | The replay table of the points of `plans/PLAN_FEWER_EXPERTS.md` §7 against the baseline, and the decision for Phase D (`--decide`) |
+| `prefill_probe.py` | The prefill probe of `plans/PLAN_SERVE_TUNE.md` §6.3: cold prompts (`--cold`), the deep warm turn (`--warm`) and the smoke requests (`--smoke`), with the time to the first token and the lowest available memory |
 
 **Rank tools.** They need the bot repo's eval worktree, `~/Projects/stock-research-model-eval`: `capture.py` and
 `rank_data.py` import its `model_eval/replay.py`, and the rank data is its `model_eval/data/rank/` (out of git). They
@@ -74,7 +75,7 @@ moved here from the bot repo's `model_eval/` on 2026-11-08.
 
 **Tests.** `test_mask_checkpoint.py`, `test_topk_checkpoint.py` and `test_prune_experts.py` run each tool on a small
 synthetic checkpoint; `test_check_routed.py` uses synthetic routing data; `test_capture.py` and `test_rank.py` use a fake server and
-synthetic sums. Run all of them with `python -m unittest`. `test_profile_report.py` uses synthetic profile rows. `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM: `./test_moe_drop.sh` runs it in the server image.
+synthetic sums. Run all of them with `python -m unittest`. `test_profile_report.py` uses synthetic profile rows. `test_prefill_probe.py` uses a fake server. `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM: `./test_moe_drop.sh` runs it in the server image.
 
 **Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output (`capture-out/`),
 the result files (`results/`, except `results/expert_rank_bot.json`), the logs (`logs/`) and `history/hermes-e2e/`: the
