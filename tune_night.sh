@@ -11,13 +11,16 @@
 # CAUTION: this stops the bot's model server for about 3.5 h. Start it only with the user's go, not 05:00-10:00 on
 # weekdays, and not during another test:
 #   tmux new -d -s tune "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/tune_night.sh"
-# POINTS (default "t0 t1 t2 t3 t4") selects the points. Without T0-T3, set BEST_DEPTH and T4_HEAD for T4.
+# POINTS (default "t0 t3 t4") selects the points. Without T0-T3, set BEST_DEPTH and T4_HEAD for T4.
+# T1 and T2 are not in the default: the image refuses a depth below the draft's dspark_block_size (5 for the live
+# draft), because a smaller depth gives incorrect output (vllm/config/speculative.py). Use them with a draft of a
+# smaller block size only.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/tune-night.log}
 RESTORE_TAG=tune
 TEST_COMPOSE="-f compose-mask.yml -f compose-tune.yml"
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
-POINTS=${POINTS:-t0 t1 t2 t3 t4}
+POINTS=${POINTS:-t0 t3 t4}
 NOISE=0.042                        # the noise floor of the bot decode test
 KV8=8589934592 KV725=7784628224    # the KV pins: 8 GiB (live) and 7.25 GiB
 export MASK_NAME=prune5b MASK_K=160 TUNE_LABEL=tune-t0   # compose-tune.yml needs TUNE_LABEL, also for a down
