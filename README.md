@@ -27,7 +27,8 @@ Run the Python files with the stock-research venv: `~/.hermes/stock-research/.ve
 
 | File | Use |
 |---|---|
-| `mask_checkpoint.py` | Builds `tp1-mask-k{K}/`: K of 216 experts per layer stay (`PLAN_MODEL_SPECIALIZE.md` §5.3). With `--rank <rank file>`, the bot rank decides the dropped experts (§6.5); the folder is then `tp1-botmask-k{K}/`. With `--keep-per-layer FILE` (a JSON list from `serve-tune/alloc_k.py`), each layer keeps its own K; `--out` is then needed |
+| `mask_checkpoint.py` | Builds `tp1-mask-k{K}/`: K of 216 experts per layer stay (`PLAN_MODEL_SPECIALIZE.md` §5.3). With `--rank <rank file>`, the bot rank decides the dropped experts (§6.5); the folder is then `tp1-botmask-k{K}/`. With `--keep-per-layer FILE` (a JSON list from `serve-tune/alloc_k.py`), each layer keeps its own K; `--out` is then needed. With `--drop-file FILE` (from `cold_sets.py`), it drops exactly the listed ids, a mandatory expert too |
+| `cold_sets.py` | The drop files of `plans/PLAN_COLD_EXPERTS.md` §4: R0 (the live set as a mask), M1 (cold tool experts), D1 (cold ordinary experts) and MD (both). `--report R0.jsonl POINT.jsonl` compares a replay with R0 (§5.2) |
 | `topk_checkpoint.py` | Builds a top-k copy of a tp1 folder (§8): `--source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`. `--check` runs the self-check only |
 | `prune_experts.py` | Builds a physically pruned copy of a mask folder (`PLAN_PHYSICAL_PRUNE.md` §3): the dropped experts leave the files, and the kept experts get the new ids 0 … K−1. `--check` runs the self-check only |
 | `prune_run.sh` | Runs `prune_experts.py` in a root container from the server image, because the 43 expert files of `data/tp1` are `root:600`. The main server stays up |
@@ -75,7 +76,7 @@ moved here from the bot repo's `model_eval/` on 2026-11-08.
 
 **Tests.** `test_mask_checkpoint.py`, `test_topk_checkpoint.py` and `test_prune_experts.py` run each tool on a small
 synthetic checkpoint; `test_check_routed.py` uses synthetic routing data; `test_capture.py` and `test_rank.py` use a fake server and
-synthetic sums. Run all of them with `python -m unittest`. `test_profile_report.py` uses synthetic profile rows. `test_serve_tune.py` runs the tests of `serve-tune/` (`serve-tune/README.md`). `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM: `./test_moe_drop.sh` runs it in the server image.
+synthetic sums. Run all of them with `python -m unittest`. `test_profile_report.py` uses synthetic profile rows. `test_serve_tune.py` runs the tests of `serve-tune/` (`serve-tune/README.md`). `test_cold_sets.py` uses a synthetic plan and rank. `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM: `./test_moe_drop.sh` runs it in the server image.
 
 **Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output (`capture-out/`), the wide drafts (`dspark-draft-*/`),
 the result files (`results/`, except `results/expert_rank_bot.json`), the logs (`logs/`) and `history/hermes-e2e/`: the
