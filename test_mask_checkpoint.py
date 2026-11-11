@@ -1,6 +1,8 @@
 """mask_checkpoint.py on a small synthetic checkpoint: 4 layers (3 hash layers), 8 of 10 experts kept."""
 
+import contextlib
 import hashlib
+import io
 import json
 import struct
 import tempfile
@@ -125,6 +127,27 @@ class MaskTest(unittest.TestCase):
         for item in manifest["files"]:
             self.assertEqual(item["sha256"], hashlib.sha256((out / item["name"]).read_bytes()).hexdigest())
         self.assertEqual(json.loads((out / "MASK.json").read_text())["keep"], 6)
+
+    def test_keep_per_layer_gives_each_layer_its_own_k(self):
+        klist, out = Path(self.tmp.name) / "klist.json", Path(self.tmp.name) / "per-layer"
+        klist.write_text("[6, 7, 5, 4]")
+        with contextlib.redirect_stdout(io.StringIO()):
+            mc.main(["--keep-per-layer", str(klist), "--base", str(self.base), "--out", str(out)])
+        record = json.loads((out / "MASK.json").read_text())
+        self.assertEqual((record["keep"], record["keep_per_layer"]), (5.5, [6, 7, 5, 4]))
+        self.assertEqual([record["layers"][str(i)]["drop"] for i in range(4)],
+                         [[2, 6], [2], [2, 6, 0], [2, 6, 0, 4]])  # the REAP order, without 3 and 6
+        bias = mc.read_tensor(out / "carried-001.safetensors", "layers.3.ffn.gate.bias")
+        self.assertEqual(np.flatnonzero(bias < 0).tolist(), [0, 2, 4, 6])
+        tid = mc.read_tensor(out / "carried-001.safetensors", "layers.2.ffn.gate.tid2eid")
+        self.assertFalse(np.isin(tid, [0, 2, 6]).any())
+        plan = json.loads((self.base / "REAP_K216_PLAN.json").read_text())
+        for bad in ([6, 6, 6], [6, 6, 6, 9], [6, 6, 6, 1]):  # 3 values; above 8; below the 2 mandatory
+            with self.assertRaises(ValueError):
+                mc.drop_lists(plan, bad)
+        for argv in (["--keep-per-layer", str(klist)], ["--keep", "6", "--keep-per-layer", str(klist)]):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                mc.main(argv + ["--base", str(self.base)])  # no --out; both K options
 
 
 if __name__ == "__main__":

@@ -413,6 +413,30 @@ If a point passes:
 
 Run #5 after the decision of `PLAN_FEWER_EXPERTS.md`, because both plans change the expert side.
 
+**The code and the folders (2026-11-10, no downtime).** `PLAN_FEWER_EXPERTS.md` ended on 2026-11-10 with no deploy,
+so #5 runs now.
+
+- `mask_checkpoint.py --keep-per-layer FILE` takes a JSON list of 43 K values and needs `--out`. The rule for the
+  mandatory tool experts moved into `drop_order`, which `alloc_k.py` also uses. So both tools drop the same experts.
+  `MASK.json` records the list and its mean.
+- `alloc_k.py --target K --rule global|even` reads the weight share of each expert from `expert_rank_weight.json`
+  (the capture of `PLAN_BETTER_RANK.md` §4). The same file gives the drop order inside each layer. Layers 0–2 keep
+  160, layers 3–42 stay between 128 and 216, and the 43 values sum to exactly 43 × the target.
+- Tests: `test_alloc_k.py` (the sum, the bounds, the mandatory rule, the two rules, the agreement with
+  `mask_checkpoint.py`) and one more test in `test_mask_checkpoint.py`.
+- Each folder took about 50 s to build and holds 12 GB. `topk_checkpoint.py --check` passes on each, and no link is
+  broken. The intermediate mask folders are deleted.
+
+| Point | Folder | Mean K | Rule | K in layers 3–42 | Weight share dropped (sum over layers 3–42) |
+|---|---|---|---|---|---|
+| N1 | `tp1-klg5-k144` | 144 | global | 128–163 | 2.773 |
+| N2 | `tp1-kle5-k144` | 144 | even | 131–155 | 2.790 |
+| N3 | `tp1-klg5-k152` | 152 | global | 134–169 | 2.093 |
+| N3 | `tp1-kle5-k152` | 152 | even | 140–162 | 2.108 |
+
+The global rule drops 0.6% less weight share than the even rule. `tune_replay.sh` chooses the folder of N3 from the
+replay of N1 and N2.
+
 The window holds #4 (75 min), #5 (2 h) and the restore: about 3.5 hours.
 
 ## 8. Step 3: offline studies, then builds (#6, #7)
