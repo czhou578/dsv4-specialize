@@ -146,13 +146,16 @@ experts at about 69.80 GiB, with the replay result and the speed of the mask. Th
 done too: on the GPU, a layer of the MD prune gives the same output as the same experts of the K 160 prune, bit for
 bit, and all expert counts share one scratch buffer. In the test window, the MD prune loaded 69.79 GiB, left
 4.18 GiB more memory free, matched the mask on two replays (+0.13%) and kept the bot speed (−1.3%). The code decode
-test is 4.9% slower. The next step is the deploy review.
+test is 4.9% slower. The deploy review runs now: the full runs of the MD prune against the live model, the
+LLM judge and your blind review.
 
 - Plan: [PLAN_LOADER_PATCH.md](plans/PLAN_LOADER_PATCH.md).
 - Tools: [prune_experts.py](prune_experts.py) (§5.1 of the plan), and the patch (§5.2):
   [image-patch/per-layer-experts.diff](image-patch/per-layer-experts.diff),
   [image-patch/build_perlayer.sh](image-patch/build_perlayer.sh) and [compose-perlayer.yml](compose-perlayer.yml).
 - Checks: [loader_kernel_check.py](loader_kernel_check.py). Run script: [loader_window.sh](loader_window.sh).
+- The deploy review: [PLAN_MD_REVIEW.md](plans/PLAN_MD_REVIEW.md). Run scripts: [review_live.sh](review_live.sh)
+  and [review_window.sh](review_window.sh). Report: [review_report.py](review_report.py).
 
 ### 7. Remove whole layers (planned)
 
@@ -289,6 +292,8 @@ safety rules in [RUNBOOK.md](RUNBOOK.md) before you start one.
 | [fewer_stepf.sh](fewer_stepf.sh) | Step F of `plans/PLAN_FEWER_EXPERTS.md` §9 on one point (`POINT`, `MOE_DROP`, `MOE_NORM`; `MASK_NAME=prune5` boots the live folder): optional replay (`REPLAY=1`) and speed tests (`SPEED=1`, gate `SPEED_MIN`), the 19 held-out prompts end to end, the restore, the checks, the judge and the blind page |
 | [cold_replay.sh](cold_replay.sh) | The replay window of `plans/PLAN_COLD_EXPERTS.md` §7: the masks R0, M1, D1 and MD (`cold_sets.py`), each with the smoke requests, the replay and the comparisons against R0 and the baseline. It stops after R0 if R0 does not match the earlier K 160 mask. The test boots pin the KV at 7.25 GiB |
 | [loader_window.sh](loader_window.sh) | The test window of `plans/PLAN_LOADER_PATCH.md` §6: the patched image (`compose-perlayer.yml`) on the K 160 prune (P0: smoke, speed, prefill probe) and on the MD prune (P1: also two replays). After the restore it logs the gates of §6.1: the loaded GiB, the free memory, the speed of P1 against P0, and the mean NLL of P1 against the MD mask |
+| [review_live.sh](review_live.sh) | The base runs of `plans/PLAN_MD_REVIEW.md` §4: the 19 held-out prompts end to end on the live server (no downtime), once for each label of `LABELS`, then the checks |
+| [review_window.sh](review_window.sh) | The test window of `plans/PLAN_MD_REVIEW.md` §5 and §6: after the base runs, the MD prune on the patched image (smoke, then the 19 held-out prompts for each label of `LABELS`), the restore, the checks against the live runs, the blind page, the judge with its controls, and the report (`review_report.py`) |
 | [overnight_guard.sh](overnight_guard.sh) | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-k160t5.yml`) if port 8888 is down. `DRY_RUN=1` logs the actions only |
 
 **Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output
@@ -318,6 +323,8 @@ python -m unittest
 - `test_loader_patch.py` (the loader patch, `plans/PLAN_LOADER_PATCH.md` §5.2) also needs vLLM. Build
   `image-patch/perlayer/` first with `image-patch/build_perlayer.sh`, then `./test_loader_patch.sh` runs it in the
   server image.
+- `test_review_report.py` tests the rules of `review_report.py` (the sign-test line, the controls, the weak
+  prompts, the skills and the run times) on synthetic rows.
 - `./loader_kernel_check.sh` runs the GPU check of §5.3 (`loader_kernel_check.py`): the real experts of one layer of
   the K 160 prune and of the MD prune, through the patched loader. It uses about 3 GiB of GPU memory beside the live
   server, so run it only when the bot is idle.
