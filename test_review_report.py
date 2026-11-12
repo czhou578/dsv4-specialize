@@ -22,6 +22,14 @@ class ReviewReportTest(unittest.TestCase):
         self.assertTrue(rr.verdict(rows(*["win"] * 12, *["loss"] * 3), two_sided=True)[2])
         self.assertFalse(rr.verdict(rows(*["loss"] * 11, *["win"] * 4), two_sided=True)[2])
 
+    def test_a_missing_judge_file_is_no_data_not_a_pass(self):
+        text, failed = rr.line_of("md-1 against live-1+live-2", [])
+        self.assertIsNone(failed)
+        self.assertIn("NO JUDGE ROWS", text)
+        self.assertEqual(rr.result([False, None]), "NO DATA")
+        self.assertEqual(rr.result([True, None]), "FAIL")
+        self.assertEqual(rr.result([False, False]), "PASS")
+
     def test_a_weak_prompt_loses_against_every_base(self):
         test = {"md-1": [{"id": "a", "verdict": "loss"}, {"id": "a", "verdict": "loss"},
                          {"id": "b", "verdict": "loss"}, {"id": "b", "verdict": "tie"},

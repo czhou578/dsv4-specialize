@@ -85,9 +85,17 @@ def runs(label):
 
 
 def line_of(name, rows, two_sided=False):
+    """The report line and the result: True (fail), False (pass) or None (no judge rows: a missing file)."""
+    if not rows:
+        return f"{name}: NO JUDGE ROWS (the judge file is missing or empty)", None
     n, line, failed = verdict(rows, two_sided)
     return (f"{name}: {n['win']} W / {n['loss']} L / {n['tie']} T, {n['error']} errors; "
             f"{n['win'] + n['loss']} decided, the fail line {line}: {'FAIL' if failed else 'pass'}"), failed
+
+
+def result(failed):
+    """``FAIL``, ``PASS`` or ``NO DATA`` from a list of the results of ``line_of``."""
+    return "FAIL" if any(failed) else "NO DATA" if None in failed else "PASS"
 
 
 def main(argv=None):
@@ -98,18 +106,21 @@ def main(argv=None):
     base = "+".join(args.live)
     test = {n: load(JUDGE / f"judge-{base}-vs-{n}.jsonl") for n in args.new}
     every = [r for rows in test.values() for r in rows]
+    runs_failed = []
     for name, rows in test.items():
-        print(line_of(f"{name} against {base}", rows)[0])
+        text, failed = line_of(f"{name} against {base}", rows)
+        runs_failed.append(None if failed is None else False)   # rule 1 is on all pairs; a missing file is no data
+        print(text)
     text, failed = line_of("Rule 1, all test pairs", every)
     print(text)
     controls = [(g[i], g[j]) for g in (args.live, args.new) for i in range(len(g)) for j in range(i + 1, len(g))]
-    bad = 0
+    c_failed = []
     for a, b in controls:
-        text, c_failed = line_of(f"Rule 2, control {a} against {b} (win = {b})", load(JUDGE / f"judge-{a}-vs-{b}.jsonl"),
-                                 two_sided=True)
-        bad += c_failed
+        text, f = line_of(f"Rule 2, control {a} against {b} (win = {b})", load(JUDGE / f"judge-{a}-vs-{b}.jsonl"),
+                          two_sided=True)
+        c_failed.append(f)
         print(text)
-    print(f"Rule 1: {'FAIL' if failed else 'PASS'}; rule 2: {'FAIL' if bad else 'PASS'} ({len(controls)} controls)")
+    print(f"Rule 1: {result([failed, *runs_failed])}; rule 2: {result(c_failed)} ({len(controls)} controls)")
     done = {lb: runs(lb) for lb in (*args.live, *args.new)}
     skill_of = {i: r["skill"] for d in done.values() for i, r in d.items()}
     print("Prompts that lose against every live run:",
