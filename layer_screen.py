@@ -16,7 +16,8 @@ before and after it: the difference is the request's own sums.
   skipped, and R2 keeps its time.
 - ``--report``: the tables of §7.5 and §7.6 from the log.
 
-The heal fit (``--fit``, §9) comes with the heal patch, only if Phase B or C asks for it.
+- ``--fit``: the heal map of §9 for each named block, from the Gram sums of the window: M = (XᵀX + λI)⁻¹ XᵀΔ, one
+  map for the streams, written as ``heal_<block>`` (FP32) to an ``.npz`` file for ``LAYER_HEAL``.
 """
 
 import argparse
@@ -313,6 +314,28 @@ class Greedy:
         self.screen("R2", "", r, reserve=False)
 
 
+# --- the heal fit of §9 -------------------------------------------------------------------------------------------
+
+def fit(gram, blocks, out, ridge=1e-6):
+    """The heal maps M = (XᵀX + λI)⁻¹ XᵀΔ of ``blocks`` from the Gram sums in ``gram``, with λ = ``ridge`` times the
+    mean diagonal of XᵀX. The probe set gives about 350 rows per column (1.4M rows for 4,096 columns), so the ridge only
+    keeps the solve stable; the plan's held-out choice of λ needs a second set of sums. Returns per block the rows, λ,
+    the norm of M, and the energy per row that the map removes from Δ (2 tr(MᵀXᵀΔ) - tr(MᵀXᵀXM))."""
+    maps, notes = {}, {}
+    with np.load(gram) as z:
+        for b in blocks:
+            xtx, xtd = (z[f"{k}_{b}"].astype(np.float64) for k in ("xtx", "xtd"))
+            xtx = (xtx + xtx.T) / 2
+            lam = ridge * np.trace(xtx) / len(xtx)
+            m = np.linalg.solve(xtx + lam * np.eye(len(xtx)), xtd)
+            rows = float(z[f"rows_{b}"])
+            removed = 2 * np.trace(m.T @ xtd) - np.trace(m.T @ xtx @ m)
+            maps[f"heal_{b}"] = m.astype(np.float32)
+            notes[b] = {"rows": rows, "lambda": lam, "norm": float(np.linalg.norm(m)), "removed_per_row": removed / rows}
+    np.savez(out, **maps)
+    return notes
+
+
 # --- the report of §7.5 and §7.6 ----------------------------------------------------------------------------------
 
 def spearman(x, y):
@@ -384,10 +407,18 @@ def main(argv=None):
     ap.add_argument("--deadline", type=float, default=float("inf"), help="--greedy ends before this Unix time")
     ap.add_argument("--stop", type=float, default=1.0, help="the limit of the rise (%%) for the Gram sums and rounds 2-3")
     ap.add_argument("--set", default="", help="the skip set of --bi and --screen, for example L17,F21")
+    ap.add_argument("--gram", type=Path, default=here / "results/skip-probe-gram.npz", help="the Gram sums of --fit")
+    ap.add_argument("--heal-out", type=Path, help="the heal file of --fit (default: results/heal-<blocks>.npz)")
     cmd = ap.add_mutually_exclusive_group(required=True)
     for name in ("pick", "bi", "screen", "greedy", "report"):
         cmd.add_argument(f"--{name}", action="store_true")
+    cmd.add_argument("--fit", nargs="+", metavar="BLOCK", help="fit the heal maps of these blocks")
     a = ap.parse_args(argv)
+    if a.fit:
+        out = a.heal_out or here / f"results/heal-{'-'.join(a.fit)}.npz"
+        for b, note in fit(a.gram, a.fit, out).items():
+            print(b, json.dumps(note), "->", out)
+        return
     if a.pick:
         sessions = [json.loads(line) for line in (DATA / "sessions.jsonl").open()]
         sets = pick(sessions, json.loads((DATA / "tools.json").read_text())["tools"])
