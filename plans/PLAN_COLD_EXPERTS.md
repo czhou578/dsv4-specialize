@@ -189,6 +189,7 @@ With the two windows of §7.2 and §7.3:
    next cut, compare the mean of two replays per point, each against an R0 of the same window.
 5. **A larger cut is open.** By §5.3, all three points have no measurable cost (D1 on the mean), so the cut can grow:
    all experts below 0.2% (894 experts, 7.89 GiB). Plan it after the loader patch, with two replays per point.
+   (2026-11-13: `PLAN_COLD_CUT2.md` tested S15 and S20, two supersets of MD. Both fail, so MD is the limit.)
 6. **No deploy.** A deploy also needs the full runs, the judge and the blind review (§8).
 
 ## 6. The tools and the folders (no downtime, about half a day)
