@@ -148,7 +148,7 @@ bit, and all expert counts share one scratch buffer. In the test window, the MD 
 4.18 GiB more memory free, matched the mask on two replays (+0.13%) and kept the bot speed (−1.3%). The code decode
 test is 4.9% slower. The deploy review passed on 2026-11-12: the full runs of the MD prune against the live model,
 the LLM judge (25 W / 16 L / 35 T, with two controls) and the blind review (9 W / 7 L / 4 T). A deploy is possible;
-it waits for your go.
+it waits for your go. The freed memory is for the second model of the router plan.
 
 - Plan: [PLAN_LOADER_PATCH.md](plans/PLAN_LOADER_PATCH.md).
 - Tools: [prune_experts.py](prune_experts.py) (§5.1 of the plan), and the patch (§5.2):
@@ -158,6 +158,7 @@ it waits for your go.
 - The deploy review: [PLAN_MD_REVIEW.md](plans/PLAN_MD_REVIEW.md). Run scripts: [review_live.sh](review_live.sh)
   and [review_window.sh](review_window.sh), with the safety net [review_finish.sh](review_finish.sh). Report:
   [review_report.py](review_report.py).
+- The deploy: [PLAN_MD_DEPLOY.md](plans/PLAN_MD_DEPLOY.md) (a proposal).
 
 ### 7. Remove whole layers (planned)
 
