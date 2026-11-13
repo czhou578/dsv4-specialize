@@ -15,6 +15,9 @@ S=/home/colin-spark/Projects/dsv4-specialize
 NEW_NAME=md149t5
 NEW_SRC=$S/deploy/compose-$NEW_NAME.yml
 FOLDER_SRC=$S/tp1-prunemd5-k149
+# The old live server: since 2026-11-12 the defaults of run_lib.sh name the new one, so the switch names the old one
+export MAIN_COMPOSE=${MAIN_COMPOSE:-/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml}
+export MAIN_CONTAINER=${MAIN_CONTAINER:-deepseek-v4-flash-k160t5-deepseek-v4-flash-1}
 # run_lib.sh needs the deadlines of a test window; the functions that this script calls do not use them
 export LOG=${LOG:-$S/logs/deploy-md.log} RESTORE_TAG=deploy START_AFTER=now BOOT_BY=now SPEED_BY=now RESTORE_AT=now
 source "$S/run_lib.sh"   # SERVER, W, PY, R, MAIN, MAIN_COMPOSE, log, busy, stop_main, wait_mem, restore, ...

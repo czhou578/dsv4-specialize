@@ -1,6 +1,7 @@
 # Plan: The deploy of the MD prune
 
-**Status:** 2026-11-12: proposal. It waits for your go · **Author:** colin-spark · **Date:** 2026-11-12
+**Status:** 2026-11-12: done. The MD prune is live since 18:00:26, and you kept it (§9.1). Reading C is due on
+2026-11-13 · **Author:** colin-spark · **Date:** 2026-11-12
 **Related:** `PLAN_MD_REVIEW.md` §8.1 (the decision that allows the deploy), `PLAN_LOADER_PATCH.md` §6.2 and §7.1
 (the patch and its speed tests), `PLAN_FEWER_EXPERTS.md` §9.2 (the deploy steps of the last prune, not done),
 `PLAN_MODEL_ROUTER.md` §3 and §8 in the bot's repo (the size cap and the second model)
@@ -11,12 +12,12 @@ About 4 minutes of downtime. No change to Hermes, its cron jobs, the gateway, `c
 
 | Step | Status |
 |---|---|
-| §4 The script and the names in this repo (PR, no downtime) | 🔨 2026-11-12: `deploy_md.sh`, `deploy/compose-md149t5.yml` and the settings are in a PR; the tests of §4.1 pass |
-| §5 The before readings (no downtime) | ⏳ |
-| §6 The server-repo files (no downtime) | ⏳ |
-| §7 The deploy (about 4 minutes of downtime) | ⏳ your `!` command |
-| §8 The after readings (no downtime) | ⏳ |
-| §9 The decision: keep, or roll back | ⏳ |
+| §4 The script and the names in this repo (PR, no downtime) | ✅ 2026-11-12: `deploy_md.sh`, `deploy/compose-md149t5.yml` and the settings (PR #35); the tests of §4.1 pass |
+| §5 The before readings (no downtime) | ✅ 2026-11-12, 17:28 to 17:57: 35.27 tok/s, and the counters saved (§5.1) |
+| §6 The server-repo files (no downtime) | ✅ 2026-11-12, 17:28: `prepare` took 3 s, and every file is in place (§6.1) |
+| §7 The deploy (about 4 minutes of downtime) | ✅ 2026-11-12, 17:57:33 to 18:00:26, on your "start the deploy": 2 min 53 s of downtime, every check passes (§7.1) |
+| §8 The after readings (no downtime) | ✅ A: 35.30 tok/s (+0.1%). B: 78.4 s per model call (+9.9%), no hard fault. C: ⏳ due 2026-11-13 at about 18:00 (§8.1) |
+| §9 The decision: keep, or roll back | ✅ 2026-11-12, about 22:30: keep (your decision). The defaults of `run_lib.sh` and `overnight_guard.sh` are in this PR (§9.1) |
 
 ---
 
@@ -119,6 +120,13 @@ The full dry run of `switch` comes after `prepare` (§6), before you start §7.
 2. Reading A: the bot decode test, 5 runs, to `results/speed-bot-deploy-before.jsonl`. A bot message waits behind
    a test request.
 
+### 5.1 The results (2026-11-12, 17:28 to 17:57)
+
+| Reading | Result |
+|---|---|
+| C: `results/metrics-deploy-before.txt` | Saved at 17:28:56. `switch` saved the final counters of the old server at 17:57:33 (`results/metrics-deploy-old-final.txt`): 445 requests since 05:27, 2.86 draft tokens accepted per decode step |
+| A: `results/speed-bot-deploy-before.jsonl` | 35.27 tok/s (the 5 runs: 33.72 to 35.81), median 35.24 tok/s, 2.173 draft tokens accepted per step |
+
 ## 6. The server-repo files (no downtime)
 
 **Caution:** the live server uses `compose-k160t5.yml`, `data/tp1-k160t5`, `cache-k160t5` and the draft. Do not
@@ -132,6 +140,13 @@ change them. The steps below add files only. `./deploy_md.sh prepare` does all f
 3. Copy `~/Projects/dsv4-specialize/cache` to `~/Projects/DeepSeek-v4-Flash-One-DGX-Spark/cache-md149t5`. Root
    owns 230 of its files (mode 600), so a container of the live image does the copy (`cp -a`, no network).
 4. Copy `deploy/compose-md149t5.yml` into the server folder (§2). Check it with `docker compose config -q`.
+
+### 6.1 The result (2026-11-12, 17:28)
+
+`./deploy_md.sh prepare` ran at 17:28:45 with the live server up. It moved the folder, copied the two patch files,
+copied the kernel cache (421 MB, 3 s) and the compose file, and found every file in place. The full dry run of
+`switch` at 17:57:23 passed the file checks, the live-server checks and every check of §7 step 5 on the boot log of
+the review window, and ended with no server action.
 
 ## 7. The deploy (about 4 minutes of downtime)
 
@@ -159,11 +174,68 @@ The deploy guard is a second safety: if port 8888 is down 90 minutes after the s
 restores `compose-k160t5.yml`. The script can take up to about 80 minutes (the idle wait, the boot and a slow
 rollback), so the guard acts only after that time.
 
+### 7.1 The result (2026-11-12, 17:57 to 18:00)
+
+You wrote "start the deploy", and the auto mode let Claude start `switch` in tmux. The log is
+`logs/deploy-md.log`; the boot log is `results/boot-deploy-md149t5.log`.
+
+| Time | Step |
+|---|---|
+| 17:57:33 | `switch` starts. The guard is set for 19:27:33 with `STOP_PROJECTS='dsv4-mask deepseek-v4-flash-md149t5'`. `/metrics` saved |
+| 17:57:33 | The bot is idle, so there is no wait. `compose-k160t5.yml` stops in 2 s |
+| 17:57:35 | `compose-md149t5.yml` starts, with 112 GiB available |
+| 18:00:26 | Healthy after 171 s. Every check passes: 69.79 GiB, 15 counts, 265,498 tokens, both names, "OK." on the first try, the gateway active, 26 GiB available |
+| 19:27:33 | The guard finds the server healthy and ends with no action (`logs/deploy-guard.log`) |
+
+The downtime was 2 min 53 s. The old container stays as `Exited (0)`, for the rollback.
+
 ## 8. The after readings (no downtime)
 
 1. Readings A and C: `./deploy_md.sh readings after`, as in §5.
 2. Reading B: `LABELS=deploy-1 ./review_live.sh` (about 3.5 h), then the checks against `live-1` and `live-2`.
 3. Reading C: save `/metrics` one day after the deploy. Compare the means with the before file.
+
+### 8.1 The results (2026-11-12, 18:01 to 22:14)
+
+**Reading A passes** (`./deploy_md.sh readings after`, 18:01 to 18:29). The gate is 4.2%.
+
+| | Before (K 160) | After (the MD prune) |
+|---|---|---|
+| Rate, 5 runs | 35.27 tok/s | 35.30 tok/s (+0.1%) |
+| Median | 35.24 tok/s | 35.95 tok/s (+2.0%) |
+| Draft tokens accepted per step | 2.173 | 2.179 |
+
+**Reading B is +9.9%**, more than the +5% line (`LABELS=deploy-1 ./review_live.sh`, 18:29:09 to 22:14:01, 3 h
+45 min). All 19 prompts ended with exit 0, and the check has 0 FAIL lines.
+
+| Run | Server | Model calls | Seconds per call | Against the live mean (71.35 s) | Run time | Output tokens per call | Ms per output token |
+|---|---|---|---|---|---|---|---|
+| `live-1` | K 160, live | 158 | 71.3 | — | 188 min | 1,837 | 38.8 |
+| `live-2` | K 160, live | 151 | 71.4 | — | 180 min | 1,758 | 40.6 |
+| `md-1` | MD, test compose at night | 156 | 80.9 | +13.4% | 210 min | 2,078 | 38.9 |
+| `md-2` | MD, test compose at night | 166 | 78.3 | +9.7% | 217 min | 1,964 | 39.8 |
+| `deploy-1` | MD, live | 172 | 78.4 | +9.9% | 225 min | 1,972 | 39.8 |
+
+- All three MD runs are 9.7% to 13.4% slower per call. The extra time is real; the test setup of the review night
+  is not the cause.
+- The cause is longer answers, not a slower decode. The MD prune writes about 8% more output tokens per call (on the
+  18 prompts with token counts: 2,031 against 1,877), and it makes more model calls (172 against 158 and 151). The
+  time per output token is the same: 39.8 ms against 38.8 and 40.6 ms. Reading A says the same.
+- The time per call varies a lot between runs of one prompt (one research prompt: 882 s on `live-1`, 471 s on
+  `live-2`), so one run gives a rough figure.
+- **The checks of step F find no hard fault.** Against `live-1`, every gate passes. Against `live-2`, one prompt gets
+  a number-fidelity flag: the AMPX research prompt (`20260912_195336_669cff`), with 21 of 353 numbers without a match
+  in the tool output. All 21 are figures from the 10-Q tables in thousands ("$101.7M" from the cell "101,713") or
+  correct results from them (+113% revenue growth, 66% below the 52-week high). The check does not scale a table in
+  thousands, so these are not errors. Over the run, `deploy-1` has the smallest share of numbers without a source:
+  2.4%, against 3.4% and 3.7% on the live runs. Files: `results/review-deploy-1-check.txt`,
+  `results/review-deploy-1-vs-live-1.txt` and `results/review-deploy-1-vs-live-2.txt`.
+
+**Reading C is due on 2026-11-13 at about 18:00.** Caution: the before counters (`metrics-deploy-old-final.txt`)
+include the 114 judge pairs of the review, which are short JSON answers with a high draft acceptance (2.86 tokens
+per step, against 2.17 in the bot decode test). The two days have a different traffic mix, so read the counters
+with that in mind. Readings A and B above hold the traffic constant. At 22:10, after 228 requests, the inter-token
+latency per decode step was 92.8 ms, against 93.8 ms in the before counters.
 
 ## 9. The decision: keep, or roll back
 
@@ -177,6 +249,23 @@ rollback), so the guard acts only after that time.
 **The rollback** (about 4 minutes of downtime): `docker compose -f compose-md149t5.yml down`, then
 `docker compose -f compose-k160t5.yml start`. Keep `data/tp1-k160t5` (73 GB) and `cache-k160t5` until you delete
 them. The disk has 2.8 TB free, so this can wait.
+
+### 9.1 The decision (2026-11-12, about 22:30): keep
+
+Reading A passes, and reading B is +9.9%: the second row of the table. You chose to keep the MD prune, for these
+reasons:
+
+- The extra time comes from longer answers at the same decode rate (§8.1).
+- The judge (25 W / 16 L / 35 T) and your blind review (9 W / 7 L / 4 T) chose the MD prune more often than the K 160
+  prune (`PLAN_MD_REVIEW.md` §7.1).
+- The 4.18 GiB is for the second model of the router plan.
+
+The cost: about 10% more time per model call, which is about 1 to 2 more minutes per research session.
+
+This PR changes the defaults of `run_lib.sh` and `overnight_guard.sh` to `compose-md149t5.yml` and
+`deepseek-v4-flash-md149t5-deepseek-v4-flash-1`. `deploy_md.sh` now sets the old server as `MAIN_COMPOSE` itself, so
+a repeat of `switch` refuses with "runs already". Phase B of the router plan is complete; mark it in the bot's repo.
+`compose-k160t5.yml`, `data/tp1-k160t5` (73 GB) and `cache-k160t5` stay as the rollback until you delete them.
 
 ## 10. Risks
 
