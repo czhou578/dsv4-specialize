@@ -171,3 +171,31 @@ def test_probe_sums_of_a_stack_with_a_skip(path):
             assert t[i, k].item() == (T if (i, kind) in done else 0), (i, kind)
     cos = c.probe.cos.cpu() / t.clamp_min(1)
     assert ((cos[t > 0] > -1) & (cos[t > 0] <= 1 + 1e-6)).all()
+
+
+ORDER = """
+import sys, torch
+from vllm.model_executor.kernels.mhc.tilelang import mhc_post_tilelang
+torch.zeros(1, device="cuda")
+if sys.argv[1] == "early":
+    import flashinfer.comm
+mhc_post_tilelang(*(torch.rand(s, device="cuda").to(d) for s, d in
+                    [((8, 4096), torch.bfloat16), ((8, 4, 4096), torch.bfloat16), ((8, 4, 1), torch.float32),
+                     ((8, 4, 4), torch.float32)]))
+torch.cuda.synchronize()
+import vllm.model_executor.warmup.kernel_warmup  # the import of the kernel warmup in an eager boot
+"""
+
+
+@pytest.mark.parametrize("order", ["late", "early"])
+def test_flashinfer_needs_its_cuda_runtime_before_a_tilelang_kernel(order):
+    """PLAN_FEWER_LAYERS.md §7.7: after a tilelang kernel, flashinfer.comm finds tilelang's libcudart stub; the patch
+    imports it in DeepseekV4Model.__init__ of an eager boot, before the first kernel."""
+    import subprocess
+    import sys
+    proc = subprocess.run([sys.executable, "-c", ORDER, order], capture_output=True, text=True, timeout=600)
+    if order == "late":
+        assert "libcudart_stub.so: undefined symbol: cudaDeviceReset" in proc.stderr
+    else:
+        assert proc.returncode == 0, proc.stderr[-2000:]
+    assert "import flashinfer.comm  # noqa: F401" in open(m.__file__).read()

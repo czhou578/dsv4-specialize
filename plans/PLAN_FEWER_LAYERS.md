@@ -413,6 +413,17 @@ Both probe boots failed at the model build, so no client ran. The script restore
   this boot loaded it. Do not edit a mounted file while a window runs.
 - The fix (PR A1c): the skip and the probe on the b12x path too. The GPU tests run every case on both paths: 16 pass.
 
+**Attempt 2 (2026-11-13, 09:02 to 09:13).** Both boots loaded the model (66.54 GiB) and failed in vLLM's kernel
+warmup, before the KV cache: `libcudart_stub.so: undefined symbol: cudaDeviceReset`. The live server was healthy again
+at 09:13:44 (reply "OK."). The downtime was about 11 minutes.
+
+- The cause is the eager boot, not the skip. FlashInfer's `flashinfer.comm` binds the CUDA runtime at its import, and
+  takes the first `libcudart` in `/proc/self/maps`. A compiled boot imports it in the compile passes, before any
+  kernel runs. An eager boot runs the profile pass first. Its tilelang kernels load tilelang's `libcudart_stub.so`,
+  and the warmup's import then binds that stub.
+- The fix (PR A1c): `DeepseekV4Model.__init__` of an eager boot imports `flashinfer.comm` before any kernel runs. A GPU
+  test reproduces the fault (a tilelang kernel first) and the fix (the import first) in subprocesses: 18 tests pass.
+
 ## 8. Phase C: the replay window (about 4 to 5 h downtime)
 
 ### 8.1 The points

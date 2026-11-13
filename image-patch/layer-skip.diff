@@ -96,7 +96,7 @@
  
          x = self.ffn(x, input_ids)
          return x, residual, post_mix, res_mix
-@@ -1544,6 +1575,18 @@
+@@ -1544,6 +1575,23 @@
              ),
              prefix=f"{prefix}.layers",
          )
@@ -112,10 +112,15 @@
 +            compile_cache=not envs.VLLM_DISABLE_COMPILE_CACHE,
 +        )
 +        self.layer_skip_runtime = self.layer_skip.runtime
++        if vllm_config.model_config.enforce_eager:
++            # dsv4-specialize (PLAN_FEWER_LAYERS.md §7.7): bind FlashInfer's CUDA runtime now. In an eager boot the
++            # profile run loads tilelang's libcudart stub first, and the kernel warmup's import of flashinfer.comm then
++            # finds the stub ("undefined symbol: cudaDeviceReset"). A compiled boot imports flashinfer.comm earlier.
++            import flashinfer.comm  # noqa: F401
  
          if get_pp_group().is_last_rank:
              self.norm = RMSNorm(config.hidden_size, self.rms_norm_eps)
-@@ -1631,6 +1674,8 @@
+@@ -1631,6 +1679,8 @@
  
          if self.use_mega_moe:
              input_ids = input_ids.to(torch.int64)
@@ -124,7 +129,7 @@
  
          aux_hidden_states: list[torch.Tensor] = []
          residual, post_mix, res_mix = None, None, None
-@@ -1682,6 +1727,8 @@
+@@ -1682,6 +1732,8 @@
                  hidden_states = mhc_post_tilelang(
                      hidden_states, residual, post_mix, res_mix
                  )
@@ -133,7 +138,7 @@
  
          if not get_pp_group().is_last_rank:
              return IntermediateTensors({"hidden_states": hidden_states})
-@@ -2053,6 +2100,8 @@
+@@ -2053,6 +2105,8 @@
          self.model.finalize_mega_moe_weights()
          self.model.finalize_mhc_broadcast_weights()
          self.model.setup_b12x_wo_projection()
