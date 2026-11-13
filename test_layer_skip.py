@@ -97,7 +97,6 @@ def test_controller_refuses_unsafe_boots(tmp_path):
     for env, kw in [({"LAYER_SKIP": "L3"}, {}),                         # the compile cache is on
                     ({"LAYER_SKIP_FILE": f}, {"compile_cache": False}),  # a run-time file needs eager
                     ({"LAYER_PROBE": "1", "LAYER_SKIP_FILE": f}, {"compile_cache": False}),
-                    ({"LAYER_SKIP": "L3"}, {"compile_cache": False, "b12x_mhc": True}),
                     ({"LAYER_HEAL": "/x.safetensors"}, {"eager": True}),
                     ({"LAYER_PROBE": "1"}, {"eager": True}),              # no folder for the sums
                     ({"LAYER_SKIP": "L0"}, {"eager": True})]:

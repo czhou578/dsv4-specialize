@@ -155,8 +155,8 @@ def _bytes(module):
 class Controller:
     """The skip and the probe of one target model: ``layers`` maps the layer number to the decoder layer."""
 
-    def __init__(self, layers, num_layers, protect_first=3, protect_last=3, eager=False, b12x_mhc=False,
-                 compile_cache=True, env=None):
+    def __init__(self, layers, num_layers, protect_first=3, protect_last=3, eager=False, compile_cache=True,
+                 env=None):
         env = os.environ if env is None else env
         self.layers, self.num_layers = dict(layers), num_layers
         self.protect = (protect_first, protect_last)
@@ -166,8 +166,6 @@ class Controller:
         self.out_dir = env.get("LAYER_PROBE_DIR") or (os.path.dirname(self.file) if self.file else "")
         if env.get("LAYER_HEAL"):
             raise RuntimeError("layer skip: LAYER_HEAL needs the heal patch of PLAN_FEWER_LAYERS.md §9")
-        if b12x_mhc:
-            raise RuntimeError("layer skip: the patch covers the tilelang mHC path only; unset VLLM_USE_B12X_MHC")
         if (self.file or self.probe_on) and not eager:
             raise RuntimeError("layer skip: LAYER_SKIP_FILE and LAYER_PROBE need --enforce-eager")
         if self.probe_on and not self.out_dir:

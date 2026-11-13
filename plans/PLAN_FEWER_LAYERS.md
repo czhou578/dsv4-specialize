@@ -209,8 +209,9 @@ How a skipped block runs inside `DeepseekV4DecoderLayer.forward`:
 
 - The loop in `DeepseekV4Model.forward` does not change. A skipped layer still returns values, so the draft's input
   after layers 40–42 stays correct.
-- The patch covers the tilelang mHC path. The b12x mHC path is off on this server (`VLLM_USE_B12X_MHC` is not set).
-  The patch stops the boot if that flag is on.
+- The patch covers both mHC paths. (2026-11-13: the plan said that the b12x path is off on this server. That is
+  wrong: the serve script sets `VLLM_USE_B12X_MHC=1` for the b12x backends, and the live server logs "b12x mHC
+  enabled". The first patch refused the b12x path, so the first probe window failed at the boot, §7.7.)
 
 The variables:
 
@@ -399,6 +400,18 @@ The thresholds of 2026-11-10 were 3%, 1% and 1.5% for a budget of 1.08%. The thr
 to the budget of §0 (0.24%), rounded up.
 
 The thresholds of the sets have a margin, because the screen and the replay use different data.
+
+### 7.7 Result
+
+**Attempt 1 (2026-11-13, 08:54 to 09:01, on your "start the window right now").** The live server stopped at 08:54:35.
+Both probe boots failed at the model build, so no client ran. The script restored the live server, healthy at
+09:01:09 (reply "OK.", gateway active). The downtime was about 7 minutes. Log: `logs/skip-probe.log`.
+
+- The V2 boot: the patch refused the b12x mHC path (§6.1). The eager settings passed: "Using V2 Model Runner",
+  CUDA graphs off.
+- The V1 boot: a `TypeError` in `layer_skip.Controller`. The fix of the patch changed the mounted `layer_skip.py` while
+  this boot loaded it. Do not edit a mounted file while a window runs.
+- The fix (PR A1c): the skip and the probe on the b12x path too. The GPU tests run every case on both paths: 16 pass.
 
 ## 8. Phase C: the replay window (about 4 to 5 h downtime)
 
