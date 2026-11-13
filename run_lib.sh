@@ -11,7 +11,8 @@
 # - free memory every 30 s during each client run; below 1 GiB, stop the client;
 # - deadlines: no boot with a replay after BOOT_BY, no speed test after SPEED_BY, and every client stops
 #   at RESTORE_AT, when the restore starts. Any other failure: the safe action (restore).
-# The live server is compose-k160t5.yml in the server folder (the pruned model, since 2026-11-06).
+# The live server is MAIN_COMPOSE with the container MAIN_CONTAINER (default: compose-k160t5.yml in the server folder,
+# the pruned model since 2026-11-06). Change the defaults here and in overnight_guard.sh when the live server changes.
 set -u
 TEST_COMPOSE=${TEST_COMPOSE:--f compose-mask.yml}   # the compose files of the test server (word-split on purpose)
 TEST_PROJECT=${TEST_PROJECT:-dsv4-mask}             # the compose project name of the test server
@@ -26,7 +27,8 @@ W=/home/colin-spark/Projects/stock-research-model-eval
 PY=/home/colin-spark/.hermes/stock-research/.venv/bin/python
 R=$S/results   # the result files; until 2026-11-08 they were in $W/model_eval/results
 URL=http://127.0.0.1:8890
-MAIN=deepseek-v4-flash-k160t5-deepseek-v4-flash-1   # the live server since 2026-11-06 (compose-k160t5.yml)
+MAIN_COMPOSE=${MAIN_COMPOSE:-$SERVER/compose-k160t5.yml}
+MAIN=${MAIN_CONTAINER:-deepseek-v4-flash-k160t5-deepseek-v4-flash-1}
 MASK=${MASK:-dsv4-mask-deepseek-v4-flash-mask-1}
 LOG=${LOG:?set LOG before you source run_lib.sh}
 BOOT_BY_S=$(date -d "$BOOT_BY" +%s); SPEED_BY_S=$(date -d "$SPEED_BY" +%s); RESTORE_S=$(date -d "$RESTORE_AT" +%s)
@@ -64,7 +66,7 @@ stop_main() {  # stop the main server when the bot is idle (up to 30 min); 9 on 
     while [ "$(busy)" != 0 ] && [ "$(now)" -lt "$end" ]; do sleep 15; done
     [ "$(busy)" = 0 ] || { log "the bot stayed busy for 30 min"; return 9; }
     log "stop the main server"
-    (cd $SERVER && docker compose -f compose-k160t5.yml stop) >> "$LOG" 2>&1
+    (cd $SERVER && docker compose -f "$MAIN_COMPOSE" stop) >> "$LOG" 2>&1
     main_running && { log "ERROR: the main server still runs"; return 9; }
   fi
   if servers > /dev/null; then log "ERROR: a server container runs: $(servers | tr '\n' ' ')"; return 9; fi
@@ -147,7 +149,7 @@ restore() {  # §6 = PLAN_OVERNIGHT_MASK_GRID.md §5
   if ! main_running; then
     wait_mem 600 || { log "RESTORE FAIL: less than 100 GiB available ($(avail_gib)); the guard restores at 04:15"; exit 3; }
     log "start the main server ($(avail_gib) GiB available)"
-    (cd $SERVER && docker compose -f compose-k160t5.yml start) >> "$LOG" 2>&1
+    (cd $SERVER && docker compose -f "$MAIN_COMPOSE" start) >> "$LOG" 2>&1
   fi
   local t0 try
   for try in 1 2; do
@@ -158,8 +160,8 @@ restore() {  # §6 = PLAN_OVERNIGHT_MASK_GRID.md §5
     done
     curl -fsS --max-time 5 http://127.0.0.1:8888/health > /dev/null 2>&1 && break
     log "main server not healthy after 1200 s (try $try)"
-    (cd $SERVER && docker compose -f compose-k160t5.yml logs --tail 80) > $R/main-restore-$RESTORE_TAG-$try.log 2>&1
-    [ $try = 1 ] && (cd $SERVER && docker compose -f compose-k160t5.yml restart) >> "$LOG" 2>&1
+    (cd $SERVER && docker compose -f "$MAIN_COMPOSE" logs --tail 80) > $R/main-restore-$RESTORE_TAG-$try.log 2>&1
+    [ $try = 1 ] && (cd $SERVER && docker compose -f "$MAIN_COMPOSE" restart) >> "$LOG" 2>&1
   done
   if ! curl -fsS --max-time 5 http://127.0.0.1:8888/health > /dev/null 2>&1; then
     log "RESTORE FAIL: main server not healthy; logs in $R/main-restore-$RESTORE_TAG-*.log; the guard tries at 04:15"; exit 3

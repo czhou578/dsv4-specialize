@@ -5,7 +5,8 @@
 # At GUARD_AT (default 04:15) and again at RECHECK_AT (default 04:35):
 #   - main server healthy: do nothing;
 #   - main container running but not healthy (it boots): wait up to 20 min for /health;
-#   - main container stopped: stop every dsv4-mask container, wait until the memory is free,
+#   - main container stopped: stop every container of STOP_PROJECTS (default: dsv4-mask, the test server),
+#     wait until the memory is free,
 #     start the main container again (docker compose start: no pull, no new compose file).
 # The main server is MAIN_COMPOSE (default: compose-k160t5.yml, the pruned model, live since 2026-11-06).
 # DRY_RUN=1 logs the actions instead of running them. GUARD_NOW=1 skips the wait for GUARD_AT.
@@ -17,6 +18,7 @@ SERVER=/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark
 MAIN_COMPOSE=${MAIN_COMPOSE:-$SERVER/compose-k160t5.yml}
 MAIN_CONTAINER=${MAIN_CONTAINER:-deepseek-v4-flash-k160t5-deepseek-v4-flash-1}
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/overnight_guard.log}
+STOP_PROJECTS=${STOP_PROJECTS:-dsv4-mask}   # deploy_md.sh adds the project of the new server
 
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 run() {
@@ -57,8 +59,10 @@ restore() {
     wait_healthy 1200; return
   fi
   log "main server down; restoring"
-  for c in $(docker ps -aq --filter label=com.docker.compose.project=dsv4-mask); do
-    run docker stop -t 120 "$c"
+  for p in $STOP_PROJECTS; do
+    for c in $(docker ps -aq --filter label=com.docker.compose.project=$p); do
+      run docker stop -t 120 "$c"
+    done
   done
   if [ "${DRY_RUN:-0}" != 1 ]; then
     for _ in $(seq 1 36); do  # up to 3 min for the memory of a test model to free
@@ -76,7 +80,7 @@ restore() {
   wait_healthy 1200
 }
 
-log "guard started (GUARD_AT=$GUARD_AT, RECHECK_AT=$RECHECK_AT, MAIN_COMPOSE=$MAIN_COMPOSE, DRY_RUN=${DRY_RUN:-0})"
+log "guard started (GUARD_AT=$GUARD_AT, RECHECK_AT=$RECHECK_AT, MAIN_COMPOSE=$MAIN_COMPOSE, STOP_PROJECTS=$STOP_PROJECTS, DRY_RUN=${DRY_RUN:-0})"
 [ "${GUARD_NOW:-0}" = 1 ] || wait_until "$GUARD_AT"
 restore
 [ "${GUARD_NOW:-0}" = 1 ] && exit 0
