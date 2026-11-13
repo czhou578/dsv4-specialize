@@ -36,6 +36,15 @@ class ColdSetsTest(unittest.TestCase):
         for point in cs.POINTS:                              # the hash layers keep the live drops only
             self.assertEqual([sets[point][i] for i in range(3)], [[8, 9]] * 3)
 
+    def test_a_share_point_is_md_plus_every_expert_below_the_share(self):
+        sets = cs.cold_sets(PLAN, RANK, LIVE)
+        s = cs.share_sets(PLAN, RANK, LIVE, sets["md"], [0.35])
+        self.assertEqual(list(s), ["s35"])
+        self.assertEqual(s["s35"][3], [0, 2, 3, 4, 6, 8, 9])   # MD, plus 3 (0.1%) and 6 (0.3%); 5 (0.5%) stays
+        self.assertEqual([s["s35"][i] for i in range(3)], [[8, 9]] * 3)
+        rows = {r["point"]: r for r in cs.table(sets | s, PLAN, RANK)}
+        self.assertEqual((rows["s35"]["experts"], rows["s35"]["mandatory"], rows["s35"]["k_min"]), (5, 3, 3))
+
     def test_the_table_of_the_points(self):
         rows = {r["point"]: r for r in cs.table(cs.cold_sets(PLAN, RANK, LIVE), PLAN, RANK)}
         self.assertEqual((rows["m1"]["experts"], rows["m1"]["mandatory"], rows["m1"]["lost_mean_pct"]), (2, 2, 0.14))
