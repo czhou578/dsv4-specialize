@@ -158,7 +158,8 @@ it waits for your go. The freed memory is for the second model of the router pla
 - The deploy review: [PLAN_MD_REVIEW.md](plans/PLAN_MD_REVIEW.md). Run scripts: [review_live.sh](review_live.sh)
   and [review_window.sh](review_window.sh), with the safety net [review_finish.sh](review_finish.sh). Report:
   [review_report.py](review_report.py).
-- The deploy: [PLAN_MD_DEPLOY.md](plans/PLAN_MD_DEPLOY.md) (a proposal).
+- The deploy: [PLAN_MD_DEPLOY.md](plans/PLAN_MD_DEPLOY.md). Script: [deploy_md.sh](deploy_md.sh), with the compose file
+  [deploy/compose-md149t5.yml](deploy/compose-md149t5.yml) of the live server.
 
 ### 7. Remove whole layers (planned)
 
@@ -283,7 +284,7 @@ safety rules in [RUNBOOK.md](RUNBOOK.md) before you start one.
 
 | File | Use |
 |---|---|
-| [run_lib.sh](run_lib.sh) | The shared functions and safety rules of the scripts below. A script sets `LOG`, `RESTORE_TAG` and, if it needs them, `TEST_COMPOSE`, `TEST_PROJECT` and `MASK`, then sources this file |
+| [run_lib.sh](run_lib.sh) | The shared functions and safety rules of the scripts below. A script sets `LOG`, `RESTORE_TAG` and, if it needs them, `TEST_COMPOSE`, `TEST_PROJECT` and `MASK`, then sources this file. `MAIN_COMPOSE` and `MAIN_CONTAINER` name the live server (default: `compose-k160t5.yml`) |
 | [topk_run.sh](topk_run.sh) | The top-k test night (`PLAN_OVERNIGHT_TOPK.md` §5 and §6) |
 | [prune_boot.sh](prune_boot.sh) | The test boot of the pruned folder: replay, speed tests (`PLAN_PHYSICAL_PRUNE.md` §6) |
 | [mem_boot.sh](mem_boot.sh) | The memory test boot at 0.73 and 128k: boot lines, free memory at idle and under load (`PLAN_MODEL_ROUTER.md` §3) |
@@ -298,7 +299,9 @@ safety rules in [RUNBOOK.md](RUNBOOK.md) before you start one.
 | [review_live.sh](review_live.sh) | The base runs of `plans/PLAN_MD_REVIEW.md` §4: the 19 held-out prompts end to end on the live server (no downtime), once for each label of `LABELS`, then the checks |
 | [review_window.sh](review_window.sh) | The test window of `plans/PLAN_MD_REVIEW.md` §5 and §6: after the base runs, the MD prune on the patched image (smoke, then the 19 held-out prompts for each label of `LABELS`), the restore, the checks against the live runs, the blind page, the judge with its controls, and the report (`review_report.py`) |
 | [review_finish.sh](review_finish.sh) | The safety net of `plans/PLAN_MD_REVIEW.md` §6.1: after `review_window.sh` ends, for any reason, and the live server is healthy, it does each step again that is not complete: the checks, the blind page, the judge calls (3 attempts each) and the report |
-| [overnight_guard.sh](overnight_guard.sh) | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-k160t5.yml`) if port 8888 is down. `DRY_RUN=1` logs the actions only |
+| [overnight_guard.sh](overnight_guard.sh) | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-k160t5.yml`) if port 8888 is down. It first stops the containers of `STOP_PROJECTS` (default: the test server). `DRY_RUN=1` logs the actions only |
+| [deploy_md.sh](deploy_md.sh) | The deploy of `plans/PLAN_MD_DEPLOY.md`: `prepare` (the files in the server folder, no downtime), `readings TAG` (the counters and the bot decode test on port 8888), `check [LOG]` (the boot checks) and `switch` (the live server to `compose-md149t5.yml`, with a rollback; only the user starts it). `DRY_RUN=1 ... switch` ends before any server action |
+| [deploy/compose-md149t5.yml](deploy/compose-md149t5.yml) | The compose file of the MD prune on the live server: `compose-k160t5.yml` with the MD folder, the loader patch and its own kernel cache. `deploy_md.sh prepare` copies it into the server folder |
 
 **Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output
 (`capture-out/`), the wide drafts (`dspark-draft-*/`), the result files (`results/`, except
