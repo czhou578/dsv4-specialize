@@ -1,0 +1,14 @@
+# The probe boot with Model Runner V1 (plans/PLAN_FEWER_LAYERS.md §7.1), as an override on top of compose-skip.yml:
+# skip_probe.sh uses it only when the eager boot fails with Model Runner V2. It runs the server's serve script through
+# serve-v1.sh, as compose-capture.yml does (V1 cannot run DSpark; the probe boot runs MODE=mtp0).
+services:
+  deepseek-v4-flash-mask:
+    volumes:
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/serve-ds4-flash.sh"
+        target: /opt/vllm/serve-ds4-flash.orig.sh
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/serve-v1.sh"
+        target: /opt/vllm/serve-ds4-flash.sh
+        read_only: true
