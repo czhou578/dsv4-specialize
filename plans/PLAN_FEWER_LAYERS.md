@@ -268,7 +268,7 @@ It imports the replay's request from the eval worktree, as `capture.py` does.
 
 | Command | Use |
 |---|---|
-| `--pick` | Chooses the screen set and the probe set from the calibration split. The screen set holds about 150k prompt tokens, so that one screen takes about 3 minutes. The probe set holds about 500k tokens. The two sets do not overlap, and no replay session is in either |
+| `--pick` | Chooses the screen set and the probe set from the calibration split. The screen set holds about 150k prompt tokens, so that one screen takes about 3 minutes. The probe set holds about 500k tokens. The two sets do not overlap, and no replay session is in either. One target per segment, one skill after another. The screen set takes the longest target turns under 30k tokens first: on 2026-11-13 it held 6 targets in 6 skills with about 5.4k scored tokens, twice the scored tokens of a hash order |
 | `--bi` | One pass over the probe set with the current skip set. It writes the BI table |
 | `--screen` | The NLL of the screen set for a list of skip sets. It does the reset and the check of §6.2 at each change |
 | `--greedy` | The rounds of §7.3 and §7.4 |
@@ -311,10 +311,11 @@ Each pull request changes at most 400 lines:
 1. A1a: `layer_skip.py` (the parser, the probe sums, the skip file) and its CPU tests, `test_layer_skip.py`.
 2. A1b: `layer-skip.diff`, `build_skip.sh`, `compose-skip.yml`, and the GPU tests of the patched layer with the real
    mHC kernels, `test_layer_skip_gpu.py` and `test_layer_skip.sh`.
-3. A2: `layer_screen.py` and `test_layer_screen.py`.
+3. A2: `layer_screen.py` and `test_layer_screen.py`, in three pull requests: A2a the data pick and the skip file,
+   A2b the BI pass, the screen and the Gram sums, A2c the greedy rounds and the report.
 4. A3: `skip_probe.sh`, `skip_replay.sh` and the change of `run_lib.sh`.
 
-A1 grew past 400 lines, so it is two pull requests (2026-11-13).
+A1 and A2 grew past 400 lines, so they are five pull requests (2026-11-13).
 
 If one part grows past 400 lines, split it again before you open the pull request. The heal code (§9) gets its own
 pull request, and only if Phase B or C asks for it.
@@ -358,7 +359,9 @@ drops the last screens of round 1 if the window cannot end before `RESTORE_AT`.
 1. Put the L or F block with the lowest rise into the set.
 2. Run the BI pass with the set.
 3. Screen the 6 L or F blocks with the lowest new BI, each added to the set.
-4. Stop when the best set rises by more than 3%.
+4. Stop when the best set rises by more than 1% (3% before the refresh of §0; 1% is the stop row of §7.6). The Gram
+   sums of §7.2 step 5 also run only when the best single L or F block rises by at most 1%, because only a heal
+   uses them.
 
 A blocks get no greedy rounds, because they free little memory.
 
