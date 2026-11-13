@@ -1,4 +1,4 @@
-"""The dry run of skip_probe.sh (plans/PLAN_FEWER_LAYERS.md §6.5): the script runs under bash with stub boots and a
+"""The dry runs of skip_probe.sh and skip_replay.sh (plans/PLAN_FEWER_LAYERS.md §6.5): the script runs under bash with stub boots and a
 stub client (SKIP_STUB), and the tests read its log. No server, no GPU."""
 
 import json
@@ -99,6 +99,97 @@ class ProbeScriptTest(unittest.TestCase):
         rc, log, _ = self.run_script(STUB_DIR=old.name)
         self.assertEqual(rc, 1)
         self.assertIn("skip-probe.jsonl exists", log)
+        self.assertNotIn("STUB stop_main", log)
+
+
+REPLAY_STUB = r"""
+R=$STUB_DIR
+stop_main() { log "STUB stop_main"; }
+down() { log "STUB down $TUNE_LABEL"; }
+restore() { log "STUB restore"; }
+smoke() { log "STUB smoke $1"; }
+speed() { log "STUB speed $1"; }
+boot() {
+  log "STUB boot $1 skip=${LAYER_SKIP:-none} heal=${LAYER_HEAL:-}"
+  case " ${STUB_BOOT_FAIL:-} " in *" $1 "*) return 1;; esac
+  local s=${LAYER_SKIP:-none} h=none
+  [ " ${STUB_WRONG_LINE:-} " = " $1 " ] && s=L99
+  [ -n "${LAYER_HEAL:-}" ] && h="F24 sha256 abc"
+  { echo "WARNING layer skip: set $s (fixed); skipped weights 1.30 GiB; heal $h; probe off"
+    [ " ${STUB_CACHE:-} " = " $1 " ] && echo "INFO Directly load AOT compilation from path /cache/x"; } > $R/boot-$1.log
+  return 0
+}
+replay() {
+  local p=${1%-[ab]}; p=${p#skip-}; local f=STUB_F_$p
+  log "STUB replay $1"
+  $PY -c "
+import json, sys
+f = float(sys.argv[2])
+rows = [{'session': 's', 'segment': 0, 'index': i, 'reasoning_tokens': 100, 'answer_tokens': 100,
+         'reasoning_nll': 44.4 * f, 'answer_nll': 44.4 * f, 'decision_ok': i < 41, 'tool_calls': 1,
+         'tool_names_ok': 1} for i in range(60)]
+open(sys.argv[1], 'w').write(''.join(json.dumps(r) + chr(10) for r in rows))" $R/$1.jsonl ${!f:-1.0}
+}
+"""
+
+
+class ReplayScriptTest(unittest.TestCase):
+    LIVE = 0.4562 / 0.4440   # S0 at the live replays
+
+    def run_script(self, **env):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        d = Path(tmp.name)
+        (d / "stub.sh").write_text(REPLAY_STUB)
+        (d / "heal.npz").write_bytes(b"x")
+        rows = [{"session": "s", "segment": 0, "index": i, "reasoning_tokens": 100, "answer_tokens": 100,
+                 "reasoning_nll": 44.4, "answer_nll": 44.4, "decision_ok": i < 41, "tool_calls": 1, "tool_names_ok": 1}
+                for i in range(60)]
+        (d / "baseline-k216.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+        t = lambda m: time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() + 60 * m))
+        full = {**os.environ, "SKIP_STUB": str(d / "stub.sh"), "STUB_DIR": str(d), "LOG": str(d / "window.log"),
+                "START_AFTER": t(-1), "BOOT_BY": t(600), "SPEED_BY": t(600), "RESTORE_AT": t(900),
+                "S1_SET": "F24", "HEAL_FILE": str(d / "heal.npz"), "STUB_F_s0": str(self.LIVE), **env}
+        proc = subprocess.run(["bash", str(HERE / "skip_replay.sh")], env=full, capture_output=True, text=True,
+                              timeout=120)
+        return proc.returncode, (d / "window.log").read_text(), d
+
+    def test_a_pass_a_fail_and_the_speed_rule(self):
+        rc, log, _ = self.run_script(STUB_F_s1="1.05", STUB_F_s1h="1.025")
+        self.assertEqual(rc, 0, log)
+        self.assertIn("S0 check: mean NLL 0.4562 is +0.00% against the live replays", log)
+        self.assertIn("skip-s1: mean NLL 0.4662 (+5.00% against K 216; the gate +3%)", log)
+        self.assertRegex(log, r"skip-s1: .*: FAIL")
+        self.assertRegex(log, r"skip-s1h: .*: PASS")
+        self.assertIn("STUB boot skip-s1h skip=F24 heal=/skip/heal.npz", log)
+        self.assertEqual([x.split()[-1] for x in log.splitlines() if "STUB speed" in x], ["skip-s0", "skip-s1h"])
+        self.assertIn("skip-s1h: PASS; mean NLL 0.4551, -0.24% against S0", log)
+
+    def test_a_failed_boot_a_wrong_line_and_a_cached_graph_skip_the_point(self):
+        for env, text in [({"STUB_BOOT_FAIL": "skip-s1"}, None), ({"STUB_WRONG_LINE": "skip-s1"}, "no line"),
+                          ({"STUB_CACHE": "skip-s1"}, "a graph from the compile cache")]:
+            rc, log, _ = self.run_script(**env)
+            self.assertEqual(rc, 0, log)
+            self.assertNotIn("STUB replay skip-s1-a", log)
+            self.assertIn("STUB replay skip-s1h-a", log)              # one failed boot: the window goes on
+            if text:
+                self.assertIn(text, log)
+                self.assertIn("STUB down skip-s1", log)
+
+    def test_the_s0_check_stops_the_window(self):
+        rc, log, _ = self.run_script(STUB_F_s0=str(self.LIVE * 1.02))
+        self.assertEqual(rc, 1)
+        self.assertIn("S0 check fails: restore and stop", log)
+        self.assertNotIn("STUB boot skip-s1", log)
+
+    def test_old_replay_files_stop_the_script_before_any_server_action(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        Path(tmp.name, "skip-s1-a.jsonl").write_text("{}\n")
+        Path(tmp.name, "baseline-k216.jsonl").write_text("{}\n")
+        rc, log, _ = self.run_script(STUB_DIR=tmp.name)
+        self.assertEqual(rc, 1)
+        self.assertIn("old replay files of s1", log)
         self.assertNotIn("STUB stop_main", log)
 
 
