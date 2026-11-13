@@ -11,8 +11,8 @@
 # - free memory every 30 s during each client run; below 1 GiB, stop the client;
 # - deadlines: no boot with a replay after BOOT_BY, no speed test after SPEED_BY, and every client stops
 #   at RESTORE_AT, when the restore starts. Any other failure: the safe action (restore).
-# The live server is MAIN_COMPOSE with the container MAIN_CONTAINER (default: compose-k160t5.yml in the server folder,
-# the pruned model since 2026-11-06). Change the defaults here and in overnight_guard.sh when the live server changes.
+# The live server is MAIN_COMPOSE with the container MAIN_CONTAINER (default: compose-md149t5.yml in the server folder,
+# the MD prune since 2026-11-12). Change the defaults here and in overnight_guard.sh when the live server changes.
 set -u
 TEST_COMPOSE=${TEST_COMPOSE:--f compose-mask.yml}   # the compose files of the test server (word-split on purpose)
 TEST_PROJECT=${TEST_PROJECT:-dsv4-mask}             # the compose project name of the test server
@@ -27,8 +27,8 @@ W=/home/colin-spark/Projects/stock-research-model-eval
 PY=/home/colin-spark/.hermes/stock-research/.venv/bin/python
 R=$S/results   # the result files; until 2026-11-08 they were in $W/model_eval/results
 URL=http://127.0.0.1:8890
-MAIN_COMPOSE=${MAIN_COMPOSE:-$SERVER/compose-k160t5.yml}
-MAIN=${MAIN_CONTAINER:-deepseek-v4-flash-k160t5-deepseek-v4-flash-1}
+MAIN_COMPOSE=${MAIN_COMPOSE:-$SERVER/compose-md149t5.yml}
+MAIN=${MAIN_CONTAINER:-deepseek-v4-flash-md149t5-deepseek-v4-flash-1}
 MASK=${MASK:-dsv4-mask-deepseek-v4-flash-mask-1}
 LOG=${LOG:?set LOG before you source run_lib.sh}
 BOOT_BY_S=$(date -d "$BOOT_BY" +%s); SPEED_BY_S=$(date -d "$SPEED_BY" +%s); RESTORE_S=$(date -d "$RESTORE_AT" +%s)

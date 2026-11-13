@@ -48,16 +48,17 @@ review. The [glossary](#glossary) defines each test.
 ## Timeline of the work
 
 The work ran in seven stages, in this order. Each stage asked one question about the model or the server. The live
-model comes from stage 1. The other stages are experiments, and their files stay in the repo as the record.
+model comes from stage 1 (the K 160 prune, live from 2026-11-06 to 11-12) and stage 6 (the MD prune of its cold
+experts, live since 2026-11-12). The other stages are experiments, and their files stay in the repo as the record.
 
 ```mermaid
 flowchart LR
-    S1["1. Prune experts<br/>11-02 to 11-07<br/>K 160, top-k 5: live"]
+    S1["1. Prune experts<br/>11-02 to 11-07<br/>K 160, top-k 5: live until 11-12"]
     S2["2. Better rank<br/>11-06 to 11-07<br/>K 144 fails"]
     S3["3. Fewer experts per token<br/>11-09 to 11-10<br/>no deploy"]
     S4["4. Serving settings<br/>11-10<br/>KV pin: live"]
     S5["5. Cold experts<br/>11-10 to 11-11<br/>486 experts not needed"]
-    S6["6. Loader patch<br/>11-11<br/>in progress"]
+    S6["6. Loader patch<br/>11-11 to 11-12<br/>MD prune: live"]
     S7["7. Fewer layers<br/>planned"]
     S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
 ```
@@ -70,7 +71,7 @@ flowchart LR
 result of a test point) and [overnight_guard.sh](overnight_guard.sh) (it restores the live server at night if the
 server is down).
 
-### 1. Prune the routed experts to K 160 (2026-11-02 to 11-07): live
+### 1. Prune the routed experts to K 160 (2026-11-02 to 11-07): live until 2026-11-12
 
 **Question:** can the model lose the experts that the bot rarely uses, fit in about 72 GiB, and keep its quality? A
 grid of masks tested K and top-k on the replay screen. The bot's own rank beat the public REAP rank: with REAP, K 192
@@ -135,7 +136,7 @@ these tool experts, without the coldest ordinary experts, and without both. The 
 - Tools: [cold_sets.py](cold_sets.py) and `mask_checkpoint.py --drop-file`.
 - Run script: [cold_replay.sh](cold_replay.sh).
 
-### 6. Prune the cold experts with a loader patch (2026-11-11): done, not deployed
+### 6. Prune the cold experts with a loader patch (2026-11-11 to 11-12): live
 
 **Question:** can the runtime load a prune with a different number of experts in each layer? The cut of stage 5
 keeps 140 to 160 experts per layer, but the runtime accepts one number for all layers. The plan patches the config,
@@ -147,8 +148,10 @@ done too: on the GPU, a layer of the MD prune gives the same output as the same 
 bit, and all expert counts share one scratch buffer. In the test window, the MD prune loaded 69.79 GiB, left
 4.18 GiB more memory free, matched the mask on two replays (+0.13%) and kept the bot speed (−1.3%). The code decode
 test is 4.9% slower. The deploy review passed on 2026-11-12: the full runs of the MD prune against the live model,
-the LLM judge (25 W / 16 L / 35 T, with two controls) and the blind review (9 W / 7 L / 4 T). A deploy is possible;
-it waits for your go. The freed memory is for the second model of the router plan.
+the LLM judge (25 W / 16 L / 35 T, with two controls) and the blind review (9 W / 7 L / 4 T). The MD prune went live
+on 2026-11-12 at 18:00, with 2 min 53 s of downtime. On the live server it takes 9.9% more time per model call than
+the K 160 prune: it writes longer answers at the same decode rate. You kept it. The freed memory is for the second
+model of the router plan.
 
 - Plan: [PLAN_LOADER_PATCH.md](plans/PLAN_LOADER_PATCH.md).
 - Tools: [prune_experts.py](prune_experts.py) (§5.1 of the plan), and the patch (§5.2):
@@ -189,8 +192,8 @@ The tools and the scripts fit one machine and one bot. They need these parts:
   [MiaAI-Lab/DeepSeek-v4-Flash-One-DGX-Spark](https://github.com/MiaAI-Lab/DeepSeek-v4-Flash-One-DGX-Spark), in the
   image `ghcr.io/0xsero/deepseek-v4-flash-0731-spark-sparkinfer` (the compose files pin a digest). The scripts expect
   it in `~/Projects/DeepSeek-v4-Flash-One-DGX-Spark`. The live server is a local compose file in that folder,
-  `compose-k160t5.yml` (container `deepseek-v4-flash-k160t5-deepseek-v4-flash-1`). The `start.sh` and `stop.sh` of
-  that repo control the stock model only.
+  `compose-md149t5.yml` (container `deepseek-v4-flash-md149t5-deepseek-v4-flash-1`, since 2026-11-12). The
+  `start.sh` and `stop.sh` of that repo control the stock model only.
 - **Checkpoint:** the EXL3 checkpoint of DeepSeek V4 Flash in `data/tp1` of that folder, and its DSpark draft. The
   weight tools read this layout only.
 - **Python:** Python 3 (tested with 3.13) and numpy run the weight tools and most unit tests. torch and vLLM run only
@@ -284,7 +287,7 @@ safety rules in [RUNBOOK.md](RUNBOOK.md) before you start one.
 
 | File | Use |
 |---|---|
-| [run_lib.sh](run_lib.sh) | The shared functions and safety rules of the scripts below. A script sets `LOG`, `RESTORE_TAG` and, if it needs them, `TEST_COMPOSE`, `TEST_PROJECT` and `MASK`, then sources this file. `MAIN_COMPOSE` and `MAIN_CONTAINER` name the live server (default: `compose-k160t5.yml`) |
+| [run_lib.sh](run_lib.sh) | The shared functions and safety rules of the scripts below. A script sets `LOG`, `RESTORE_TAG` and, if it needs them, `TEST_COMPOSE`, `TEST_PROJECT` and `MASK`, then sources this file. `MAIN_COMPOSE` and `MAIN_CONTAINER` name the live server (default: `compose-md149t5.yml`) |
 | [topk_run.sh](topk_run.sh) | The top-k test night (`PLAN_OVERNIGHT_TOPK.md` §5 and §6) |
 | [prune_boot.sh](prune_boot.sh) | The test boot of the pruned folder: replay, speed tests (`PLAN_PHYSICAL_PRUNE.md` §6) |
 | [mem_boot.sh](mem_boot.sh) | The memory test boot at 0.73 and 128k: boot lines, free memory at idle and under load (`PLAN_MODEL_ROUTER.md` §3) |
@@ -299,8 +302,8 @@ safety rules in [RUNBOOK.md](RUNBOOK.md) before you start one.
 | [review_live.sh](review_live.sh) | The base runs of `plans/PLAN_MD_REVIEW.md` §4: the 19 held-out prompts end to end on the live server (no downtime), once for each label of `LABELS`, then the checks |
 | [review_window.sh](review_window.sh) | The test window of `plans/PLAN_MD_REVIEW.md` §5 and §6: after the base runs, the MD prune on the patched image (smoke, then the 19 held-out prompts for each label of `LABELS`), the restore, the checks against the live runs, the blind page, the judge with its controls, and the report (`review_report.py`) |
 | [review_finish.sh](review_finish.sh) | The safety net of `plans/PLAN_MD_REVIEW.md` §6.1: after `review_window.sh` ends, for any reason, and the live server is healthy, it does each step again that is not complete: the checks, the blind page, the judge calls (3 attempts each) and the report |
-| [overnight_guard.sh](overnight_guard.sh) | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-k160t5.yml`) if port 8888 is down. It first stops the containers of `STOP_PROJECTS` (default: the test server). `DRY_RUN=1` logs the actions only |
-| [deploy_md.sh](deploy_md.sh) | The deploy of `plans/PLAN_MD_DEPLOY.md`: `prepare` (the files in the server folder, no downtime), `readings TAG` (the counters and the bot decode test on port 8888), `check [LOG]` (the boot checks) and `switch` (the live server to `compose-md149t5.yml`, with a rollback; only the user starts it). `DRY_RUN=1 ... switch` ends before any server action |
+| [overnight_guard.sh](overnight_guard.sh) | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-md149t5.yml`) if port 8888 is down. It first stops the containers of `STOP_PROJECTS` (default: the test server). `DRY_RUN=1` logs the actions only |
+| [deploy_md.sh](deploy_md.sh) | The deploy of `plans/PLAN_MD_DEPLOY.md`: `prepare` (the files in the server folder, no downtime), `readings TAG` (the counters and the bot decode test on port 8888), `check [LOG]` (the boot checks) and `switch` (the live server to `compose-md149t5.yml`, with a rollback; only the user starts it; done on 2026-11-12). `DRY_RUN=1 ... switch` ends before any server action |
 | [deploy/compose-md149t5.yml](deploy/compose-md149t5.yml) | The compose file of the MD prune on the live server: `compose-k160t5.yml` with the MD folder, the loader patch and its own kernel cache. `deploy_md.sh prepare` copies it into the server folder |
 
 **Not in git.** The test checkpoints (`tp1-*`), the kernel cache copy (`cache/`), the capture output
