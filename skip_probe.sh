@@ -19,6 +19,7 @@ source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 export MASK_NAME=prunemd5 MASK_K=149 TUNE_LABEL=skip-probe TUNE_KV_BYTES=7784628224
 export DRAFT_DIR=$SERVER/data/dspark-draft-k64-bot
 export SKIP_PROBE=1 SKIP_FILE=/skip/skip.json SKIP_MODE=mtp0 SKIP_PREFIX_CACHE=0 MASK_EXTRA_ARGS=--enforce-eager
+export TUNE_GRAPH_SIZES=none       # eager: no CUDA graph sizes for vLLM (the serve script passes none)
 BOOT_MIN_GIB=110                   # vLLM's boot check at util 0.90 needs 109.5 GiB free
 probe_line() { grep -q 'layer skip: set none (run-time file /skip/skip.json); .*probe on' "$R/boot-$1.log"; }
 client() {  # the greedy rounds of §7; the client ends 15 min before RESTORE_AT
