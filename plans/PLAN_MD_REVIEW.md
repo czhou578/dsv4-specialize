@@ -13,7 +13,7 @@ of downtime on the live server. No change to the live bot, the server repo or th
 | §3 The same code and the same date | ✅ 2026-11-11 16:06: the bot code is `a0fd27b` for all runs; the two bot sessions confirmed the freeze |
 | §4 The base runs on the live model (no downtime) | 🔨 2026-11-11 16:06: `live-1`, then `live-2` (`review_live.sh`, tmux `live`) |
 | §5 The test window: the runs on the MD prune | ⏳ tonight, after the base runs: `md-1` and `md-2` (`review_window.sh`, tmux `window`) |
-| §6 The checks and the judge (no downtime) | ⏳ after the window, in the same script |
+| §6 The checks and the judge (no downtime) | ⏳ after the window, in the same script; `review_finish.sh` (tmux `finish`, from 20:21) does each step again that is not complete (§6.1) |
 | §7 Your blind review of 20 pairs | ⏳ the page is ready after the window |
 | §8 The decision | ⏳ |
 
@@ -143,6 +143,22 @@ After the restore, `review_window.sh` goes on with the live server up:
    hours for 114 pairs, until about 19:00 on 2026-11-12.
 4. The report (`review_report.py`) in the window log: rules 1 and 2, the weak prompts, the skills, the `</s>` count
    of each run, and the run time of each skill.
+
+### 6.1 The safety net (`review_finish.sh`)
+
+The window script has two gaps after the window. A failed request (for example, a lost connection) ends a judge call,
+and the script does not try again. A failed restore ends the script (exit 3) before the checks and the judge. The
+script was already running, and a change to a running bash script can break it, so a second script closes the gaps:
+
+1. It waits until `review_window.sh` has ended, for any reason, and until port 8888 is healthy (up to 4 hours, so
+   that the guard can restore the live server at 09:00 or 09:20).
+2. It runs the checks and the compares again (seconds), and it makes the blind page if it is missing.
+3. It runs each judge call again, up to 3 attempts. The judge skips the rows that are already in its file, so a
+   complete call ends in seconds.
+4. It writes the report to `results/review-report.txt` and to `logs/review-finish.log`.
+
+It only sends requests to the live server. A missing judge file shows "NO DATA" in the report, not "pass". The test on
+2026-11-11 used a stub judge that failed once for each call: both calls passed on the second attempt.
 
 Files: `model_eval/results/e2e/judge-live-1+live-2-vs-md-{1,2}.jsonl`, `judge-live-1-vs-live-2.jsonl` and
 `judge-md-1-vs-md-2.jsonl` in the eval repo; `results/review-*` in this repo.
