@@ -146,8 +146,9 @@ experts at about 69.80 GiB, with the replay result and the speed of the mask. Th
 done too: on the GPU, a layer of the MD prune gives the same output as the same experts of the K 160 prune, bit for
 bit, and all expert counts share one scratch buffer. In the test window, the MD prune loaded 69.79 GiB, left
 4.18 GiB more memory free, matched the mask on two replays (+0.13%) and kept the bot speed (−1.3%). The code decode
-test is 4.9% slower. The deploy review runs now: the full runs of the MD prune against the live model, the
-LLM judge and your blind review.
+test is 4.9% slower. The deploy review passed on 2026-11-12: the full runs of the MD prune against the live model,
+the LLM judge (25 W / 16 L / 35 T, with two controls) and the blind review (9 W / 7 L / 4 T). A deploy is possible;
+it waits for your go.
 
 - Plan: [PLAN_LOADER_PATCH.md](plans/PLAN_LOADER_PATCH.md).
 - Tools: [prune_experts.py](prune_experts.py) (§5.1 of the plan), and the patch (§5.2):

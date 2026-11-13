@@ -1,7 +1,8 @@
 # Plan: The deploy review of the MD prune
 
-**Status:** 2026-11-11: in progress. The base runs on the live model run (§4). The test window is set for tonight
-(§5) · **Author:** colin-spark · **Date:** 2026-11-11
+**Status:** 2026-11-12: done. The MD prune passes rules 1, 2 and 3, and you accept the hard faults of rule 4
+(§8.1). A deploy is possible. No deploy: the deploy and the use of the 4.18 GiB wait for your go · **Author:**
+colin-spark · **Date:** 2026-11-11
 **Related:** `PLAN_LOADER_PATCH.md` §7.1 (the decision that asks for this review), `PLAN_FINAL_REVIEW.md` (the
 method: the full runs, the LLM judge, the blind review), `PLAN_FEWER_EXPERTS.md` §9 (the last review of this kind),
 `PLAN_OVERNIGHT_MASK_GRID.md` §2 (the safety rules of a test boot)
@@ -11,11 +12,11 @@ of downtime on the live server. No change to the live bot, the server repo or th
 | Step | Status |
 |---|---|
 | §3 The same code and the same date | ✅ 2026-11-11 16:06: the bot code is `a0fd27b` for all runs; the two bot sessions confirmed the freeze |
-| §4 The base runs on the live model (no downtime) | 🔨 2026-11-11 16:06: `live-1`, then `live-2` (`review_live.sh`, tmux `live`) |
-| §5 The test window: the runs on the MD prune | ⏳ tonight, after the base runs: `md-1` and `md-2` (`review_window.sh`, tmux `window`) |
-| §6 The checks and the judge (no downtime) | ⏳ after the window, in the same script; `review_finish.sh` (tmux `finish`, from 20:21) does each step again that is not complete (§6.1) |
-| §7 Your blind review of 20 pairs | ⏳ the page is ready after the window |
-| §8 The decision | ⏳ |
+| §4 The base runs on the live model (no downtime) | ✅ 2026-11-11 16:06 to 22:14: `live-1` (188 min) and `live-2` (180 min), 19 of 19 prompts each; both checks have 0 FAIL lines |
+| §5 The test window: the runs on the MD prune | ✅ 2026-11-11 22:15 to 2026-11-12 05:28 (7 h 13 min of downtime): the boot in 165 s, the smoke passes, `md-1` (210 min) and `md-2` (217 min), 19 of 19 prompts each, the restore at 05:27 (§6.2) |
+| §6 The checks and the judge (no downtime) | ✅ 2026-11-12 05:28 to 15:25: the checks, the blind page and 114 judge pairs with 0 errors. Rule 1 and rule 2 pass. At 15:26 `review_finish.sh` found no step left (§6.2) |
+| §7 Your blind review of 20 pairs | ✅ 2026-11-12: 9 W / 7 L / 4 T for the MD prune; rule 3 passes (§7.1) |
+| §8 The decision | ✅ 2026-11-12: you accept the hard faults. A deploy is possible; no deploy yet (§8.1) |
 
 ---
 
@@ -163,6 +164,53 @@ It only sends requests to the live server. A missing judge file shows "NO DATA" 
 Files: `model_eval/results/e2e/judge-live-1+live-2-vs-md-{1,2}.jsonl`, `judge-live-1-vs-live-2.jsonl` and
 `judge-md-1-vs-md-2.jsonl` in the eval repo; `results/review-*` in this repo.
 
+### 6.2 The result of the window and the judge (2026-11-12)
+
+**The window.** The base runs ended at 22:14. On your go, the window started at 22:15, not at 22:30.
+
+- The boot: 165 s, 69.79 GiB loaded, a KV cache of 265,498 tokens, and 26.8 GB available. The 15 expert counts
+  (140 to 160) share one scratch pool (decode 10.9 MiB). The smoke passes: the JSON schema and both tool-call modes.
+- The runs: `md-1` in 210 min and `md-2` in 217 min, 19 of 19 prompts each, all with exit 0.
+- The restore: the live server was healthy at 05:27, with the reply "OK." and the gateway active. The downtime was
+  7 h 13 min.
+- The judge: from 05:28 to 15:25 (about 10 hours for 114 pairs), 0 errors, and no call failed.
+  `review_finish.sh` found the window script ended at 15:26, and every step was complete.
+
+**Rules 1 and 2 (the LLM judge).** A win is a win for the MD prune. In a control, a win is a win for the second run.
+
+| Test | W / L / T | Pairs with a winner | Fail line | Result |
+|---|---|---|---|---|
+| `md-1` against `live-1` and `live-2` | 11 / 10 / 17 | 21 | 15 | pass |
+| `md-2` against `live-1` and `live-2` | 14 / 6 / 18 | 20 | 15 | pass |
+| **Rule 1: the 76 test pairs** | **25 / 16 / 35** | 41 | 27 | **pass** |
+| Rule 2: control `live-1` against `live-2` | 5 / 7 / 7 | 12 | 10 (both directions) | pass |
+| Rule 2: control `md-1` against `md-2` | 7 / 4 / 8 | 11 | 9 (both directions) | pass |
+
+**The five gates of step F.** All gates pass, with two flags. Neither flag separates the models:
+
+- `md-1` fails the number fidelity on the "Hi!" prompt (`8eb30d36`), against both live runs. The prompt has no data
+  task. The number share of `md-1` is 3.1%, against 3.4% for `live-1`.
+- `md-2` against `live-1` fails the report marker on `54cc02`. `live-2` has no marker on this prompt either, so the
+  flag is not a result of the MD prune.
+
+**The readings with no gate (§2.4).**
+
+- The hard faults that a script can find: all four runs have 19 of 19 prompts with exit 0 and a report. No run has a
+  literal `</s>` or a call to an unknown tool.
+- The weak prompts: three prompts lose against both live runs. These are the "Hi!" prompt and the subagent prompt
+  `54cf37` in `md-1`, and the research prompt `68c0317c` in `md-2`. Each prompt is weak in one MD run only.
+- The skills (W / L / T for the MD prune):
+  - quant 2/0/2, filings 4/0/0, earnings 3/1/0, daily-report 3/0/1, watchlist 3/0/1, stock-update 1/0/3.
+  - research 6/6/20.
+  - subagent 3/5/4 and other 0/4/4. These are the losses, and both counts are too small for the sign test.
+- The run time: the mean of all prompts is 12,806 s for the MD runs against 11,022 s for the live runs (+16.2%).
+  - Per model call, the MD runs take 80.9 s and 78.3 s, and the live runs 71.3 s and 71.4 s (about +11%).
+  - This is more than the decode test of `PLAN_LOADER_PATCH.md` §6.2 (−1.3% for the bot, −4.9% for code). A model
+    call also holds the tool time and long prefills, and the MD runs ran at night on the test compose. So this is
+    a rough reading.
+  - The `quant` time of +105% comes from one run: `md-2` took 311 s on `quant-drift`, against 100 s in the other
+    three runs, with the same 3 calls.
+
 ## 7. Your blind review of 20 pairs
 
 1. I put the 20 pairs of `results/review-md.html` on a private review page: one pair per prompt and one more, each
@@ -172,6 +220,51 @@ Files: `model_eval/results/e2e/judge-live-1+live-2-vs-md-{1,2}.jsonl`, `judge-li
 
 This takes about 2 hours: the answers are long research reports.
 
+### 7.1 The result of the blind review (2026-11-12)
+
+**Who reviewed.** A Claude session filled the review page: each note starts with "[Claude]". You read the answers
+and count them as your review. This reviewer is not the live model, so the bias of §2.5 does not apply to it.
+
+**Rule 3.** The MD prune has 9 wins, 7 losses and 4 ties. 16 pairs have a winner, so the fail line is 12 losses.
+The MD prune has 7 losses, so rule 3 passes (p of a loss = 0.77).
+
+| Pair | Runs | Prompt | Skill | Result for MD | Faults of MD | Faults of live |
+|---|---|---|---|---|---|---|
+| 1 | live-2 / md-2 | `3c708852` | stock-update | win | – | number |
+| 2 | live-1 / md-2 | `quant-drift` | quant | win | – | tool |
+| 3 | live-2 / md-2 | `38c7eb58` | filings | win | – | other |
+| 4 | live-2 / md-2 | `fd10d6b7` | research | loss | garbled, number | garbled |
+| 5 | live-1 / md-1 | `8eb30d36` | other | loss | – | – |
+| 6 | live-2 / md-2 | `3d277250` | research | loss | – | garbled |
+| 7 | live-2 / md-2 | `495a6ca2` | research | win | number, garbled | number |
+| 8 | live-2 / md-2 | `54cc02` | subagent | win | garbled | garbled |
+| 9 | live-1 / md-1 | `68c0317c` | research | loss | number, garbled | number, garbled |
+| 10 | live-2 / md-1 | `ccd5f1fb` | other | win | garbled, number | garbled |
+| 11 | live-1 / md-2 | `54cf37` | subagent | loss | garbled | garbled |
+| 12 | live-2 / md-1 | `5a7a4ea3` | watchlist | tie | – | – |
+| 13 | live-2 / md-1 | `669cff0b` | research | loss | garbled, number, other | garbled |
+| 14 | live-1 / md-2 | `6186758a` | research | tie | garbled, number | garbled |
+| 15 | live-2 / md-1 | `daily-report` | daily-report | tie | – | – |
+| 16 | live-1 / md-2 | `17bd3e34` | research | win | garbled, number | garbled, number |
+| 17 | live-2 / md-1 | `c7f2cb` | subagent | loss | garbled, number, other | garbled, number |
+| 18 | live-1 / md-2 | `5a7a4ea3` | watchlist | tie | – | – |
+| 19 | live-2 / md-1 | `0d31caa5` | earnings | win | garbled, number | garbled |
+| 20 | live-2 / md-1 | `3e2f0342` | research | win | garbled, number | garbled |
+
+By skill, all 7 losses are in research (3/4/1), subagent (1/2/0) and other (1/1/0; the loss is the "Hi!" prompt).
+The short tool tasks have 4 wins (quant, filings, earnings, stock-update) and 3 ties (watchlist, daily-report).
+
+**Rule 4 (the hard faults that the review marked).**
+
+| Fault | Pairs of MD | Pairs of live | Note |
+|---|---|---|---|
+| A wrong number | 10 | 5 | 6 pairs have it on the MD side only, 1 pair on the live side only (sign test p = 0.06). The faults are of one kind on both sides: a wrong percentage, multiple or range in a long report |
+| Stray tokens (garbled) | 12 | 12 | Both models have them at the same rate, so they do not separate the models |
+| A tool fault | 0 | 1 | Pair 2: Nasdaq HTTP 403 warnings in the live run |
+| Other | 2 | 1 | MD: pair 13 does not name a short report, and pair 17 gives an acquisition to the wrong company. Live: pair 3 has a duplicated link |
+
+The answers with the notes and the key are in `results/review-md-answers.json` (not in git).
+
 ## 8. The decision (yours)
 
 | Result | Next |
@@ -180,6 +273,28 @@ This takes about 2 hours: the answers are long research reports.
 | Rule 1 or rule 3 fails | No deploy. Look at the skills and the weak prompts: if the losses are in one skill, the cold set of that skill is the next question |
 | A control fails | Rule 3 decides alone. Look at the control rows for the bias |
 | The `quant` skill loses, or its run time grows a lot, and the rest is even | You decide: the bot's traffic has few code prompts, but the cut costs them something |
+
+### 8.1 The decision (2026-11-12)
+
+The first row of the table applies:
+
+- Rule 1 passes (25 W / 16 L / 35 T), and both controls of rule 2 pass (§6.2).
+- Rule 3 passes (9 W / 7 L / 4 T, §7.1).
+- You accept the hard faults of rule 4. The wrong numbers are of the same kind as in the live runs, and their excess
+  is not significant (p = 0.06). The stray tokens are equal (12 against 12). No run has a literal `</s>`, a call to
+  an unknown tool or a missing save.
+- The `quant` row does not apply: `quant` has 2/0/2 by the judge and a win in the blind review. Its +105% of run time
+  comes from one run.
+
+**Result:** a deploy of `tp1-prunemd5-k149` is possible. No deploy is done, and the server repo has no change.
+
+Open, on your go:
+
+1. The use of the 4.18 GiB: KV room, or the second model of the router plan.
+2. The deploy plan: the compose mounts of the two built files of `image-patch/perlayer/` in the server repo, the
+   rollback, and a check of the time per model call on the live bot before and after the deploy (§6.2 shows about
+   +11% in the runs, against −1.3% in the decode test).
+3. The Hermes cron jobs `daily-report` and `daily-followups` are still paused (§3).
 
 ## 9. Risks
 
