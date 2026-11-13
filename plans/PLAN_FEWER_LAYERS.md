@@ -1,7 +1,7 @@
 # Plan: fewer layers (depth pruning)
 
-**Status:** 2026-11-10: plan written; the sizes of §4.1 and the budget of §4.2 are measured; nothing built ·
-**Author:** colin-spark · **Date:** 2026-11-10
+**Status:** 2026-11-13: refreshed for the live MD prune (§0); Phase A in work ·
+**Author:** colin-spark · **Date:** 2026-11-10, refreshed 2026-11-13
 **Source:** a note on depth pruning: rank the layers by Block Influence, confirm the best ones with the replay gate,
 heal the cut with a linear map, then remove the layers from the files. This plan checks each step against this stack.
 **Related:** `PLAN_SERVE_TUNE.md` (§7.1 the replay gate; H1 of the Step 2 window), `PLAN_COLD_EXPERTS.md` (the other
@@ -19,6 +19,43 @@ to the live server.
 | §10 Phase E: the physical removal and the deploy chain (only if a set passes) | ⬜ |
 
 ---
+
+## 0. Refresh (2026-11-13): the MD prune is live
+
+The plan was written on 2026-11-10 for the K 160 prune. Since 2026-11-12 the live server runs the MD prune
+(`tp1-prunemd5-k149`, `compose-md149t5.yml`, `PLAN_MD_DEPLOY.md`). These facts change. Where a later section gives an
+older number, this section is correct.
+
+| Item | The plan of 2026-11-10 | Now |
+|---|---|---|
+| The live folder | `tp1-k160t5`, 74.09 GiB loaded | `tp1-prunemd5-k149`, 140 to 160 experts per layer, 69.79 GiB loaded |
+| The 72 GiB cap of `PRUNE.md` §5 | 2.09 GiB above it | Met. The freed memory is for the second model of the router plan |
+| The live replay NLL | 0.4524 (`prune5-k160`) | 0.4566 and 0.4558, a mean of 0.4562 (+2.75%; `lp-p1-a`, `lp-p1-b`) |
+| Left under the gate (0.4573) | 0.0049 (+1.08% over the live replay) | **0.0011 (+0.24% over the live replay)** |
+| The noise of one replay | 0.23% | Up to 0.56% between windows (`PLAN_COLD_EXPERTS.md` §7.3) |
+| A whole layer (layers 3–39) | 1.55 to 1.57 GiB | 1.39 to 1.51 GiB (140 to 154 experts) |
+| An F block | 1.44 GiB | 1.26 to 1.39 GiB |
+| The model file of the boots | The image's file | The per-layer file of `PLAN_LOADER_PATCH.md`: `build_skip.sh` applies `per-layer-experts.diff`, then `layer-skip.diff` |
+| The compose files | `compose-mask.yml`, `compose-tune.yml` | Also `compose-perlayer.yml`, under `compose-skip.yml` |
+| The KV pin | 8 GiB | 7.25 GiB, as on the live server |
+| The FP8 head (`HEAD=1`) | An option of `build_skip.sh` | Dropped: H1 did not deploy |
+
+What this means for the plan:
+
+1. **The budget is almost gone.** The cold cut S15 cost +0.82% against its reference and failed the gate
+   (`PLAN_COLD_CUT2.md` §4.1). A whole layer is a larger change than S15. So a pass in Phase C needs a block whose
+   rise is near zero. A likely result is still zero layers, now more likely than in §1.
+2. **Phase B still runs.** It is the cheap test of §1, and it measures the rise of each block. Only a block near
+   zero can go on. The thresholds of §7.6 are scaled to the new budget.
+3. **Phase C, if it runs, uses two replays per point** and gates on the mean, as `PLAN_COLD_CUT2.md` §3 does. The S0
+   check allows 1%, because a repeat check needs a limit above the noise (`PLAN_COLD_CUT2.md` §4.1, item 6).
+4. **The prefix cache of the probe boot is off.** The reset endpoint of §6.2 needs `VLLM_SERVER_DEV_MODE=1`. The
+   probe boot sets `PREFIX_CACHE=0` in its place. The client counts the shared prefix (the system prompt and the
+   tools) once: it tells the patch the first position to count (`count_from` in the skip file). The screen requests
+   ask for prompt logprobs, so vLLM skips the prefix cache for them in any case.
+5. **The heal code waits.** `LAYER_HEAL` and `--fit` come in their own pull request, only if Phase B or C asks for
+   them (§6.6). The Gram sums of the probe come in Phase A, so that Phase B can collect them.
+
 
 ## 1. Short answer
 
@@ -271,10 +308,13 @@ It imports the replay's request from the eval worktree, as `capture.py` does.
 
 Each pull request changes at most 400 lines:
 
-1. A1: `layer_skip.py`, `layer-skip.diff`, `build_skip.sh`, `compose-skip.yml`, `test_layer_skip.py` and its shell
-   script.
-2. A2: `layer_screen.py` and `test_layer_screen.py`.
-3. A3: `skip_probe.sh`, `skip_replay.sh` and the change of `run_lib.sh`.
+1. A1a: `layer_skip.py` (the parser, the probe sums, the skip file) and its CPU tests, `test_layer_skip.py`.
+2. A1b: `layer-skip.diff`, `build_skip.sh`, `compose-skip.yml`, and the GPU tests of the patched layer with the real
+   mHC kernels, `test_layer_skip_gpu.py` and `test_layer_skip.sh`.
+3. A2: `layer_screen.py` and `test_layer_screen.py`.
+4. A3: `skip_probe.sh`, `skip_replay.sh` and the change of `run_lib.sh`.
+
+A1 grew past 400 lines, so it is two pull requests (2026-11-13).
 
 If one part grows past 400 lines, split it again before you open the pull request. The heal code (§9) gets its own
 pull request, and only if Phase B or C asks for it.
@@ -283,8 +323,9 @@ pull request, and only if Phase B or C asks for it.
 
 ### 7.1 The boot
 
-- The live folder (`MASK_NAME=prune5b MASK_K=160`) with `--enforce-eager`, no draft (`MODE=mtp0`), `LAYER_PROBE=1`,
-  `LAYER_SKIP_FILE`, and the KV pin of 8 GiB.
+- The live folder (`MASK_NAME=prunemd5 MASK_K=149`, with `compose-perlayer.yml`) with `--enforce-eager`, no draft
+  (`MODE=mtp0`), `LAYER_PROBE=1`, `LAYER_SKIP_FILE`, the prefix cache off (`PREFIX_CACHE=0`, §0 item 4), and the KV pin
+  of 7.25 GiB.
 - If Model Runner V2 refuses this boot, use `serve-v1.sh`, as `compose-capture.yml` does.
 
 ### 7.2 Order and times
@@ -335,10 +376,13 @@ thresholds:
 
 | Result of the screen | Meaning | Next step |
 |---|---|---|
-| The best single L or F block rises by more than 3% | No block is near the budget. A heal that halves the rise still does not fit | Stop the memory track. Record the result here and in `PRUNE.md` |
-| The best single block rises by 1% to 3% | One block needs a heal | Fit the heal map of that block (`--fit`). Phase C runs S0, S1 and S1h only |
-| The best single block rises by at most 1% | One block can fit as it is | Phase C runs S0, S1, S1h, and S2 and S3 if each set rises by at most 1.5% |
-| The set of 6 A blocks rises by at most 1% | The attention halves can buy speed | Add SA (the 6 A blocks) to Phase C as a speed point |
+| The best single L or F block rises by more than 1% | No block is near the budget (0.24%, §0). A heal that halves the rise still does not fit | Stop the memory track. Record the result here and in `PRUNE.md` |
+| The best single block rises by 0.25% to 1% | One block needs a heal | The heal pull request, then fit the heal map of that block (`--fit`). Phase C runs S0, S1 and S1h only |
+| The best single block rises by at most 0.25% | One block can fit as it is | Phase C runs S0, S1, S1h, and S2 and S3 if each set rises by at most 0.35% |
+| The set of 6 A blocks rises by at most 0.25% | The attention halves can buy speed | Add SA (the 6 A blocks) to Phase C as a speed point |
+
+The thresholds of 2026-11-10 were 3%, 1% and 1.5% for a budget of 1.08%. The thresholds above keep the same ratios
+to the budget of §0 (0.24%), rounded up.
 
 The thresholds of the sets have a margin, because the screen and the replay use different data.
 
@@ -371,8 +415,8 @@ on the boot of its replay.
 
 ### 8.3 The gates
 
-- **The S0 check.** The NLL of S0 matches the live replay (0.4524) within 0.5%. Else the patch changes the model with
-  no skip. Then stop, and do not use the other points.
+- **The S0 check.** The NLL of S0 matches the mean of the live replays (0.4562, §0) within 1%. Else the patch changes
+  the model with no skip. Then stop, and do not use the other points.
 - **The replay gate** of `PLAN_SERVE_TUNE.md` §7.1, against `baseline-k216`: the NLL at most 0.4573, the tool names
   at least 98% of the baseline, and the decisions down by no more than 3.
 - **The smoke test** passes: a JSON schema, a tool call with `auto`, and one with `required`.
