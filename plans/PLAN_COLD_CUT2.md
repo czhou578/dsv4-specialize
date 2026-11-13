@@ -1,8 +1,8 @@
 # PLAN_COLD_CUT2: the second cold window, S15 and S20
 
-**Status:** 2026-11-12 22:50: §5 is done (PR #37): the tools, the two folders and a stubbed dry run. The steps before
-the start are done: the old files moved, the guard runs, and both Hermes cron jobs are paused for the morning of
-2026-11-13. The window waits for its start.
+**Status:** 2026-11-13 01:50: done. The window ran from 22:49 to 01:27 (2 h 38 min downtime, §6.1). S15 and S20 both
+fail the gate, so MD is the limit of the cold cut on this traffic (§4.1). The live MD prune stays. Both Hermes cron
+jobs stay paused for the morning of 2026-11-13.
 **Author:** colin-spark · **Related:** `PLAN_COLD_EXPERTS.md` (the first two windows, the points R0 to MD, the gate of
 §5), `PLAN_LOADER_PATCH.md` (the prune of a point that passes), `PLAN_MD_DEPLOY.md` (the live server since 2026-11-12).
 
@@ -63,6 +63,30 @@ live server and stops. Then the folders or the image changed, and the window giv
 
 The full runs, the judge and the blind review stay the final gate before a deploy, as for MD.
 
+### 4.1 The decision (2026-11-13)
+
+The window of §6.1 gave the first half only: the R0-2 check stopped the second half. The first half decides.
+
+| Point | Against R0 | Against R0-2 | Against `botmask5-k160` | Decisions against R0 | Tool names against R0 | Against K 216 (gate: at most +3%) |
+|---|---|---|---|---|---|---|
+| S15 | **+0.82%** | +1.24% | +0.73% | **−5** | −1 | **+3.02%, fail** |
+| S20 | **+1.49%** | +1.91% | +1.39% | −2 | +2 | **+3.69%, fail** |
+
+1. **Both points fail.** Condition 4 of §3 needs a pass of the baseline gate in both halves. S15 and S20 fail it in
+   the first half, so a second half cannot change the result.
+2. **The R0 gate gives the same answer.** For a mean of +0.5%, S15-2 needs +0.18% or less and at least +3 decisions.
+   Each of the three references puts S15 above the budget, so the result does not depend on the R0 noise.
+3. **No repeat of the second half.** The R0-2 check failed on noise (§6.1), but a repeat cannot turn condition 4 into
+   a pass. It costs about 3 h of downtime for no decision.
+4. **By the table of §4: MD is the limit of the cold cut on this traffic.** Stop the cold cuts. The live MD prune
+   (`compose-md149t5.yml`) stays. The next lever for memory is `PLAN_FEWER_LAYERS.md`.
+5. **No point between MD and S15.** S15 adds 144 experts and 1.27 GiB to MD, at +0.82% on one replay. MD already uses
+   +0.18% of the 0.5% budget. A point between them frees less than 1.27 GiB, and it needs a window of about 3 h and
+   the full deploy chain.
+6. **A lesson for a later window.** The R0 check limit of 0.5% sits inside the noise of one replay (0.56%). A repeat
+   R0 can miss it by chance, as R0-2 did. A later script must give a repeat R0 a limit above the noise, for example
+   1%, and keep 0.5% for the first R0 only.
+
 ## 5. The tools
 
 - `cold_sets.py --share 0.15 0.2`: the new option writes `results/cold-s15.json` and `results/cold-s20.json`, the
@@ -113,6 +137,53 @@ tmux new -d -s cold3 "POINTS='r0 s20 s15 r0-2 s20-2 s15-2' LOG=~/Projects/dsv4-s
 The memory rules of `run_lib.sh` hold: no boot under 110 GiB free, and the memory watch stops a client below 1 GiB.
 A mask of `data/tp1` loads 95.4 GiB and left 2 to 3 GiB free after the boot in the first windows.
 
+### 6.1 Result (2026-11-12 22:49 to 2026-11-13 01:27)
+
+**Before the start (2026-11-12, 22:38 to 22:49):**
+
+1. The files of window 2 were already in `results/cold-w2/` and `logs/cold-w2/`.
+2. The guard ran in the tmux session `guard` (`GUARD_AT=04:15`, `RECHECK_AT=04:35`).
+3. Both Hermes cron jobs (`daily-report` 89988a054346, `daily-followups` 0983231e9695) were paused for the morning of
+   2026-11-13. The backup is `logs/hermes-jobs.json.bak.20261112_cold3`. The jobs stay paused after the window.
+   Resume them with `hermes cron resume 89988a054346` and `hermes cron resume 0983231e9695`.
+4. The auto mode refused the start by Claude. You started the window with a `!` command. It sets the restore at the
+   start plus 4 h 35 min, but no later than 04:10, and the boot deadline 45 min before the restore.
+
+**The window.** The live server stopped at 22:49:30. The restore was healthy at 01:27:43 (reply "OK.", gateway
+active). The downtime was 2 h 38 min. Logs: `logs/cold-replay-3.log` and `logs/memory-cold-*.log`. Result files:
+`results/cold-{r0,s20,s15,r0-2}*`, not in git.
+
+| Point | Boot | Free memory after the boot, lowest in the replay | Smoke | Summed NLL against K 216 | Against R0 | Decisions (K 216: 41) | Tool names (K 216: 77 of 83) |
+|---|---|---|---|---|---|---|---|
+| R0 | 240 s | 2 GiB, 1.50 GiB | pass | +2.16% | — | 42 | 77 |
+| S20 | 225 s | 2 GiB, 1.30 GiB | pass | **+3.69%** | **+1.49%** | 40 | 79 |
+| S15 | 210 s | 1 GiB, 1.91 GiB | pass | **+3.02%** | **+0.82%** | 37 | 76 |
+| R0-2 | 225 s | 2 GiB, 1.73 GiB | pass | +1.76% | −0.41% | 40 | 78 |
+
+- **The R0 check passes for R0:** −0.11% against `botmask5-k160`. So the first half reads.
+- **The R0 check fails for R0-2:** −0.51% against `botmask5-k160` (the limit is ±0.5%). The script restored the live
+  server and stopped, as §3 says. S20-2 and S15-2 did not run. The miss is noise, not a change of the folders or the
+  image: R0-2 is better than the reference, and it differs from R0 by 0.41%, inside the noise of 0.56%.
+- **The memory held.** Every boot loaded 95.39 GiB with a KV cache of 265,498 tokens and found 114 to 116 GiB free.
+  No replay came near the 1 GiB stop.
+- **The smoke test passes at every point.** The layers of S20 at K 120 load and serve, so risk 1 of §8 did not occur.
+
+The NLL change against R0 for each skill (a diagnostic, not a gate; 7 or 8 targets per skill):
+
+| Skill | S15 | S20 |
+|---|---|---|
+| earnings | +0.09% | +0.69% |
+| filings | +1.79% | +3.65% |
+| other | +1.89% | +4.52% |
+| quant | +0.28% | +0.76% |
+| research | +1.84% | +2.51% |
+| stock-update | +1.15% | +1.81% |
+| subagent | +0.62% | +0.32% |
+| watchlist | +0.28% | +0.53% |
+
+One replay of 7 or 8 targets is noise for a single skill (`PLAN_COLD_EXPERTS.md` §7.3). But the cost grows from S15
+to S20 in 7 of 8 skills, and filings, other and research pay the most at both points. This points to a real cost.
+
 ## 7. What a pass gives, and what it does not
 
 - **No memory yet.** A mask frees nothing. The memory comes from the per-layer prune and its loader patch, as for MD.
@@ -133,8 +204,8 @@ A mask of `data/tp1` loads 95.4 GiB and left 2 to 3 GiB free after the boot in t
 
 ## 9. Timeline
 
-| Work | Time | Downtime |
-|---|---|---|
-| §5: the tools, the folders, the dry run | About 1 h | None |
-| §6: the window | About 4 h 35 min | About 4 h 35 min |
-| §4: the report and the decision | About 30 min | None |
+| Work | Time | Downtime | Result |
+|---|---|---|---|
+| §5: the tools, the folders, the dry run | About 1 h | None | Done 2026-11-12 (PR #37) |
+| §6: the window | About 4 h 35 min | About 4 h 35 min | Done 2026-11-12 22:49 to 11-13 01:27, 2 h 38 min: the R0-2 check stopped the second half (§6.1) |
+| §4: the report and the decision | About 30 min | None | Done 2026-11-13: both points fail, MD is the limit (§4.1) |

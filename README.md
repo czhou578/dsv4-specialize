@@ -57,7 +57,7 @@ flowchart LR
     S2["2. Better rank<br/>11-06 to 11-07<br/>K 144 fails"]
     S3["3. Fewer experts per token<br/>11-09 to 11-10<br/>no deploy"]
     S4["4. Serving settings<br/>11-10<br/>KV pin: live"]
-    S5["5. Cold experts<br/>11-10 to 11-11<br/>486 experts not needed"]
+    S5["5. Cold experts<br/>11-10 to 11-13<br/>486 experts not needed; more fail"]
     S6["6. Loader patch<br/>11-11 to 11-12<br/>MD prune: live"]
     S7["7. Fewer layers<br/>planned"]
     S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
@@ -124,15 +124,18 @@ is not deployed. The other ideas fail their gates or cannot run on this stack.
 - All files: [serve-tune/](serve-tune/README.md), with its own plan, tools, data and write-up.
 - Also: `mask_checkpoint.py --keep-per-layer`, for a different K in each layer.
 
-### 5. Drop the cold experts (2026-11-10 to 11-11): the bot does not need them
+### 5. Drop the cold experts (2026-11-10 to 11-13): the bot does not need them
 
 **Question:** does the bot need the experts that its traffic rarely uses? The default mask rule keeps 257 "mandatory"
 tool experts, and each gets less than 0.1% of the routing weight of its layer. Two replay windows tested masks without
 these tool experts, without the coldest ordinary experts, and without both. The cut of both sets, 486 experts, costs
 +0.18% NLL against the live set over two replays, under the limit of 0.5%. A prune of these experts would free about
-4.29 GiB. But a mask frees no memory, and after the cut each layer keeps a different number of experts.
+4.29 GiB. But a mask frees no memory, and after the cut each layer keeps a different number of experts. A third
+window on 2026-11-12 tested two larger cuts: S15 (630 experts, 5.56 GiB) and S20 (908 experts, 8.01 GiB). Both cost
+too much: +0.82% and +1.49% NLL against the live set, and both fail the baseline gate. So MD (stage 6) is the limit
+of the cold cut on this traffic.
 
-- Plan: [PLAN_COLD_EXPERTS.md](plans/PLAN_COLD_EXPERTS.md).
+- Plans: [PLAN_COLD_EXPERTS.md](plans/PLAN_COLD_EXPERTS.md) and [PLAN_COLD_CUT2.md](plans/PLAN_COLD_CUT2.md).
 - Tools: [cold_sets.py](cold_sets.py) and `mask_checkpoint.py --drop-file`.
 - Run script: [cold_replay.sh](cold_replay.sh).
 
