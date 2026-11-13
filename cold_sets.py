@@ -6,10 +6,12 @@ Each point drops the live drops (the drop lists of the live ``MASK.json``) plus 
 - M1: the mandatory experts (``mask_checkpoint.mandatory``) with a weight share below 0.1%.
 - D1: the coldest ordinary experts, while their summed weight share stays at or below 1% in each layer.
 - MD: M1 and D1.
+- S15, S20, ... (``--share 0.15 0.2``): MD plus every kept expert with a weight share below 0.15%, 0.2%, ... The
+  second window (``plans/PLAN_COLD_CUT2.md``) uses them.
 
 The weight share comes from the rank file of the live set (``capture.py --rank ... --order weight``). Layers 0-2 (hash
 routing) keep the live drops only. The tool writes ``cold-{r0,m1,d1,md}.json`` (``{layer: current ids}``, the input of
-``mask_checkpoint.py --drop-file``) and prints the table of §4 as a check.
+``mask_checkpoint.py --drop-file``), plus ``cold-s15.json``, ... for ``--share``, and prints the table of §4 as a check.
 
 ``--report R0.jsonl POINT.jsonl`` prints the comparison of §5.2 for two replay files: the summed NLL, the decisions
 and the tool names against R0, the NLL change per skill, and each target whose tool names change.
@@ -54,11 +56,27 @@ def cold_sets(plan, rank, live, m_share=M_SHARE, d_budget=D_BUDGET):
     return out
 
 
+def share_sets(plan, rank, live, md, shares):
+    """``{s<share>: {layer: drops}}``: MD plus every kept expert of layers 3-42 below the share, for each share in %."""
+    kept_by_layer = plan["keep_maps"]["keep_by_layer"]
+    out = {}
+    for pct in shares:
+        name = f"s{round(pct * 100):02d}"   # 0.15 -> s15, 0.2 -> s20
+        out[name] = {}
+        for layer in range(len(kept_by_layer)):
+            drop = set(live["layers"][str(layer)]["drop"]) | set(md[layer])
+            if layer >= mc.HASH_LAYERS:
+                share = {e["id"]: e["weight_share"] for e in rank["layers"][str(layer)]}
+                drop |= {c for c in range(len(kept_by_layer[str(layer)])) if share[c] < pct / 100}
+            out[name][layer] = sorted(drop)
+    return out
+
+
 def table(sets, plan, rank):
     """The rows of the table of §4: the extra drops, their mandatory count, GiB, the lost share and the K."""
     kept_by_layer, live = plan["keep_maps"]["keep_by_layer"], sets["r0"]
     rows = []
-    for point in POINTS:
+    for point in sets:
         extra, must, lost, ks = 0, 0, [], []
         for layer, drop in sets[point].items():
             add = set(drop) - set(live[layer])
@@ -111,6 +129,8 @@ def main(argv=None):
     parser.add_argument("--live", type=Path, default=LIVE, help="the MASK.json of the live set")
     parser.add_argument("--base", type=Path, default=mc.BASE, help="the folder with REAP_K216_PLAN.json")
     parser.add_argument("--out-dir", type=Path, default=S / "results")
+    parser.add_argument("--share", type=float, nargs="*", default=(), metavar="PCT",
+                        help="more points: MD plus every expert below this weight share in %%, for example 0.15 0.2")
     parser.add_argument("--report", nargs=2, type=Path, metavar=("R0_JSONL", "POINT_JSONL"))
     args = parser.parse_args(argv)
     if args.report:
@@ -119,13 +139,14 @@ def main(argv=None):
     plan = json.loads((args.base / "REAP_K216_PLAN.json").read_text())
     rank, live = json.loads(args.rank.read_text()), json.loads(args.live.read_text())
     sets = cold_sets(plan, rank, live)
+    sets.update(share_sets(plan, rank, live, sets["md"], args.share))
     for point, drops in sets.items():
         (args.out_dir / f"cold-{point}.json").write_text(json.dumps({str(k): v for k, v in drops.items()}))
     print("point  experts  mandatory   GiB  lost/layer mean (max)  K in layers 3-42  mean K")
     for r in table(sets, plan, rank):
         print(f"{r['point']:<6}{r['experts']:>8}{r['mandatory']:>11}{r['gib']:>6.2f}  {r['lost_mean_pct']:>5.2f}% "
               f"({r['lost_max_pct']:.2f}%)        {r['k_min']}-{r['k_max']}          {r['mean_k']}")
-    print(f"wrote {', '.join(f'cold-{p}.json' for p in POINTS)} to {args.out_dir}")
+    print(f"wrote {', '.join(f'cold-{p}.json' for p in sets)} to {args.out_dir}")
 
 
 if __name__ == "__main__":
