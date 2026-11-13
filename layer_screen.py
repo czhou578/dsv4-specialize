@@ -146,12 +146,98 @@ def check(after, skip, resp):
         raise RuntimeError(f"{cached} cached prompt tokens: the prefix cache must be off in the probe boot")
 
 
+class Client:
+    def __init__(self, base, model, skip_dir, data=DATA, effort="medium"):
+        self.base, self.model, self.dir, self.effort = base, model, Path(skip_dir), effort
+        with (data / "sessions.jsonl").open() as f:
+            self.sessions = {s["id"]: s for s in map(json.loads, f)}
+        self.tools = json.loads((data / "tools.json").read_text())["tools"]
+        self.file = SkipFile(skip_dir)
+        self._ids = None
+
+    def body(self, sid, g, i, logprobs):
+        s = self.sessions[sid]
+        body = request_body(self.model, s, s["segments"][g], i, self.tools, self.effort)
+        if not s["system_prompt"]:
+            body["messages"] = body["messages"][1:]
+        if not logprobs:
+            del body["prompt_logprobs"]
+        return body
+
+    def tokenize(self, messages):
+        return post(self.base, "/tokenize", {"model": self.model, "messages": messages, "tools": self.tools,
+                                             "add_generation_prompt": False,
+                                             "chat_template_kwargs": {"reasoning_effort": self.effort}})["tokens"]
+
+    def bi(self, items, skip="", gram=()):
+        """One pass over ``items`` with ``skip``: the summed cos, rel and tokens of each block (the shared prefix of
+        the pass counts once)."""
+        seen, total = set(), None
+        for sid, g, i, _ in items:
+            body = self.body(sid, g, i, logprobs=False)
+            prompt = self.tokenize(body["messages"])
+            system = [m for m in body["messages"] if m["role"] == "system"] or [{"role": "system", "content": ""}]
+            shared = self.tokenize(system)
+            n = next((k for k, (a, b) in enumerate(zip(shared, prompt)) if a != b), min(len(shared), len(prompt)))
+            key = hashlib.sha256(json.dumps(prompt[:n]).encode()).hexdigest()
+            self.file.write(skip, count_from=n if key in seen else 0, gram=gram)
+            seen.add(key)
+            before = read_probe(self.dir)
+            resp = post(self.base, "/v1/chat/completions", body)
+            after = read_probe(self.dir)
+            check(after, skip, resp)
+            delta = {k: after[k] - (before[k] if before is not None else 0) for k in ("cos", "rel", "tokens")}
+            total = delta if total is None else {k: total[k] + delta[k] for k in total}
+        return {k: v.tolist() for k, v in total.items()}
+
+    def screen(self, items, skip=""):
+        """The NLL of the screen set under ``skip``, summed as the replay sums its targets."""
+        if self._ids is None:
+            self._ids = [post(self.base, "/tokenize", {"model": self.model, "prompt": t, "add_special_tokens": False})
+                         ["tokens"][0] for t in ("<think>", "</think>")]
+        self.file.write(skip, sums=False)
+        nll = tokens = 0.0
+        for n, (sid, g, i, _) in enumerate(items):
+            resp = post(self.base, "/v1/chat/completions", self.body(sid, g, i, logprobs=True))
+            if n == 0:
+                check(read_probe(self.dir), skip, resp)
+            row = score(resp["prompt_logprobs"], *self._ids)
+            nll += row["reasoning_nll"] + row["answer_nll"]
+            tokens += row["reasoning_tokens"] + row["answer_tokens"]
+        return {"nll": nll / tokens, "scored_tokens": int(tokens)}
+
+    def gram(self, items, names, out):
+        """The Gram sums of ``names`` over ``items`` with no skip, then the flush to ``out`` (one short request)."""
+        self.bi(items, "", gram=names)
+        self.file.write("", sums=False, gram=names, flush=True)
+        post(self.base, "/v1/chat/completions", {"model": self.model, "max_tokens": 1,
+                                                 "messages": [{"role": "user", "content": "OK"}]})
+        self.file.write("", sums=True)
+        with np.load(self.dir / "layer_gram.npz") as z:
+            if int(z["flush"]) != self.file.flush or not all(f"xtx_{n}" in z.files for n in names):
+                raise RuntimeError(f"layer_gram.npz has flush {int(z['flush'])} and {sorted(z.files)}")
+        shutil.copy(self.dir / "layer_gram.npz", out)
+
+
+# --- the BI table --------------------------------------------------------------------------------------------------
+
+def bi_table(sums):
+    """``{block: (BI, relative change)}`` of every block with sums: BI = 1 - mean cosine."""
+    cos, rel, tok = (np.asarray(sums[k]) for k in ("cos", "rel", "tokens"))
+    return {f"{kind}{layer}": (1 - cos[layer, c] / tok[layer, c], rel[layer, c] / tok[layer, c])
+            for layer in range(cos.shape[0]) for c, kind in enumerate(KINDS) if tok[layer, c] > 0}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     here = Path(__file__).resolve().parent
+    ap.add_argument("--base-url", default="http://127.0.0.1:8890")
+    ap.add_argument("--model", help="served model name (default: the server's first model)")
+    ap.add_argument("--skip-dir", type=Path, default=here / "skip-out")
     ap.add_argument("--sets", type=Path, default=here / "results/skip-sets.json")
+    ap.add_argument("--set", default="", help="the skip set of --bi and --screen, for example L17,F21")
     cmd = ap.add_mutually_exclusive_group(required=True)
-    for name in ("pick",):
+    for name in ("pick", "bi", "screen"):
         cmd.add_argument(f"--{name}", action="store_true")
     a = ap.parse_args(argv)
     if a.pick:
@@ -161,6 +247,15 @@ def main(argv=None):
         for k, v in sets.items():
             print(f"{k}: {len(v)} targets, about {sum(r[3] for r in v)} prompt tokens -> {a.sets}")
         return
+    sets = json.loads(a.sets.read_text())
+    if a.model is None:
+        with urllib.request.urlopen(a.base_url + "/v1/models", timeout=30) as resp:
+            a.model = json.load(resp)["data"][0]["id"]
+    client = Client(a.base_url, a.model, a.skip_dir)
+    if a.bi:
+        print(json.dumps(bi_table(client.bi(sets["probe"], canon(blocks_of(a.set))))))
+    else:
+        print(json.dumps(client.screen(sets["screen"], canon(blocks_of(a.set)))))
 
 
 if __name__ == "__main__":
