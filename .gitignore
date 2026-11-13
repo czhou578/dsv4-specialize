@@ -24,3 +24,6 @@ serve-tune/image-patch/deepseek_v4_model.py
 dspark-draft-*/
 # the patched loader and model files of the loader patch, built from the image by image-patch/build_perlayer.sh (plans/PLAN_LOADER_PATCH.md §4.4)
 image-patch/perlayer/
+# the patched model file of the layer skip, built by image-patch/build_skip.sh, and the probe output (plans/PLAN_FEWER_LAYERS.md §6)
+image-patch/skip/
+skip-out/

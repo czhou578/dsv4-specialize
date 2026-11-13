@@ -1,0 +1,31 @@
+# The layer skip of plans/PLAN_FEWER_LAYERS.md §6.1, as an override on top of compose-mask.yml,
+# serve-tune/compose-tune.yml and compose-perlayer.yml. It mounts the model file with layer-skip.diff (built by
+# image-patch/build_skip.sh; else Docker mounts an empty folder and the boot fails) and image-patch/layer_skip.py.
+# - LAYER_SKIP: the fixed skip set of a skip boot, for example L17,F21 (default: no skip). The boot log has one line
+#   "layer skip: set ... (fixed); ...", which skip_replay.sh checks.
+# - VLLM_DISABLE_COMPILE_CACHE=1 on every boot: the compile cache key has no environment variable in it, so a boot
+#   could load the compiled graph of another skip set. The patch refuses a compiled boot without it.
+# - The probe boot of §7 (skip_probe.sh): SKIP_PROBE=1, SKIP_FILE=/skip/skip.json, SKIP_MODE=mtp0,
+#   SKIP_PREFIX_CACHE=0 and MASK_EXTRA_ARGS=--enforce-eager. The client writes ./skip-out/skip.json; the patch writes
+#   ./skip-out/layer_probe.npz and layer_gram.npz. Make ./skip-out first (mkdir), else Docker makes it for root.
+#   MASK_NAME=prunemd5 MASK_K=149 TUNE_LABEL=skip-s1 TUNE_KV_BYTES=7784628224 LAYER_SKIP=L17 docker compose \
+#     -f compose-mask.yml -f serve-tune/compose-tune.yml -f compose-perlayer.yml -f compose-skip.yml up -d
+services:
+  deepseek-v4-flash-mask:
+    environment:
+      LAYER_SKIP: "${LAYER_SKIP:-}"
+      LAYER_PROBE: "${SKIP_PROBE:-0}"
+      LAYER_SKIP_FILE: "${SKIP_FILE:-}"
+      VLLM_DISABLE_COMPILE_CACHE: "1"
+      MODE: "${SKIP_MODE:-dspark}"
+      PREFIX_CACHE: "${SKIP_PREFIX_CACHE:-1}"
+    volumes:
+      - ./skip-out:/skip
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/skip/deepseek_v4_model.py"
+        target: /opt/vllm/vllm/models/deepseek_v4/nvidia/model.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/layer_skip.py"
+        target: /opt/vllm/vllm/models/deepseek_v4/nvidia/layer_skip.py
+        read_only: true
