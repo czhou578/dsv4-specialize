@@ -1,6 +1,6 @@
 # Plan: fewer layers (depth pruning)
 
-**Status:** 2026-11-13: refreshed for the live MD prune (§0); Phase A in work ·
+**Status:** 2026-11-13: refreshed for the live MD prune (§0); Phase A done (PRs #39 to #45); Phase B ready to start ·
 **Author:** colin-spark · **Date:** 2026-11-10, refreshed 2026-11-13
 **Source:** a note on depth pruning: rank the layers by Block Influence, confirm the best ones with the replay gate,
 heal the cut with a linear map, then remove the layers from the files. This plan checks each step against this stack.
@@ -12,7 +12,7 @@ to the live server.
 
 | Step | Status |
 |---|---|
-| §6 Phase A: the patch, the tools and the tests (no downtime, about 2 days) | ⬜ |
+| §6 Phase A: the patch, the tools and the tests (no downtime, about 2 days) | ✅ 2026-11-13: A1a to A3a (PRs #40 to #45); all tests pass; A3b (`skip_replay.sh`) waits for Phase B (§6.4) |
 | §7 Phase B: the probe window (about 3 h downtime) | ⬜ |
 | §8 Phase C: the replay window (about 4 to 5 h downtime) | ⬜ |
 | §9 Phase D: heal maps for sets (only if §8.4 says so) | ⬜ |
