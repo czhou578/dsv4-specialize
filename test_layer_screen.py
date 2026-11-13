@@ -172,5 +172,94 @@ class ClientTest(unittest.TestCase):
             self.assertEqual((int(z["flush"]), sorted(z.files)), (c.file.flush, ["flush", "xtx_F9", "xtx_L17"]))
 
 
+class FakeClient:
+    """The client with a model of the screen: each block adds its rise to the NLL; a fake clock moves 180 s per
+    screen and 480 s per BI pass."""
+
+    def __init__(self, bi, rise, base=0.5):
+        self.bi_of, self.rise, self.base, self.now, self.calls, self.grams = bi, rise, base, 0.0, [], []
+
+    def clock(self):
+        return self.now
+
+    def screen(self, items, skip=""):
+        self.now += 180
+        self.calls.append(("screen", skip))
+        return {"nll": self.base * (1 + sum(self.rise.get(b, 5.0) for b in ls.blocks_of(skip)) / 100),
+                "scored_tokens": 10}
+
+    def bi(self, items, skip="", gram=()):
+        self.now += 480
+        self.calls.append(("bi", skip))
+        cos, tok = np.zeros((43, 3)), np.zeros((43, 3))
+        for layer in range(43):
+            for c, kind in enumerate(ls.KINDS):
+                if not removed(f"{kind}{layer}", skip):
+                    cos[layer, c] = 100 * (1 - self.bi_of.get(f"{kind}{layer}", 0.2 + layer / 100))
+                    tok[layer, c] = 100
+        return {"cos": cos.tolist(), "rel": np.zeros((43, 3)).tolist(), "tokens": tok.tolist()}
+
+    def gram(self, items, names, out):
+        self.now += 600
+        self.grams.append(names)
+
+
+def greedy(tmp, fake, deadline=1e9, stop=1.0):
+    return ls.Greedy(fake, {"screen": [], "probe": []}, Path(tmp) / "log.jsonl", deadline, stop, clock=fake.clock)
+
+
+class GreedyTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        bi = {f"{k}{l}": v for k, l, v in [("L", 30, 0.01), ("F", 30, 0.005), ("A", 30, 0.001), ("F", 12, 0.006),
+                                           ("L", 12, 0.02), ("A", 2, 0.0001), ("F", 41, 0.0001)]}
+        rise = {"F30": 0.2, "L30": 0.9, "F12": 0.3, "L12": 1.5, **{f"A{l}": 0.05 * (l % 7) for l in range(3, 40)}}
+        self.fake = FakeClient(bi, rise)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_rounds_of_section_7(self):
+        greedy(self.tmp.name, self.fake).run()
+        keys = [k for k, s in self.fake.calls]
+        screens = [s for k, s in self.fake.calls if k == "screen"]
+        r1 = [s for s in screens[1:29]]
+        self.assertEqual(sorted(b[0] for b in r1), ["A"] * 8 + ["F"] * 10 + ["L"] * 10)
+        self.assertEqual(r1[:3], ["L30", "F30", "A30"])                   # the lowest BI of each kind first
+        self.assertFalse({"A2", "F41"} & set(r1))                          # protected layers are not candidates
+        a_rises = sorted((self.fake.rise[b], b) for b in r1 if b[0] == "A")
+        self.assertEqual(screens[29], ls.canon(b for _, b in a_rises[:6]))   # the 6 A blocks with the lowest rises
+        self.assertEqual(self.fake.grams, [["F30", "F12", "L30"]])        # the 3 lowest L or F rises
+        self.assertEqual(keys.count("bi"), 3)                              # no skip, then the sets of 1 and 2
+        self.assertEqual([s for k, s in self.fake.calls if k == "bi"][1], "F30")
+        r2 = screens[30:36]
+        self.assertTrue(all("F30" in s and len(ls.blocks_of(s)) == 2 for s in r2))
+        self.assertTrue(all("F12,F30" in s and len(ls.blocks_of(s)) == 3 for s in screens[36:42]))
+        self.assertEqual(screens[-1], "")                                   # R2
+        report = ls.report(json.loads(x) for x in (Path(self.tmp.name) / "log.jsonl").read_text().splitlines())
+        self.assertIn("rises by +0.20% (at most 0.25%)", report)
+        self.assertIn("the screen is stable", report)
+        self.assertIn("Rank correlation of BI and the rise", report)
+
+    def test_the_stop_rule_and_the_deadline(self):
+        self.fake.rise.update({"F30": 1.2, "F12": 1.3, "L30": 2.0})
+        greedy(self.tmp.name, self.fake, stop=1.0).run()
+        self.assertEqual(self.fake.grams, [])
+        self.assertEqual([k for k, s in self.fake.calls].count("bi"), 1)
+        self.assertIn("(more than 1%): stop the memory track",
+                      ls.report(json.loads(x) for x in (Path(self.tmp.name) / "log.jsonl").read_text().splitlines()))
+        fake = FakeClient({}, {})
+        with tempfile.TemporaryDirectory() as tmp:   # R and BI at 660 s, 12 screens to 2820 s, then R2 at 3000 s
+            greedy(tmp, fake, deadline=3000).run()
+        screens = [s for k, s in fake.calls if k == "screen"]
+        self.assertEqual((screens[0], screens[-1], len(screens), fake.now), ("", "", 1 + 12 + 1, 3000))
+
+    def test_a_rerun_skips_the_logged_steps(self):
+        greedy(self.tmp.name, self.fake).run()
+        again = FakeClient({}, {})
+        greedy(self.tmp.name, again).run()
+        self.assertEqual(again.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()
