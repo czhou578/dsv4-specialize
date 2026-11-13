@@ -18,10 +18,14 @@ source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 export MASK_NAME=prunemd5 MASK_K=149 TUNE_LABEL=skip-probe TUNE_KV_BYTES=7784628224
 export DRAFT_DIR=$SERVER/data/dspark-draft-k64-bot
-export SKIP_PROBE=1 SKIP_FILE=/skip/skip.json SKIP_MODE=mtp0 SKIP_PREFIX_CACHE=0 MASK_EXTRA_ARGS=--enforce-eager
+# The prefix cache goes off with a vLLM flag: the server's entrypoint sets PREFIX_CACHE=1 (§7.7, attempt 3).
+export SKIP_PROBE=1 SKIP_FILE=/skip/skip.json SKIP_MODE=mtp0 MASK_EXTRA_ARGS="--enforce-eager --no-enable-prefix-caching"
 export TUNE_GRAPH_SIZES=none       # eager: no CUDA graph sizes for vLLM (the serve script passes none)
 BOOT_MIN_GIB=110                   # vLLM's boot check at util 0.90 needs 109.5 GiB free
-probe_line() { grep -q 'layer skip: set none (run-time file /skip/skip.json); .*probe on' "$R/boot-$1.log"; }
+probe_line() {  # the probe line of the patch, and the prefix cache off in the engine config
+  grep -q 'layer skip: set none (run-time file /skip/skip.json); .*probe on' "$R/boot-$1.log" &&
+    grep -q 'enable_prefix_caching=False' "$R/boot-$1.log" && ! grep -q 'enable_prefix_caching=True' "$R/boot-$1.log"
+}
 client() {  # the greedy rounds of §7; the client ends 15 min before RESTORE_AT
   local left=$(( RESTORE_S - $(now) - 600 ))
   [ $left -le 600 ] && { log "no time for the client"; return 1; }
@@ -56,7 +60,7 @@ if [ $rc = 1 ]; then
 fi
 [ $rc != 0 ] && { log "no probe boot (rc $rc): restore"; restore; exit 1; }
 if ! probe_line $label; then
-  log "ERROR: the boot log has no probe line: restore"; down; restore; exit 1
+  log "ERROR: the boot log has no probe line, or the prefix cache is on: restore"; down; restore; exit 1
 fi
 log "$(grep -o 'layer skip: set .*' $R/boot-$label.log | head -1); $(avail_gib) GiB available"
 client; rc=$?

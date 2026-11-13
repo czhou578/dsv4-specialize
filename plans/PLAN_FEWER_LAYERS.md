@@ -50,7 +50,8 @@ What this means for the plan:
 3. **Phase C, if it runs, uses two replays per point** and gates on the mean, as `PLAN_COLD_CUT2.md` §3 does. The S0
    check allows 1%, because a repeat check needs a limit above the noise (`PLAN_COLD_CUT2.md` §4.1, item 6).
 4. **The prefix cache of the probe boot is off.** The reset endpoint of §6.2 needs `VLLM_SERVER_DEV_MODE=1`. The
-   probe boot sets `PREFIX_CACHE=0` in its place. The client counts the shared prefix (the system prompt and the
+   probe boot passes `--no-enable-prefix-caching` in its place. (`PREFIX_CACHE=0` does not work: the server's
+   entrypoint sets `PREFIX_CACHE=1`, §7.7, attempt 3.) The client counts the shared prefix (the system prompt and the
    tools) once: it tells the patch the first position to count (`count_from` in the skip file). The screen requests
    ask for prompt logprobs, so vLLM skips the prefix cache for them in any case.
 5. **The heal code waits.** `LAYER_HEAL` and `--fit` come in their own pull request, only if Phase B or C asks for
@@ -423,6 +424,18 @@ at 09:13:44 (reply "OK."). The downtime was about 11 minutes.
   and the warmup's import then binds that stub.
 - The fix (PR A1c): `DeepseekV4Model.__init__` of an eager boot imports `flashinfer.comm` before any kernel runs. A GPU
   test reproduces the fault (a tilelang kernel first) and the fix (the import first) in subprocesses: 18 tests pass.
+
+**Attempt 3 (2026-11-13, 09:15 to 09:23).** The probe boot was healthy after 180 s: 66.54 GiB loaded, a KV cache of
+277,541 tokens, the probe line, 30 GiB available. R ran: NLL 0.5081 over 6,294 scored tokens in 120 s (about 1,200
+prompt tokens per second, eager). The first request of the BI pass then had 47,360 cached prompt tokens, and the client
+stopped, as §6.2 asks. The rerun stopped the same way. The live server was healthy again at 09:23:37. The downtime was
+about 8 minutes. The client log of this attempt is `results/skip-probe-attempt3.jsonl`.
+
+- The cause: the server repo's entrypoint (`entrypoint-no-download.sh`) sets `PREFIX_CACHE=1`, so the variable of
+  `compose-skip.yml` had no effect. The boot ran with `--enable-prefix-caching`.
+- The fix (PR A1c): `--no-enable-prefix-caching` after the script's own flag (vLLM's parser takes the last one;
+  checked in the image), and a check of `enable_prefix_caching=False` in the boot log before the client starts. A new
+  case of the dry run covers the check.
 
 ## 8. Phase C: the replay window (about 4 to 5 h downtime)
 

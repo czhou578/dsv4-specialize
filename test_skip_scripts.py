@@ -21,7 +21,8 @@ boot() {
   log "STUB boot $1 compose $TEST_COMPOSE"
   case " ${STUB_BOOT_FAIL:-} " in *" $1 "*) return 1;; esac
   [ "${STUB_NO_LINE:-0}" = 1 ] && { echo "no line" > $R/boot-$1.log; return 0; }
-  echo "WARNING layer skip: set none (run-time file $SKIP_FILE); skipped weights 0.00 GiB; heal none; probe on" > $R/boot-$1.log
+  { echo "WARNING layer skip: set none (run-time file $SKIP_FILE); skipped weights 0.00 GiB; heal none; probe on"
+    echo "INFO Initializing a V1 LLM engine with config: enable_prefix_caching=${STUB_CACHE:-False}, x"; } > $R/boot-$1.log
 }
 client() {
   log "STUB client"
@@ -83,6 +84,12 @@ class ProbeScriptTest(unittest.TestCase):
         self.assertIn("the boot log has no probe line", log)
         self.assertNotIn("STUB client", log)
         self.assertLess(log.index("STUB down"), log.index("STUB restore"))
+
+    def test_a_prefix_cache_on_stops_the_test_server_and_restores(self):
+        rc, log, _ = self.run_script(STUB_CACHE="True")
+        self.assertEqual(rc, 1)
+        self.assertIn("or the prefix cache is on: restore", log)
+        self.assertNotIn("STUB client", log)
 
     def test_an_old_client_log_stops_the_script_before_any_server_action(self):
         old = tempfile.TemporaryDirectory()
