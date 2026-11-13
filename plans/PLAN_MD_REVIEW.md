@@ -288,13 +288,15 @@ The first row of the table applies:
 
 **Result:** a deploy of `tp1-prunemd5-k149` is possible. No deploy is done, and the server repo has no change.
 
-Open, on your go:
+Your decisions on the open items (2026-11-12):
 
-1. The use of the 4.18 GiB: KV room, or the second model of the router plan.
-2. The deploy plan: the compose mounts of the two built files of `image-patch/perlayer/` in the server repo, the
-   rollback, and a check of the time per model call on the live bot before and after the deploy (§6.2 shows about
-   +11% in the runs, against −1.3% in the decode test).
-3. The Hermes cron jobs `daily-report` and `daily-followups` are still paused (§3).
+1. The 4.18 GiB is for the second model of the router plan. The KV pin stays at 7.25 GiB.
+2. The deploy plan is `PLAN_MD_DEPLOY.md`. It includes the check of the time per model call before and after the
+   deploy (§6.2 shows about +11% in the runs, against −1.3% in the decode test).
+3. The Hermes cron jobs `daily-report` and `daily-followups` run again since 2026-11-12 17:16. Both jobs are now
+   pinned to the provider `custom` and the model `deepseek-v4-flash-0731-k160t5`. Before, `daily-report` failed
+   with "global inference config drifted" (last run 2026-11-09). The backup of the job file is
+   `logs/hermes-jobs.json.bak.20261112_resume`.
 
 ## 9. Risks
 
