@@ -1,6 +1,8 @@
 # PLAN_COLD_CUT2: the second cold window, S15 and S20
 
-**Status:** 2026-11-12 22:40: proposal. The tools are ready, the two folders are built, and the window waits for your go.
+**Status:** 2026-11-12 22:50: §5 is done (PR #37): the tools, the two folders and a stubbed dry run. The steps before
+the start are done: the old files moved, the guard runs, and both Hermes cron jobs are paused for the morning of
+2026-11-13. The window waits for its start.
 **Author:** colin-spark · **Related:** `PLAN_COLD_EXPERTS.md` (the first two windows, the points R0 to MD, the gate of
 §5), `PLAN_LOADER_PATCH.md` (the prune of a point that passes), `PLAN_MD_DEPLOY.md` (the live server since 2026-11-12).
 
