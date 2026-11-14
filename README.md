@@ -188,6 +188,16 @@ fits, and nothing changed on the live server. The patch, the heal and the script
 - Run scripts: [skip_probe.sh](skip_probe.sh) and [skip_replay.sh](skip_replay.sh), with their dry run
   [test_skip_scripts.py](test_skip_scripts.py). The summary is [PRUNE.md](PRUNE.md) §7.
 
+### Next: a second model beside DeepSeek (planned)
+
+**Question:** does Qwen 27B (NVFP4) with a 256k context fit beside the live checkpoint? Not today: it needs 28.4 GiB
+plus its runtime overhead, and about 29 GiB is available. The plan measures the overhead of Qwen alone, then chooses
+savings on the DeepSeek side that do not change the output.
+
+- Plan: [PLAN_SECOND_MODEL_FIT.md](plans/PLAN_SECOND_MODEL_FIT.md).
+- Run script: [qwen_fit.sh](qwen_fit.sh), with its client [qwen_fit.py](qwen_fit.py) and the dry run
+  [test_qwen_fit.py](test_qwen_fit.py).
+
 ## Documents
 
 | Document | Read it for |

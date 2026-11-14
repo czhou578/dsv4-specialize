@@ -1,6 +1,7 @@
 # Plan: the fit of a second model (Qwen 27B) beside DeepSeek
 
-**Status:** 2026-11-13: plan written; the numbers of §2 are measured; nothing built ·
+**Status:** 2026-11-13: plan written; the numbers of §2 are measured; the Phase A script is built and its dry run
+passes; the window waits for your go ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_MODEL_ROUTER.md` in the bot's repo (§3 the memory budget, §7 the fast model, §9 the run of both
 servers), `PLAN_MD_DEPLOY.md` (the live server), `../serve-tune/PLAN_SERVE_TUNE.md` (§6 the KV pin, §8 the wide
@@ -12,7 +13,7 @@ live server in Phases A and B.
 
 | Step | Status |
 |---|---|
-| §4 Phase A: measure Qwen alone (about 30 min downtime) | ⬜ |
+| §4 Phase A: measure Qwen alone (about 45 min downtime) | 🔨 2026-11-13: `qwen_fit.sh`, `qwen_fit.py` and `test_qwen_fit.py` are built; the window has not run |
 | §5 Phase B: the arithmetic and your decisions (no downtime) | ⬜ |
 | §6 Phase C: the savings on the DeepSeek side (one window each) | ⬜ |
 | §7 Phase D: both servers at the same time | ⬜ |
@@ -106,7 +107,7 @@ experts, attention in EXL3.
 | Q3 | Text only, if vLLM 0.33 then skips the vision encoder | Up to 0.86 | No images. Phase A checks whether the load size falls |
 | Q4 | A context of 128k | 4.0 | Your decision. You plan 256k |
 
-## 4. Phase A: measure Qwen alone (about 30 min downtime)
+## 4. Phase A: measure Qwen alone (about 45 min downtime)
 
 ### 4.1 The script: `qwen_fit.sh`
 
@@ -147,19 +148,25 @@ more with that value plus 4%.
 
 ### 4.3 The tests and the gate
 
-- `bash -n` passes. A dry run with stub boots (as `test_skip_scripts.py`) covers a normal window, a failed boot, a
-  pin that is too small, and a memory stop.
+- `bash -n` passes. A dry run with stub boots (`test_qwen_fit.py`, as `test_skip_scripts.py`) covers a normal
+  window, a failed boot, two failed boots in a row, and a pin that is too small. Two more tests check the report
+  arithmetic and the size of the long prompt. Result 2026-11-13: 6 tests pass.
+- The bot decode test is `model_eval.speed` of the bot's repo with 5 sessions and 1 run, so its rate compares with
+  the DeepSeek numbers.
+- The window boots use `--gpu-memory-utilization 0.30`. With a pinned KV cache, this value sets only the boot check
+  of §7.2.
 - A start with a boot deadline in the past ends before any server action.
 
 **Gate.** Each point gives its four memory values, and the live server is healthy after the window.
 
-CAUTION: The window stops the bot's model server for about 30 minutes. Do not start it between 05:00 and 10:00 on a
+CAUTION: The window stops the bot's model server for about 45 minutes (three points of about 15 minutes; the script
+skips a point that cannot end before `RESTORE_AT`). Do not start it between 05:00 and 10:00 on a
 weekday while the cron jobs are active.
 
 ## 5. Phase B: the arithmetic and your decisions (no downtime)
 
 1. Put X of F1 into the formula of §2.3.
-2. Read vLLM 0.33 for the boot check of §7.2. No downtime.
+2. Read vLLM 0.33 for the boot check of §7.2. No downtime. Done 2026-11-13 (§7.2).
 3. You decide three values:
    - the margin (the proposal: at least 4 GiB, the small margin of the router plan);
    - the context of Qwen (256k, or 128k for 4.0 GiB);
@@ -205,10 +212,15 @@ margin of at least 4 GiB on paper.
 
 ### 7.2 The boot check
 
-vLLM checks the free GPU memory at boot. On this machine that value leaves out the page cache: beside the live server
-it showed about 2 GiB while 23 GiB was available (measured for a small GPU test on 2026-11-11, not for a second
-server). If the boot of Qwen fails on this check, drop the page cache first. This needs `sudo`, so you run it:
-`sudo sh -c 'sync; echo 1 > /proc/sys/vm/drop_caches'`.
+vLLM 0.33 checks the free GPU memory at boot, also with a pinned KV cache (`vllm/v1/worker/utils.py`,
+`request_memory`): the boot fails if the free memory is below `--gpu-memory-utilization` × 121.7 GiB. On this machine
+the free value leaves out the page cache. Beside the live server, torch saw 1.1 GiB free while 28 GiB was available
+(2026-11-13). So the boot of Qwen beside DeepSeek needs one of these, and Phase D tests which one works:
+
+1. A very small `--gpu-memory-utilization`, for example 0.005 (0.6 GiB). With a pinned KV cache, vLLM uses the value
+   for this check only. The kernel then frees the page cache when Qwen allocates.
+2. A drop of the page cache before the boot. This needs `sudo`, so you run it:
+   `sudo sh -c 'sync; echo 1 > /proc/sys/vm/drop_caches'`. Then set the utilization below the free share.
 
 ### 7.3 The tests
 
@@ -237,7 +249,7 @@ plan (§9.3 there): no out-of-memory event with the cron jobs and normal use.
 
 | Phase | Work | Downtime |
 |---|---|---|
-| A | The script and its dry run: about 2 hours. The window: about 30 minutes | About 30 min |
+| A | The script and its dry run: done 2026-11-13. The window: about 45 minutes | About 45 min |
 | B | About 1 hour, and your three decisions | None |
 | C | One to three windows, by the table of §5 | About 1 to 2 h each |
 | D | One evening for the tests, then 24 hours of normal use | None, if the margin holds |
