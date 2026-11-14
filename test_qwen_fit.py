@@ -162,6 +162,14 @@ class WindowTest(unittest.TestCase):
         self.assertRegex(line("k1"), r'^k208 ctx=128000 pin=1965377034 budget=512 draft=\{"method":"mtp","model":"[^"]*snapshots/.* pypath=\S+/qwen_mtp_patch$')
         self.assertIn("qwen-o0 processes (name, RSS kB, peak RSS kB, pid): ", log)
 
+    def test_the_nvfp4_draft_point(self):
+        stub = STUB + "MODEL[d1]=$STUB_DIR/k208\n"
+        rc, log, _ = self.run_script(POINTS="d1", stub=stub, files={"k208/config.json": "{}"})
+        self.assertEqual(rc, 0, log)
+        line = log.split("STUB launch d1 ")[1].splitlines()[0]
+        self.assertRegex(line, r'^k208 ctx=128000 pin=1965377034 budget=2048 draft=\{"method":"mtp","model":"\S+/qwen-draft-nvfp4",'
+                               r'"num_speculative_tokens":3,"moe_backend":"marlin"\} .* pypath=\S+/qwen_mtp_patch$')
+
     def test_the_server_of_a_patch_point_gets_the_patch_on_its_python_path(self):
         fake = "#!/usr/bin/env bash\necho \"PP=${PYTHONPATH:-}\" >> $STUB_DIR/calls.log\nexit 1\n"
         # the real launch(): the stub without its launch()
