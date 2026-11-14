@@ -216,8 +216,8 @@ at the same coverage of the routing.
 A third window (2026-11-14) tested the overhead of vLLM itself: about 6.6 GiB that is neither weights nor KV cache.
 A smaller prefill budget, eager mode and the expandable allocator free nothing: the overhead is the CUDA context and
 workspaces (about 2.2 GiB) and the host memory of the two server processes (about 4.4 GiB). K 208 with its draft
-uses 26.5 GiB at the peak with a 120k prompt and decodes at 98 tok/s: a margin of 2.3 to 3.0 GiB, or 3.4 to 4.1 GiB
-with the DeepSeek context cap. It is the setup to report, at the G1 cost of +4.15%; the choice is the user's.
+uses 26.5 GiB at the peak with a 120k prompt and decodes at 98 tok/s: a margin of 2.3 to 3.0 GiB, or 2.7 to 3.4 GiB
+with the DeepSeek context cap (which frees about 0.35 GiB). It is the setup to report, at the G1 cost of +4.15%; the choice is the user's.
 A fourth window measured facts and visible quality. On 80 rare facts of SimpleQA with no search, K 208 answers 10
 right against 15 for the full model, and 46 wrong against 43 (both inside the noise of 80 questions). On 30 of the
 user's held-out turns, a blind DeepSeek judge finds no loss (K 208 better on 8 turns, worse on 10, p = 0.81).

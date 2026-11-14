@@ -3,8 +3,8 @@
 **Status:** 2026-11-14: the facts and side-by-side test (§7.6): on 80 rare facts, K 208 answers 10 right against
 15 for the full model, and 46 wrong against 43 (both below the noise of 80 questions; p = 0.18 for the right answers).
 On 30 of your held-out turns, a blind judge finds no visible loss (K 208 better on 8 turns, worse on 10, p = 0.81).
-The overhead of vLLM frees nothing (§7.4); K 208 with its draft uses 26.5 GiB at the peak, a margin of 3.4 to
-4.1 GiB with the DeepSeek context cap. The choice is yours. Nothing is deployed.
+The overhead of vLLM frees nothing (§7.4); K 208 with its draft uses 26.5 GiB at the peak, a margin of 2.3 to
+3.0 GiB, or 2.7 to 3.4 GiB with the DeepSeek context cap (D1 frees about 0.35 GiB, not 1.1: §2.3). The choice is yours. Nothing is deployed.
 2026-11-13: every pruned point failed G1 (§7.2) ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_SECOND_MODEL_FIT.md` (§5.5 the measured fit and speed of the candidates), `PLAN_PHYSICAL_PRUNE.md`
@@ -73,8 +73,13 @@ because vLLM reads one `num_experts` for the model and its draft. One slot of th
 | 176 (−31%) | 5.27 | 0.47 | 5.74 | About 25.0 | About 4.0 |
 | 160 (−37%) | 6.33 | 0.56 | 6.89 | About 23.9 | About 5.1 |
 
-The DeepSeek context cap (`PLAN_SECOND_MODEL_FIT.md` §3.1, D1) adds 1.1 GiB to each margin. So K 192 with D1 also
-reaches 4 GiB.
+The DeepSeek context cap (`PLAN_SECOND_MODEL_FIT.md` §3.1, D1) adds about 0.35 GiB to each margin.
+
+**Correction (2026-11-14).** This page first gave D1 as 1.1 GiB, and the margins with D1 in §6.1, §7, §7.2 and §7.4
+used that value. The 1.1 GiB is the saving against the old KV pin of 8 GiB (`serve-tune/PLAN_SERVE_TUNE.md` §3). The
+live pin has been 7.25 GiB since 2026-11-10, and the pin for 160k is about 6.9 GiB (most of the KV need of DeepSeek
+is fixed: about 6.5 GiB at 128k and 7.0 GiB at 256k). So D1 frees about 0.35 GiB. The margins with D1 below use
+0.35 GiB.
 
 ## 3. The data
 
@@ -285,8 +290,8 @@ is the clean number for the model with its draft at 128k.
 
 | Point | Saving | Use at the peak | Margin |
 |---|---|---|---|
-| K 208 | 3.16 GiB | About 26.7 GiB | About 2.3 GiB (3.4 with the DeepSeek context cap) |
-| K 192 | 4.22 GiB | About 25.7 GiB | About 3.3 GiB (4.4 with the cap) |
+| K 208 | 3.16 GiB | About 26.7 GiB | About 2.3 GiB (2.7 with the DeepSeek context cap) |
+| K 192 | 4.22 GiB | About 25.7 GiB | About 3.3 GiB (3.7 with the cap) |
 | K 176 | 5.27 GiB | About 24.6 GiB | About 4.4 GiB |
 
 The builds (no downtime): K 176 (16.72 GiB), K 192 (17.78 GiB) and K 208 (18.84 GiB), each in about 75 seconds, and
@@ -313,8 +318,8 @@ How to read the result:
 | Result | Next step |
 |---|---|
 | K 176 passes all gates | Phase D with K 176 |
-| K 192 passes and K 176 fails | Phase D with K 192 (margin about 3.3 GiB; 4.4 with the DeepSeek context cap, D1) |
-| Only K 208 passes | Phase D with K 208 and D1 (margin about 3.4 GiB). Your decision on the smaller margin |
+| K 192 passes and K 176 fails | Phase D with K 192 (margin about 3.3 GiB; 3.7 with the DeepSeek context cap, D1) |
+| Only K 208 passes | Phase D with K 208 and D1 (margin about 2.7 GiB). Your decision on the smaller margin |
 | No point passes G1 or G3 | Stop the prune. The choices are Qwen without its draft at 128k (about 27.4 GiB), or Nemotron |
 | A point passes the quality gates, but the speed with the draft falls | Rebuild the draft experts by the rank of the pruned target, as the bot-rank draft of DeepSeek. Else your decision |
 
@@ -388,7 +393,7 @@ The use at the peak holds the score and suite clients; the clean peak of the ful
 
 **The decision: no prune.** The first 48 experts cost +4.15% and the next 16 cost +3.9%, so G1 holds only above about
 K 224. K 224 saves about 2.1 GiB, and the full model with its draft at 128k leaves about −0.9 GiB (29.9 GiB against
-about 29 GiB available): the margin at K 224 is about 1.2 GiB, or about 2.3 GiB with the DeepSeek context cap (D1).
+about 29 GiB available): the margin at K 224 is about 1.2 GiB, or about 1.6 GiB with the DeepSeek context cap (D1).
 G6 asks for 4 GiB. No K passes both G1 and G6, so nothing is accepted and nothing is deployed. On your request,
 the folders `qwen-k176`, `qwen-k192` and `qwen-k208` were deleted on 2026-11-14. The rank file
 (`results/qwen-rank.json`) stays, and `qwen_prune.py --draft keep` rebuilds a folder in about 75 seconds.
@@ -399,7 +404,7 @@ the folders `qwen-k176`, `qwen-k192` and `qwen-k208` were deleted on 2026-11-14.
    (a margin of about 3.5 GiB), 127 tok/s in 28.8 GiB with its DSpark draft. Its quality on your work is not tested.
 2. **Qwen3.6-35B-A3B in full with a shorter context or no draft:** 58.8 tok/s with no draft at 128k (about 27.4 GiB),
    or the draft at a context short enough for the margin.
-3. **K 208 with a looser G1:** it passes every other gate and saves 2.8 GiB, but its margin is about 2.3 GiB (3.4
+3. **K 208 with a looser G1:** it passes every other gate and saves 2.8 GiB, but its margin is about 2.3 GiB (2.7
    with D1). This changes a gate, so it is your decision.
 
 ### 7.3 The overhead window: the memory of vLLM itself, then K 208 (your goal of 2026-11-14)
@@ -472,13 +477,12 @@ cost in two parts:
 **K 208 with the draft (k0) is the choice to report.** Its use at the peak, with one prompt of 120k tokens and the bot
 decode test, is 26.51 GiB: 3.13 GiB below o0, as the prune predicts. Its margin beside DeepSeek:
 
-| Setup | Peak | Margin (28.8 to 29.5 GiB available) | With the DeepSeek context cap D1 (+1.1 GiB) |
+| Setup | Peak | Margin (28.8 to 29.5 GiB available) | With the DeepSeek context cap D1 (+0.35 GiB) |
 |---|---|---|---|
-| Full model with its draft (o0) | 29.64 GiB | −0.8 to −0.1 GiB | +0.3 to +1.0 GiB |
-| K 208 with its draft (k0) | 26.51 GiB | 2.3 to 3.0 GiB | 3.4 to 4.1 GiB |
+| Full model with its draft (o0) | 29.64 GiB | −0.8 to −0.1 GiB | −0.5 to +0.2 GiB |
+| K 208 with its draft (k0) | 26.51 GiB | 2.3 to 3.0 GiB | 2.7 to 3.4 GiB |
 
-K 208 with the draft and D1 reaches the 4 GiB of G6 only at the top of the range, so read it as a margin of about
-3.5 GiB. Its quality cost is the
+K 208 with the draft and D1 does not reach the 4 GiB of G6: read it as a margin of about 3 GiB. Its quality cost is the
 G1 loss of +4.15% (§7.2); the decisions, the tool names and the tool-call suite do not move, and the draft keeps its
 speed (97.7 to 101 tok/s). k1 gains nothing over k0, so k0 keeps the default settings.
 
