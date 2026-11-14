@@ -50,7 +50,8 @@ What this means for the plan:
 3. **Phase C, if it runs, uses two replays per point** and gates on the mean, as `PLAN_COLD_CUT2.md` §3 does. The S0
    check allows 1%, because a repeat check needs a limit above the noise (`PLAN_COLD_CUT2.md` §4.1, item 6).
 4. **The prefix cache of the probe boot is off.** The reset endpoint of §6.2 needs `VLLM_SERVER_DEV_MODE=1`. The
-   probe boot sets `PREFIX_CACHE=0` in its place. The client counts the shared prefix (the system prompt and the
+   probe boot passes `--no-enable-prefix-caching` in its place. (`PREFIX_CACHE=0` does not work: the server's
+   entrypoint sets `PREFIX_CACHE=1`, §7.7, attempt 3.) The client counts the shared prefix (the system prompt and the
    tools) once: it tells the patch the first position to count (`count_from` in the skip file). The screen requests
    ask for prompt logprobs, so vLLM skips the prefix cache for them in any case.
 5. **The heal code waits.** `LAYER_HEAL` and `--fit` come in their own pull request, only if Phase B or C asks for
@@ -209,8 +210,9 @@ How a skipped block runs inside `DeepseekV4DecoderLayer.forward`:
 
 - The loop in `DeepseekV4Model.forward` does not change. A skipped layer still returns values, so the draft's input
   after layers 40–42 stays correct.
-- The patch covers the tilelang mHC path. The b12x mHC path is off on this server (`VLLM_USE_B12X_MHC` is not set).
-  The patch stops the boot if that flag is on.
+- The patch covers both mHC paths. (2026-11-13: the plan said that the b12x path is off on this server. That is
+  wrong: the serve script sets `VLLM_USE_B12X_MHC=1` for the b12x backends, and the live server logs "b12x mHC
+  enabled". The first patch refused the b12x path, so the first probe window failed at the boot, §7.7.)
 
 The variables:
 
@@ -399,6 +401,41 @@ The thresholds of 2026-11-10 were 3%, 1% and 1.5% for a budget of 1.08%. The thr
 to the budget of §0 (0.24%), rounded up.
 
 The thresholds of the sets have a margin, because the screen and the replay use different data.
+
+### 7.7 Result
+
+**Attempt 1 (2026-11-13, 08:54 to 09:01, on your "start the window right now").** The live server stopped at 08:54:35.
+Both probe boots failed at the model build, so no client ran. The script restored the live server, healthy at
+09:01:09 (reply "OK.", gateway active). The downtime was about 7 minutes. Log: `logs/skip-probe.log`.
+
+- The V2 boot: the patch refused the b12x mHC path (§6.1). The eager settings passed: "Using V2 Model Runner",
+  CUDA graphs off.
+- The V1 boot: a `TypeError` in `layer_skip.Controller`. The fix of the patch changed the mounted `layer_skip.py` while
+  this boot loaded it. Do not edit a mounted file while a window runs.
+- The fix (PR A1c): the skip and the probe on the b12x path too. The GPU tests run every case on both paths: 16 pass.
+
+**Attempt 2 (2026-11-13, 09:02 to 09:13).** Both boots loaded the model (66.54 GiB) and failed in vLLM's kernel
+warmup, before the KV cache: `libcudart_stub.so: undefined symbol: cudaDeviceReset`. The live server was healthy again
+at 09:13:44 (reply "OK."). The downtime was about 11 minutes.
+
+- The cause is the eager boot, not the skip. FlashInfer's `flashinfer.comm` binds the CUDA runtime at its import, and
+  takes the first `libcudart` in `/proc/self/maps`. A compiled boot imports it in the compile passes, before any
+  kernel runs. An eager boot runs the profile pass first. Its tilelang kernels load tilelang's `libcudart_stub.so`,
+  and the warmup's import then binds that stub.
+- The fix (PR A1c): `DeepseekV4Model.__init__` of an eager boot imports `flashinfer.comm` before any kernel runs. A GPU
+  test reproduces the fault (a tilelang kernel first) and the fix (the import first) in subprocesses: 18 tests pass.
+
+**Attempt 3 (2026-11-13, 09:15 to 09:23).** The probe boot was healthy after 180 s: 66.54 GiB loaded, a KV cache of
+277,541 tokens, the probe line, 30 GiB available. R ran: NLL 0.5081 over 6,294 scored tokens in 120 s (about 1,200
+prompt tokens per second, eager). The first request of the BI pass then had 47,360 cached prompt tokens, and the client
+stopped, as §6.2 asks. The rerun stopped the same way. The live server was healthy again at 09:23:37. The downtime was
+about 8 minutes. The client log of this attempt is `results/skip-probe-attempt3.jsonl`.
+
+- The cause: the server repo's entrypoint (`entrypoint-no-download.sh`) sets `PREFIX_CACHE=1`, so the variable of
+  `compose-skip.yml` had no effect. The boot ran with `--enable-prefix-caching`.
+- The fix (PR A1c): `--no-enable-prefix-caching` after the script's own flag (vLLM's parser takes the last one;
+  checked in the image), and a check of `enable_prefix_caching=False` in the boot log before the client starts. A new
+  case of the dry run covers the check.
 
 ## 8. Phase C: the replay window (about 4 to 5 h downtime)
 

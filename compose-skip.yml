@@ -5,8 +5,9 @@
 #   "layer skip: set ... (fixed); ...", which skip_replay.sh checks.
 # - VLLM_DISABLE_COMPILE_CACHE=1 on every boot: the compile cache key has no environment variable in it, so a boot
 #   could load the compiled graph of another skip set. The patch refuses a compiled boot without it.
-# - The probe boot of §7 (skip_probe.sh): SKIP_PROBE=1, SKIP_FILE=/skip/skip.json, SKIP_MODE=mtp0,
-#   SKIP_PREFIX_CACHE=0 and MASK_EXTRA_ARGS=--enforce-eager. The client writes ./skip-out/skip.json; the patch writes
+# - The probe boot of §7 (skip_probe.sh): SKIP_PROBE=1, SKIP_FILE=/skip/skip.json, SKIP_MODE=mtp0 and
+#   MASK_EXTRA_ARGS="--enforce-eager --no-enable-prefix-caching" (the server's entrypoint sets PREFIX_CACHE=1, so the
+#   prefix cache goes off only with the vLLM flag). The client writes ./skip-out/skip.json; the patch writes
 #   ./skip-out/layer_probe.npz and layer_gram.npz. Make ./skip-out first (mkdir), else Docker makes it for root.
 #   MASK_NAME=prunemd5 MASK_K=149 TUNE_LABEL=skip-s1 TUNE_KV_BYTES=7784628224 LAYER_SKIP=L17 docker compose \
 #     -f compose-mask.yml -f serve-tune/compose-tune.yml -f compose-perlayer.yml -f compose-skip.yml up -d
@@ -18,7 +19,6 @@ services:
       LAYER_SKIP_FILE: "${SKIP_FILE:-}"
       VLLM_DISABLE_COMPILE_CACHE: "1"
       MODE: "${SKIP_MODE:-dspark}"
-      PREFIX_CACHE: "${SKIP_PREFIX_CACHE:-1}"
     volumes:
       - ./skip-out:/skip
       - type: bind

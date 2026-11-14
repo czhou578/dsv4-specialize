@@ -20,17 +20,50 @@
          self._use_b12x_mhc = _use_b12x_mhc()
          if self._use_b12x_mhc:
              if not prefix:
-@@ -1381,9 +1387,18 @@
-             x = self.ffn(x, input_ids)
-             return x, residual, post_mix, res_mix
- 
-+        # dsv4-specialize layer skip (plans/PLAN_FEWER_LAYERS.md §6.1). L: return the inputs, so the next layer
-+        # merges the FFN output of the layer before. A: no attention pre and no attention; the FFN pre merges the
-+        # inputs. F: return the attention output unmerged, with the mix values of the attention pre. The probe
-+        # (eager only) gets the merged state before the attention and before the FFN.
+@@ -1333,10 +1339,19 @@
+         res_mix: torch.Tensor | None = None,
+         residual: torch.Tensor | None = None,
+     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
++        # dsv4-specialize layer skip (plans/PLAN_FEWER_LAYERS.md §6.1), on the b12x and the tilelang mHC paths.
++        # L: return the inputs, so the next layer merges the FFN output of the layer before. A: no attention pre and
++        # no attention; the FFN pre merges the inputs. F: return the attention output unmerged, with the mix values
++        # of the attention pre. The probe (eager only) gets the merged state before the attention and the FFN.
 +        skip = self.layer_skip
 +        if skip == "L":
 +            return x, residual, post_mix, res_mix
+         if self._should_run_b12x_mhc(int(x.shape[0])):
+             attn_norm_weight = self.attn_norm.weight.data
+             attn_norm_eps = self.attn_norm.variance_epsilon
+-            if residual is None:
++            if skip == "A":
++                pass
++            elif residual is None:
+                 assert x.dim() == 2
+                 assert self.hc_attn_fn_broadcast is not None
+                 residual, post_mix, res_mix, x = self.hc_pre(
+@@ -1362,7 +1377,12 @@
+                     norm_eps=attn_norm_eps,
+                 )
+ 
+-            x = self.attn(positions, x, None)
++            if skip != "A":
++                if self.layer_probe is not None:
++                    self.layer_probe.event(self.layer_idx, "A", residual)
++                x = self.attn(positions, x, None)
++                if skip == "F":
++                    return x, residual, post_mix, res_mix
+ 
+             ffn_norm_weight = self.ffn_norm.weight.data
+             ffn_norm_eps = self.ffn_norm.variance_epsilon
+@@ -1378,12 +1398,16 @@
+                 norm_eps=ffn_norm_eps,
+                 hc_fn_bf16=self.hc_ffn_fn_bf16,
+             )
++            if self.layer_probe is not None:
++                self.layer_probe.event(self.layer_idx, "F", residual)
+             x = self.ffn(x, input_ids)
+             return x, residual, post_mix, res_mix
+ 
          attn_norm_weight = self.attn_norm.weight.data
          attn_norm_eps = self.attn_norm.variance_epsilon
 -        if residual is None:
@@ -40,7 +73,7 @@
              # Run standalone mhc_pre on first layer
              if x.dim() == 2:
                  assert self.hc_attn_fn_broadcast is not None
-@@ -1437,7 +1452,12 @@
+@@ -1437,7 +1461,12 @@
              )
  
          # attn_norm is fused into mhc_pre_tilelang / mhc_fused_post_pre above.
@@ -54,7 +87,7 @@
  
          ffn_norm_weight = self.ffn_norm.weight.data
          ffn_norm_eps = self.ffn_norm.variance_epsilon
-@@ -1459,6 +1479,8 @@
+@@ -1459,6 +1488,8 @@
              norm_weight=ffn_norm_weight,
              norm_eps=ffn_norm_eps,
          )
@@ -63,7 +96,7 @@
  
          x = self.ffn(x, input_ids)
          return x, residual, post_mix, res_mix
-@@ -1544,6 +1566,19 @@
+@@ -1544,6 +1575,23 @@
              ),
              prefix=f"{prefix}.layers",
          )
@@ -76,14 +109,18 @@
 +            protect_first=int(getattr(config, "num_hash_layers", 0) or 0),
 +            protect_last=config.num_hidden_layers - min(draft_layers),
 +            eager=vllm_config.model_config.enforce_eager,
-+            b12x_mhc=_use_b12x_mhc(),
 +            compile_cache=not envs.VLLM_DISABLE_COMPILE_CACHE,
 +        )
 +        self.layer_skip_runtime = self.layer_skip.runtime
++        if vllm_config.model_config.enforce_eager:
++            # dsv4-specialize (PLAN_FEWER_LAYERS.md §7.7): bind FlashInfer's CUDA runtime now. In an eager boot the
++            # profile run loads tilelang's libcudart stub first, and the kernel warmup's import of flashinfer.comm then
++            # finds the stub ("undefined symbol: cudaDeviceReset"). A compiled boot imports flashinfer.comm earlier.
++            import flashinfer.comm  # noqa: F401
  
          if get_pp_group().is_last_rank:
              self.norm = RMSNorm(config.hidden_size, self.rms_norm_eps)
-@@ -1631,6 +1666,8 @@
+@@ -1631,6 +1679,8 @@
  
          if self.use_mega_moe:
              input_ids = input_ids.to(torch.int64)
@@ -92,7 +129,7 @@
  
          aux_hidden_states: list[torch.Tensor] = []
          residual, post_mix, res_mix = None, None, None
-@@ -1682,6 +1719,8 @@
+@@ -1682,6 +1732,8 @@
                  hidden_states = mhc_post_tilelang(
                      hidden_states, residual, post_mix, res_mix
                  )
@@ -101,7 +138,7 @@
  
          if not get_pp_group().is_last_rank:
              return IntermediateTensors({"hidden_states": hidden_states})
-@@ -2053,6 +2092,8 @@
+@@ -2053,6 +2105,8 @@
          self.model.finalize_mega_moe_weights()
          self.model.finalize_mhc_broadcast_weights()
          self.model.setup_b12x_wo_projection()
