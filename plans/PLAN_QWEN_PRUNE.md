@@ -1,10 +1,9 @@
 # Plan: prune the experts of Qwen3.6-35B-A3B for the fast route
 
-**Status:** 2026-11-14: the facts and side-by-side test (§7.6): on 80 rare facts, K 208 answers 10 right against
-15 for the full model, and 46 wrong against 43 (both below the noise of 80 questions; p = 0.18 for the right answers).
-On 30 of your held-out turns, a blind judge finds no visible loss (K 208 better on 8 turns, worse on 10, p = 0.81).
-The overhead of vLLM frees nothing (§7.4); K 208 with its draft uses 26.5 GiB at the peak, a margin of 2.3 to
-3.0 GiB, or 2.7 to 3.4 GiB with the DeepSeek context cap (D1 frees about 0.35 GiB, not 1.1: §2.3). The choice is yours. Nothing is deployed.
+**Status:** 2026-11-14: K 208 with NVFP4 draft experts (§7.7 to §7.9) uses 25.42 GiB at the peak with a 120k
+prompt, at 101.8 tok/s: a margin of 3.4 to 4.1 GiB beside DeepSeek, or 3.7 to 4.4 GiB with the context cap. The
+facts and side-by-side test (§7.6): K 208 loses a third of the right answers on 80 rare facts, and a blind judge finds
+no loss on your turns. You chose K 208. Phase D (both servers at the same time) waits for your go.
 2026-11-13: every pruned point failed G1 (§7.2) ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_SECOND_MODEL_FIT.md` (§5.5 the measured fit and speed of the candidates), `PLAN_PHYSICAL_PRUNE.md`
@@ -599,6 +598,62 @@ tokens accepted per draft step.
 **The decision rule, written before the window:** the NVFP4 draft is the choice if d1 boots, passes the smoke test,
 uses at least 0.75 GiB less than k0 at the peak, and decodes within 5% of k0 (at least 92.8 tok/s). Then K 208 uses
 about 25.5 GiB: a margin of about 3.3 to 4.0 GiB beside DeepSeek, or 3.7 to 4.4 GiB with the context cap.
+
+### 7.8 Result of d1, and the next window (2026-11-14, 13:48 to 13:57)
+
+The live server stopped at 13:48 and was healthy again at 13:57:07: 9 minutes of downtime. d1 booted on the first
+try: the target's MoE on FLASHINFER_CUTLASS, the draft with 256 experts (`qwen_mtp_patch`) and its MoE on MARLIN
+(weight-only FP4).
+
+| | k0 (BF16 draft, §7.4) | d1 (NVFP4 draft) |
+|---|---|---|
+| Model loading | 18.09 GiB | **17.01 GiB** (−1.08) |
+| GPU process (`nvidia-smi`) | 22,639 MiB | 22,461 MiB (−0.17 GiB) |
+| Use at the peak | 26.51 GiB | 26.44 GiB (−0.07) |
+| Overhead X at the peak / after the boot | 6.59 / 6.21 GiB | 7.60 / 7.23 GiB |
+| Prompt of 119,745 tokens | 45.5 s | 45.4 s |
+| Decode with the draft | 97.65 tok/s | 97.92 tok/s |
+| Tokens accepted per draft step | 2.24 | 2.19 |
+
+**By the rule of §7.7, d1 fails:** its peak is only 0.07 GiB below k0, and the rule asks 0.75 GiB. The speed and the
+acceptance hold.
+
+**The cause, found in the second window: a cold compile.** The patched quant config changes the graph, so d1
+compiled it cold (torch.compile took 17.6 s, against 0.4 s from the cache in k0), and the compile held about 1 GiB
+in the engine process. My first guess (blocks of the Marlin repack that the allocator keeps) was wrong.
+
+### 7.9 Result of d2 and d3, and the decision (2026-11-14, 14:02 to 14:15)
+
+The live server stopped at 14:02 and was healthy again at 14:15:26: 13 minutes of downtime. You started this window.
+Both points loaded the compiled graph from the cache (0.4 s).
+
+- d2 was meant to free the allocator cache after the load (`QWEN_EMPTY_CACHE=1`), but the hook patched the V1
+  model runner, and vLLM 0.33 runs the V2 runner (`vllm.v1.worker.gpu.model_runner`): the hook did not run. So d2 is
+  d1 again with a warm cache. The hook is removed (it is not needed), and d2 is now d1 with no change.
+- d3 is d1 with the allocator's expandable segments.
+
+| | k0 (BF16 draft) | d1 (cold compile) | **d2 (warm)** | d3 (warm, expandable) |
+|---|---|---|---|---|
+| Model loading | 18.09 GiB | 17.01 GiB | 17.01 GiB | 16.96 GiB |
+| GPU process | 22,639 MiB | 22,461 MiB | **21,655 MiB** | 21,647 MiB |
+| Use at the peak | 26.51 GiB | 26.44 GiB | **25.42 GiB** | 25.51 GiB |
+| Overhead X at the peak | 6.59 GiB | 7.60 GiB | 6.58 GiB | 6.72 GiB |
+| Prompt of 119,745 tokens | 45.5 s | 45.4 s | 45.1 s | 45.2 s |
+| Decode with the draft | 97.65 tok/s | 97.92 tok/s | 101.78 tok/s | 99.31 tok/s |
+| Tokens accepted per draft step | 2.24 | 2.19 | 2.31 | 2.23 |
+
+**The decision: the NVFP4 draft passes the rule of §7.7.** With a warm cache, K 208 with the NVFP4 draft uses
+25.42 GiB at the peak, 1.09 GiB less than with the BF16 draft, at the same speed and acceptance (2.19 to 2.31 against
+2.24). Expandable segments add nothing. The setup: `qwen-k208` with the patched quant config, the draft folder
+`qwen-draft-nvfp4`, `"moe_backend": "marlin"` in the speculative config, and `qwen_mtp_patch` on the `PYTHONPATH`.
+
+| Margin beside DeepSeek (28.8 to 29.5 GiB available) | Without the context cap | With the cap (+0.35 GiB) |
+|---|---|---|
+| K 208 with the NVFP4 draft (25.42 GiB) | 3.4 to 4.1 GiB | 3.7 to 4.4 GiB |
+
+**A caution for Phase D.** The first boot after any change of the config or of vLLM compiles cold and needs about
+1 GiB more for a minute. Boot a new setup once alone (DeepSeek stopped) to fill the compile cache, then beside
+DeepSeek. The cache now holds this setup.
 
 ## 8. Phase D: both servers at the same time
 
