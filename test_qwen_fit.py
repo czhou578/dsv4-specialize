@@ -4,6 +4,7 @@ prompt size, and the window script under bash with stub boots and stub clients (
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -26,7 +27,7 @@ sample_start() { printf '1 118000\n2 84000\n9999999999 80000\n' > "$1"; }
 sample_stop() { :; }
 N=0
 launch() {
-  N=$((N + 1)); log "STUB launch $1 ${MODEL[$1]##*/} pin=$PIN budget=${BUDGET[$1]} draft=${DRAFT[$1]:-none} flags=${FLAGS[$1]}"
+  N=$((N + 1)); log "STUB launch $1 ${MODEL[$1]##*/} ctx=${CTX[$1]:-256000} pin=$PIN budget=${BUDGET[$1]} draft=${DRAFT[$1]:-none} flags=${FLAGS[$1]}"
   case " ${STUB_FAIL:-} " in *" $1 "*) echo "RuntimeError: boom" > "$2"; return 1;; esac
   if [ "${STUB_SMALL_PIN:-}" = "$1" ] && [ "$PIN" = 8933531976 ]; then
     echo "ValueError: 8.80 GiB KV cache is needed, which is larger than the available KV cache memory (8.32 GiB)" > "$2"; return 1
@@ -65,11 +66,15 @@ class ReportTest(unittest.TestCase):
 
 
 class WindowTest(unittest.TestCase):
-    def run_script(self, boot_by=60, **env):
+    def run_script(self, boot_by=60, stub=STUB, files=None, **env):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         d = Path(tmp.name)
-        (d / "stub.sh").write_text(STUB)
+        (d / "stub.sh").write_text(stub)
+        for name, text in (files or {}).items():
+            (d / name).parent.mkdir(parents=True, exist_ok=True)
+            (d / name).write_text(text)
+            (d / name).chmod(0o755)
         t = lambda m: time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() + 60 * m))
         full = {**os.environ, "QWEN_STUB": str(d / "stub.sh"), "STUB_DIR": str(d), "LOG": str(d / "window.log"),
                 "START_AFTER": t(-1), "BOOT_BY": t(boot_by), "SPEED_BY": t(boot_by), "RESTORE_AT": t(240), **env}
@@ -79,9 +84,9 @@ class WindowTest(unittest.TestCase):
     def test_a_normal_window(self):
         rc, log, d = self.run_script()
         self.assertEqual(rc, 0, log)
-        self.assertIn("STUB launch f1 Qwen3.8-27B-NVFP4 pin=8933531976 budget=2048 draft=none", log)
-        self.assertIn("STUB launch f2 Qwen3.8-27B-NVFP4 pin=8933531976 budget=8192 draft=none", log)
-        self.assertIn('STUB launch f3 Qwen3.8-27B-NVFP4 pin=8933531976 budget=2048 draft={"method":"mtp","num_speculative_tokens":3}', log)
+        self.assertIn("STUB launch f1 Qwen3.8-27B-NVFP4 ctx=256000 pin=8933531976 budget=2048 draft=none", log)
+        self.assertIn("STUB launch f2 Qwen3.8-27B-NVFP4 ctx=256000 pin=8933531976 budget=8192 draft=none", log)
+        self.assertIn('STUB launch f3 Qwen3.8-27B-NVFP4 ctx=256000 pin=8933531976 budget=2048 draft={"method":"mtp","num_speculative_tokens":3}', log)
         self.assertIn("qwen-f1: overhead X 8.69 GiB at the peak", log)       # (118000 - 80000) / 1024 - 20.1 - 8.32
         self.assertEqual(json.loads((d / "qwen-fit-f1.json").read_text())["kv_tokens"], 266240)
         self.assertEqual(log.count("STUB stop_main"), 3)
@@ -93,19 +98,43 @@ class WindowTest(unittest.TestCase):
         self.assertEqual(rc, 0, log)
         pin = int(8.80 * 1.04 * 2**30)
         self.assertIn(f"the need is 8.80 GiB: one more boot with {pin} bytes", log)
-        self.assertIn(f"STUB launch f2 Qwen3.8-27B-NVFP4 pin={pin}", log)     # the later points of the model keep the pin
+        self.assertIn(f"STUB launch f2 Qwen3.8-27B-NVFP4 ctx=256000 pin={pin}", log)   # the later points keep the pin
         self.assertIn("STUB tests f1", log)
 
     def test_the_points_of_the_fast_models(self):
         rc, log, _ = self.run_script(POINTS="q1 n1 q2 n2")
         self.assertEqual(rc, 0, log)
-        self.assertIn("STUB launch q1 Qwen3.6-35B-A3B-NVFP4-Fast pin=2800000000 budget=2048 draft=none flags=--attention-backend "
+        self.assertIn("STUB launch q1 Qwen3.6-35B-A3B-NVFP4-Fast ctx=256000 pin=2800000000 budget=2048 draft=none flags=--attention-backend "
                       "flashinfer --moe-backend flashinfer_cutlass --reasoning-parser qwen3 --tool-call-parser qwen3_xml "
                       "--language-model-only", log)
-        self.assertIn('STUB launch q2 Qwen3.6-35B-A3B-NVFP4-Fast pin=2800000000 budget=2048 draft={"method":"mtp"', log)
-        self.assertIn("STUB launch n1 NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 pin=820000000 budget=2048 draft=none "
+        self.assertIn('STUB launch q2 Qwen3.6-35B-A3B-NVFP4-Fast ctx=256000 pin=2800000000 budget=2048 draft={"method":"mtp"', log)
+        self.assertIn("STUB launch n1 NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 ctx=256000 pin=820000000 budget=2048 draft=none "
                       "flags=--moe-backend marlin --mamba-backend flashinfer --reasoning-parser nemotron_v3", log)
         self.assertIn('draft={"model":"nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark","num_speculative_tokens":3}', log)
+
+    def test_the_points_of_the_prune_windows_run_their_own_tests(self):
+        # the real tests() with a fake Python that logs its arguments; the report and the rate use the real Python
+        fake = "#!/usr/bin/env bash\ncase \" $* \" in *\" --report \"*|*\" --rate \"*) exec %s \"$@\";; esac\n" \
+               "echo \"FAKE $*\" >> $STUB_DIR/calls.log\n" % sys.executable
+        stub = STUB.replace('tests() { log "STUB tests $1"; }\n', "") + \
+            "PY=$STUB_DIR/python QV=$STUB_DIR MB=$STUB_DIR; MODEL[g176]=$STUB_DIR/k176; MODEL[g192]=$STUB_DIR/none\n"
+        rc, log, d = self.run_script(POINTS="c1 c2 c3 g256 g176 g192", stub=stub, files={"python": fake, "vllm": fake, "k176/config.json": "{}"})
+        self.assertEqual(rc, 0, log)
+        calls = (d / "calls.log").read_text()
+        self.assertIn("STUB launch c1 Qwen3.6-35B-A3B-NVFP4-Fast ctx=128000 pin=1480000000 budget=2048 draft=none", log)
+        self.assertIn("--language-model-only --enable-return-routed-experts", log.split("STUB launch c1")[1].splitlines()[0])
+        self.assertIn('STUB launch c3 Qwen3.6-35B-A3B-NVFP4-Fast ctx=128000 pin=1480000000 budget=2048 draft={"method":"ngram"', log)
+        self.assertIn("STUB launch g176 k176 ctx=128000 pin=1730000000", log)
+        self.assertIn("ERROR: no folder", log.split("qwen-g176")[-1])                    # g192 has no folder: skipped
+        self.assertNotIn("STUB launch g192", log)
+        self.assertRegex(calls, r"capture\.py .*--sources claude,discord,repo --experts 256 --generate 256 --out \S+/qwen-capture\.jsonl")
+        self.assertRegex(calls, r"capture\.py .*--limit 24 --out \S+/qwen-capture-draft\.jsonl")
+        self.assertRegex(calls, r"qwen_gate\.py .*--recorded \S+/qwen-recorded\.jsonl --record")
+        self.assertRegex(calls, r"qwen_gate\.py .*--score --out \S+/qwen-fit-g176-score\.jsonl")
+        self.assertRegex(calls, r"-m benchmarks\.tool_calling --base-url http://127\.0\.0\.1:8889/v1 .*--output \S+/qwen-fit-g256-tools\.json")
+        self.assertEqual(calls.count("--long"), 0)                                        # 128k points send no 250k prompt
+        self.assertEqual(calls.count("model_eval.speed"), 5)                              # c1, c2, c3, g256 and g176
+        self.assertIn("qwen-g176: overhead X", log)
 
     def test_failed_boots_skip_the_point_and_two_in_a_row_restore(self):
         rc, log, _ = self.run_script(STUB_FAIL="f2")
