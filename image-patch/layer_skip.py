@@ -6,9 +6,12 @@ FFN half (``F17``). The controller sets ``layer_skip`` (None, "A", "F" or "L") o
 reads it. ``LAYER_SKIP`` is a fixed set (``L17,F21``). Eager boots only: ``LAYER_SKIP_FILE`` is a JSON file, read at
 the start of a step when its mtime changes (``{"skip": "L17", "count_from": 0, "sums": true, "gram": ["L17"],
 "gram_flush": 0}``), and ``LAYER_PROBE=1`` writes the probe sums to ``layer_probe.npz`` after each step. ``LAYER_HEAL``
-(§9) is not in this patch yet. Only torch and numpy are needed, so ``test_layer_skip.py`` runs without vLLM.
+(§9, fixed sets only) is an ``.npz`` file with one map ``heal_<block>`` (FP32, hidden x hidden) for blocks of the set:
+the layer then hands the next block s + s·M. Only torch and numpy are needed, so ``test_layer_skip.py`` runs without
+vLLM.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -148,6 +151,19 @@ class Probe:
                 for k, v in (("xtx", g[0].cpu().numpy()), ("xtd", g[1].cpu().numpy()), ("rows", np.array(g[2])))}
 
 
+def load_heal(path, skips):
+    """The heal maps of ``path`` (``heal_<block>``) and the sha256 of the file. Every map must be square and belong to a
+    block of the skip set, as the set names it (an A and an F of one layer are one L block)."""
+    with open(path, "rb") as f:
+        sha = hashlib.sha256(f.read()).hexdigest()[:16]
+    names = {f"{kind}{layer}" for layer, kind in skips.items()}
+    with np.load(path) as z:
+        maps = {k[len("heal_"):]: z[k].astype(np.float32) for k in z.files if k.startswith("heal_")}
+    if not maps or set(maps) - names or any(m.ndim != 2 or m.shape[0] != m.shape[1] for m in maps.values()):
+        raise ValueError(f"layer skip: {path} has maps {sorted(maps)}; the set is {canon(skips)} (square maps only)")
+    return maps, sha
+
+
 def _bytes(module):
     return sum(t.numel() * t.element_size() for t in [*module.parameters(), *module.buffers()])
 
@@ -164,8 +180,9 @@ class Controller:
         self.file = env.get("LAYER_SKIP_FILE", "")
         self.probe_on = env.get("LAYER_PROBE", "0") == "1"
         self.out_dir = env.get("LAYER_PROBE_DIR") or (os.path.dirname(self.file) if self.file else "")
-        if env.get("LAYER_HEAL"):
-            raise RuntimeError("layer skip: LAYER_HEAL needs the heal patch of PLAN_FEWER_LAYERS.md §9")
+        self.heal_file = env.get("LAYER_HEAL", "")
+        if self.heal_file and self.file:
+            raise RuntimeError("layer skip: LAYER_HEAL works with a fixed LAYER_SKIP only, not with LAYER_SKIP_FILE")
         if (self.file or self.probe_on) and not eager:
             raise RuntimeError("layer skip: LAYER_SKIP_FILE and LAYER_PROBE need --enforce-eager")
         if self.probe_on and not self.out_dir:
@@ -176,6 +193,7 @@ class Controller:
         self.runtime = bool(self.file or self.probe_on)
         self.skips = parse(self.spec, num_layers, *self.protect)
         self.probe, self.mtime, self.loads, self.error, self.count_from, self.gram_flush = None, None, 0, "", 0, None
+        self.heal, self.heal_sha = load_heal(self.heal_file, self.skips) if self.heal_file else ({}, "")
         for i, layer in self.layers.items():
             layer.layer_idx = i
         self.apply(self.skips)
@@ -185,13 +203,24 @@ class Controller:
             layer.layer_skip = skips.get(i)
             layer.layer_probe = self.probe
 
+    def place_heal(self, dtype=torch.bfloat16):
+        """Put each heal map on its layer (``layer_heal``), on the device of the layer, after the weights load."""
+        for name, m in self.heal.items():
+            layer = self.layers[int(name[1:])]
+            device = next(iter(layer.parameters()), torch.empty(0)).device
+            layer.layer_heal = torch.as_tensor(m).to(device=device, dtype=dtype)
+
     def boot_line(self):
         """The one boot line of §6.1: the skip set, the GiB of the skipped weights, the heal file and the probe."""
         parts = {"A": "attn", "F": "ffn"}
         size = sum(_bytes(self.layers[i]) if kind == "L" else _bytes(getattr(self.layers[i], parts[kind]))
                    for i, kind in self.skips.items() if i in self.layers)
         return (f"layer skip: set {canon(self.skips)} ({'run-time file ' + self.file if self.file else 'fixed'}); "
-                f"skipped weights {size / 2**30:.2f} GiB; heal none; probe {'on' if self.probe_on else 'off'}")
+                f"skipped weights {size / 2**30:.2f} GiB; heal {self.heal_line()}; "
+                f"probe {'on' if self.probe_on else 'off'}")
+
+    def heal_line(self):
+        return f"{','.join(sorted(self.heal))} sha256 {self.heal_sha}" if self.heal else "none"
 
     def step_begin(self, positions):
         """The start of a model step (eager only): read the skip file if it changed, and start the probe sums."""

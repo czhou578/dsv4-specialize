@@ -2,7 +2,7 @@
 # serve-tune/compose-tune.yml and compose-perlayer.yml. It mounts the model file with layer-skip.diff (built by
 # image-patch/build_skip.sh; else Docker mounts an empty folder and the boot fails) and image-patch/layer_skip.py.
 # - LAYER_SKIP: the fixed skip set of a skip boot, for example L17,F21 (default: no skip). The boot log has one line
-#   "layer skip: set ... (fixed); ...", which skip_replay.sh checks.
+#   "layer skip: set ... (fixed); ...", which skip_replay.sh checks. LAYER_HEAL: a heal file in ./skip-out, as /skip/...
 # - VLLM_DISABLE_COMPILE_CACHE=1 on every boot: the compile cache key has no environment variable in it, so a boot
 #   could load the compiled graph of another skip set. The patch refuses a compiled boot without it.
 # - The probe boot of §7 (skip_probe.sh): SKIP_PROBE=1, SKIP_FILE=/skip/skip.json, SKIP_MODE=mtp0 and
@@ -17,6 +17,7 @@ services:
       LAYER_SKIP: "${LAYER_SKIP:-}"
       LAYER_PROBE: "${SKIP_PROBE:-0}"
       LAYER_SKIP_FILE: "${SKIP_FILE:-}"
+      LAYER_HEAL: "${LAYER_HEAL:-}"   # skip_replay.sh: /skip/heal.npz, the maps of layer_screen.py --fit (§9)
       VLLM_DISABLE_COMPILE_CACHE: "1"
       MODE: "${SKIP_MODE:-dspark}"
     volumes:

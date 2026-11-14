@@ -261,5 +261,20 @@ class GreedyTest(unittest.TestCase):
         self.assertEqual(again.calls, [])
 
 
+class FitTest(unittest.TestCase):
+    def test_fit_finds_a_known_map(self):
+        g = np.random.default_rng(0)
+        x = g.normal(size=(4000, 16))
+        m = 0.1 * g.normal(size=(16, 16))
+        d = x @ m + 0.001 * g.normal(size=(4000, 16))
+        with tempfile.TemporaryDirectory() as tmp:
+            np.savez(Path(tmp, "gram.npz"), xtx_F24=x.T @ x, xtd_F24=x.T @ d, rows_F24=np.array(4000.0))
+            notes = ls.fit(Path(tmp, "gram.npz"), ["F24"], Path(tmp, "heal.npz"))
+            with np.load(Path(tmp, "heal.npz")) as z:
+                self.assertEqual((z.files, z["heal_F24"].dtype), (["heal_F24"], np.float32))
+                np.testing.assert_allclose(z["heal_F24"], m, atol=1e-3)
+        self.assertAlmostEqual(notes["F24"]["removed_per_row"], float((x @ m).var(axis=0).sum() + 0), delta=0.3)
+
+
 if __name__ == "__main__":
     unittest.main()

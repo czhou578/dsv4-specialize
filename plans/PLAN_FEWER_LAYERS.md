@@ -1,6 +1,8 @@
 # Plan: fewer layers (depth pruning)
 
-**Status:** 2026-11-13: refreshed for the live MD prune (§0); Phase A done (PRs #39 to #45); Phase B ready to start ·
+**Status:** 2026-11-13: Phase B done (§7.7, §7.8): no whole layer and no pair is near the budget; the best single
+block, F24 (an FFN half), rises by +0.54% on a screen that drifted by 0.40%. The heal and `skip_replay.sh` are built.
+Phase C (S0, S1, S1h) waits for your go ·
 **Author:** colin-spark · **Date:** 2026-11-10, refreshed 2026-11-13
 **Source:** a note on depth pruning: rank the layers by Block Influence, confirm the best ones with the replay gate,
 heal the cut with a linear map, then remove the layers from the files. This plan checks each step against this stack.
@@ -13,7 +15,7 @@ to the live server.
 | Step | Status |
 |---|---|
 | §6 Phase A: the patch, the tools and the tests (no downtime, about 2 days) | ✅ 2026-11-13: A1a to A3a (PRs #40 to #45); all tests pass; A3b (`skip_replay.sh`) waits for Phase B (§6.4) |
-| §7 Phase B: the probe window (about 3 h downtime) | ⬜ |
+| §7 Phase B: the probe window (about 3 h downtime) | ✅ 2026-11-13: attempt 4, 09:25 to 11:18 (§7.7); three failed boots before it, fixed in PR #46 |
 | §8 Phase C: the replay window (about 4 to 5 h downtime) | ⬜ |
 | §9 Phase D: heal maps for sets (only if §8.4 says so) | ⬜ |
 | §10 Phase E: the physical removal and the deploy chain (only if a set passes) | ⬜ |
@@ -327,6 +329,8 @@ Each pull request changes at most 400 lines:
    A2b the BI pass, the screen and the Gram sums, A2c the greedy rounds and the report.
 4. A3a: `skip_probe.sh`, `compose-skip-v1.yml`, the change of `run_lib.sh`, and the dry run `test_skip_scripts.py`.
 5. A3b: `skip_replay.sh` and its dry run, only if Phase B does not say "stop" (§6.4).
+6. A1c (#46): the fixes from the first three probe window attempts (§7.7).
+7. D1: the heal (§9): `LAYER_HEAL` in the patch and `--fit` in the client, because §7.8 asks for S1h.
 
 A1 and A2 grew past 400 lines, so they are five pull requests (2026-11-13).
 
@@ -437,6 +441,85 @@ about 8 minutes. The client log of this attempt is `results/skip-probe-attempt3.
   checked in the image), and a check of `enable_prefix_caching=False` in the boot log before the client starts. A new
   case of the dry run covers the check.
 
+**Attempt 4 (2026-11-13, 09:25 to 11:18).** The live server stopped at 09:25. The probe boot was healthy at 09:27:37
+(150 s; 66.54 GiB loaded; a KV cache of 277,541 tokens; `enable_prefix_caching=False`; the probe line; 30 GiB
+available). The client ran 40 steps in 108 minutes and ended with exit 0. The live server was healthy again at
+11:17:51 (reply "OK.", gateway active). The downtime was 1 h 53 min. Files: `results/skip-probe.jsonl`,
+`results/skip-probe-report.md`, `results/skip-probe-gram.npz` (not in git), `logs/skip-probe.log`.
+
+| Step | Result | Time |
+|---|---|---|
+| R (no skip) | NLL 0.5031 over 6,294 scored tokens (6 targets, about 143k prompt tokens) | 120 s |
+| BI pass (no skip) | 129 blocks, 359,381 counted tokens per block | 700 s |
+| Round 1 | 28 single blocks and the A set (below) | 29 × 118 s |
+| Gram sums | F24, F31 and F27, 1.44M rows each | 729 s |
+| BI pass (F24 skipped), round 2 | 6 pairs with F24 (below) | 692 s, 6 × 117 s |
+| Round 3 | Not run: the best pair rises by more than 1% (§7.4) | — |
+| R2 (no skip) | NLL 0.5011: **−0.40% against R** | 120 s |
+
+Round 1, the single blocks, by rise (BI is 1 minus the mean cosine of the state before and after the block):
+
+| Block | BI | Rise | Block | BI | Rise |
+|---|---|---|---|---|---|
+| F24 | 0.0094 | +0.54% | L31 | 0.0189 | +2.55% |
+| F31 | 0.0131 | +0.57% | A32 | 0.0155 | +2.56% |
+| F27 | 0.0112 | +0.65% | F35 | 0.0119 | +2.79% |
+| A34 | 0.0196 | +0.82% | A35 | 0.0096 | +2.85% |
+| F32 | 0.0110 | +0.90% | L32 | 0.0266 | +2.87% |
+| F30 | 0.0124 | +0.92% | A23 | 0.0148 | +3.49% |
+| F25 | 0.0090 | +0.96% | L5 | 0.0463 | +3.83% |
+| A37 | 0.0128 | +1.12% | L35 | 0.0220 | +4.35% |
+| A31 | 0.0058 | +1.39% | A26 | 0.0153 | +4.35% |
+| F28 | 0.0141 | +1.44% | L23 | 0.0327 | +4.85% |
+| F29 | 0.0127 | +1.45% | L26 | 0.0432 | +4.92% |
+| A5 | 0.0235 | +1.85% | L29 | 0.0374 | +6.16% |
+| L34 | 0.0351 | +2.15% | L30 | 0.0391 | +7.43% |
+| L37 | 0.0295 | +2.30% | | | |
+| F33 | 0.0088 | +2.40% | **The 6 best A blocks together** | — | **+11.41%** |
+
+Round 2, F24 and one more block: F32 +2.43%, F25 +2.84%, F33 +3.09%, F30 +3.10%, F29 +3.27%, F35 +4.48%. Each pair
+costs more than the sum of its two single rises.
+
+The checks of §7.5:
+
+- **R and R2 differ by 0.40%, not at most 0.1%.** By §7.5 the screen is not stable, and its small numbers do not
+  count. The drift is the size of the replay noise between windows (up to 0.56%). The large results hold: every whole
+  layer (+2.15% or more) and every pair (+2.43% or more) is five times the drift or more. The rises of the best F
+  blocks (+0.54% to +0.96%) differ by less than one drift.
+- **The rank correlation of BI and the rise is 0.63** (the limit is 0.5). It comes from the kinds: within a kind it is
+  0.47 for L, −0.01 for F and −0.10 for A. So BI tells an L from an F block, but does not rank the F blocks. F31 and
+  F27 had low rises but did not come into round 2, because round 2 picks by BI.
+- Before each set, the client checked the set that the patch ran, and no prompt token came from the cache.
+
+The heal fit (`layer_screen.py --fit`, 2026-11-13, from `results/skip-probe-gram.npz`):
+
+| Block | Top singular values of M | Energy of Δ that M removes (estimate) |
+|---|---|---|
+| F24 | 1.63, 0.92, 0.68 | About 32% |
+| F27 | 6.78, 1.29, 0.75 | About 44% |
+| F31 | 24.9, 2.89, 1.22 | Not plausible (485%) |
+
+The Gram sums weigh every row the same, so the few tokens with a very large state norm dominate the fit. The F31 map
+fits those tokens with one large direction, and the estimate (the mean relative change times the mean norm) does not
+hold for them. The F24 map is moderate. Only a replay can show whether it heals.
+
+### 7.8 The decision after Phase B
+
+By the table of §7.6 (the refresh of §0): the best single L or F block, F24, rises by +0.54%, in the band from 0.25% to
+1%. So **the next step is the heal, then Phase C with S0, S1 (F24) and S1h (F24 with its heal map)**. The heal code
+and `skip_replay.sh` are built (PRs D1 and A3b). The memory track for whole layers ends: no whole layer and no pair
+comes near the budget. The set of the 6 A blocks rises by +11.41%, so Phase C gets no SA point.
+
+What Phase C can give, and what it cannot:
+
+- A pass needs a mean of two replays at most 0.4573: at most about +0.24% over the live replays. F24 rose by +0.54% on
+  the screen, and the screen drifted by 0.40%. So S1 likely fails; S1h is the real test of the heal.
+- Even a pass of S1h frees memory only after more work: an FFN half needs a loader patch that stays on the live server
+  (§10.2), and the heal map needs the patched model file there too. F24 holds about 1.3 GiB. The 72 GiB cap is met
+  since the MD prune.
+- Phase C costs about 4.5 to 5 hours of downtime: three points with two replays each, and the restore. It needs your
+  go.
+
 ## 8. Phase C: the replay window (about 4 to 5 h downtime)
 
 ### 8.1 The points
@@ -507,6 +590,20 @@ next block then runs the standalone mHC pre, the path for a merged input that th
 1. Fit the blocks one at a time, in the order of the greedy rounds.
 2. Take the Gram sums of each block from a probe boot with the earlier blocks of the set skipped and healed.
 3. Choose λ by the lowest error on a held-out quarter of the probe set.
+
+**What was built (2026-11-13, PR D1).**
+
+- `LAYER_HEAL` is an `.npz` file with one map `heal_<block>` (FP32) for blocks of a fixed skip set; the host venv has
+  no `safetensors`. The patch casts each map to BF16 and puts it on its layer as the buffer `layer_heal` after the
+  weights load. The boot line names the blocks and the sha256 of the file.
+- The patch does not use the standalone mHC pre (the b12x path has none for a merged input). It merges the open block
+  with the mHC post kernel of the path, applies s + s·M, and returns the healed state as the residual with post 0
+  and comb I. The fused post-pre of the next layer then gives exactly that state, so the next layer does not change.
+  For an A block, its FFN pre runs on the healed state. A zero map gives the state of the plain skip within the BF16
+  rounding (GPU test, both paths).
+- `layer_screen.py --fit` solves M in float64 with λ = 1e-6 times the mean diagonal of XᵀX. The Gram sums of Phase B
+  cover the whole probe set, so the held-out choice of λ (step 3 above) was not possible. The fit has about 350 rows
+  per column, so the ridge only keeps the solve stable.
 
 **The limits.**
 

@@ -76,7 +76,7 @@ def make_layer(idx, seed, b12x):
     layer._b12x_mhc_block_k = int(DEFAULT_BLOCK_K) if b12x else 0
     layer._b12x_mhc_split_k = HC * H // int(DEFAULT_BLOCK_K) if b12x else 0
     layer.attn_norm, layer.ffn_norm, layer.attn, layer.ffn = Norm(g), Norm(g), Map(g, 1), Map(g, 0)
-    layer.layer_skip, layer.layer_probe, layer.layer_idx = None, None, idx
+    layer.layer_skip, layer.layer_probe, layer.layer_idx, layer.layer_heal = None, None, idx, None
     return layer
 
 
@@ -171,6 +171,35 @@ def test_probe_sums_of_a_stack_with_a_skip(path):
             assert t[i, k].item() == (T if (i, kind) in done else 0), (i, kind)
     cos = c.probe.cos.cpu() / t.clamp_min(1)
     assert ((cos[t > 0] > -1) & (cos[t > 0] <= 1 + 1e-6)).all()
+
+
+@pytest.mark.parametrize("kind", ["L", "A", "F"])
+def test_heal_hands_on_the_healed_state(path, kind):
+    """§9: a zero map gives the next layer the state of the plain skip (within the BF16 rounding); a map M hands on
+    s + s·M as a merged residual (post 0, comb I), and an A block runs its FFN pre on it."""
+    b12x, inputs = path
+    layer, nxt = make_layer(3, 2, b12x), make_layer(4, 3, b12x)
+    plain = run(layer, inputs, kind)
+    layer.layer_heal = torch.zeros(H, H, device="cuda").bfloat16()
+    zero = run(layer, inputs, kind)
+    a, b = run(nxt, plain, None), run(nxt, zero, None)
+    assert torch.allclose(a[1].float(), b[1].float(), atol=2e-2, rtol=2e-2)
+    m_ = (0.01 * torch.randn(H, H, generator=torch.Generator(device="cuda").manual_seed(5), device="cuda")).bfloat16()
+    layer.layer_heal = m_
+    out = run(layer, inputs, kind)
+    if kind == "F":
+        r, p, c, x = pre(layer, "attn", *inputs)
+        src = (layer.attn(None, x, None), r, p, c)
+    else:
+        src = inputs
+    s = post(layer, *src)
+    h = s + (s.reshape(-1, H) @ m_).reshape(s.shape)
+    eye = torch.eye(HC, device="cuda").expand_as(inputs[3])
+    if kind == "A":
+        r, p, c, x = pre(layer, "ffn", torch.zeros_like(inputs[0]), h, torch.zeros_like(inputs[2]), eye.contiguous())
+        assert same(out, (layer.ffn(x, None), r, p, c))
+    else:
+        assert torch.equal(out[1], h) and not out[0].any() and not out[2].any() and torch.equal(out[3], eye)
 
 
 ORDER = """

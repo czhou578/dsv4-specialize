@@ -97,7 +97,7 @@ def test_controller_refuses_unsafe_boots(tmp_path):
     for env, kw in [({"LAYER_SKIP": "L3"}, {}),                         # the compile cache is on
                     ({"LAYER_SKIP_FILE": f}, {"compile_cache": False}),  # a run-time file needs eager
                     ({"LAYER_PROBE": "1", "LAYER_SKIP_FILE": f}, {"compile_cache": False}),
-                    ({"LAYER_HEAL": "/x.safetensors"}, {"eager": True}),
+                    ({"LAYER_HEAL": "/x.npz", "LAYER_SKIP_FILE": f}, {"eager": True}),   # heal: fixed sets only
                     ({"LAYER_PROBE": "1"}, {"eager": True}),              # no folder for the sums
                     ({"LAYER_SKIP": "L0"}, {"eager": True})]:
         with pytest.raises((RuntimeError, ValueError)):
@@ -110,6 +110,19 @@ def test_controller_fixed_set_and_boot_line():
         [(i, {2: "L", 4: "F"}.get(i), None) for i in range(8)] and not c.runtime
     gib = (2 * 16 * 16 + 16 * 64 * 2) * 4 / 2**30
     assert c.boot_line() == f"layer skip: set L2,F4 (fixed); skipped weights {gib:.2f} GiB; heal none; probe off"
+
+
+def test_heal_file_rules_and_boot_line(tmp_path):
+    f = tmp_path / "heal.npz"
+    np.savez(f, heal_F4=np.eye(16, dtype=np.float32) * 0.1)
+    c, mods = controller({"LAYER_SKIP": "F4,L2", "LAYER_HEAL": str(f)}, compile_cache=False)
+    c.place_heal()
+    assert mods[4].layer_heal.dtype == torch.bfloat16 and mods[4].layer_heal.shape == (16, 16)
+    assert not hasattr(mods[2], "layer_heal") and c.boot_line().endswith(f"heal F4 sha256 {c.heal_sha}; probe off")
+    for maps in ({"heal_F5": np.eye(16)}, {"heal_F4": np.ones((16, 8))}, {"other": np.eye(16)}):
+        np.savez(f, **maps)
+        with pytest.raises(ValueError):
+            controller({"LAYER_SKIP": "F4,L2", "LAYER_HEAL": str(f)}, compile_cache=False)
 
 
 def write(path, cfg):

@@ -8,7 +8,7 @@
  from vllm.models.deepseek_v4.nvidia.ops.prepare_megamoe import prepare_megamoe_inputs
  from vllm.platforms import current_platform
  from vllm.sequence import IntermediateTensors
-@@ -905,6 +906,11 @@
+@@ -905,6 +906,12 @@
  
          config = vllm_config.model_config.hf_config
          self.layer_name = prefix
@@ -17,10 +17,32 @@
 +        self.layer_skip: str | None = None
 +        self.layer_probe = None
 +        self.layer_idx = -1
++        self.register_buffer("layer_heal", None, persistent=False)  # the heal map of the skipped block (§9)
          self._use_b12x_mhc = _use_b12x_mhc()
          if self._use_b12x_mhc:
              if not prefix:
-@@ -1333,10 +1339,19 @@
+@@ -1324,6 +1331,20 @@
+             norm_eps=norm_eps,
+         )
+ 
++    def _layer_heal_state(self, x, residual, post_mix, res_mix):
++        """dsv4-specialize heal (plans/PLAN_FEWER_LAYERS.md §9): merge the open block with the mHC post kernel of the
++        path, apply s + s·M (one map for the streams), and hand the next block the healed state as a merged residual
++        (post 0, comb I), so that its own fused post-pre gives that state."""
++        if self._should_run_b12x_mhc(int(x.shape[0])):
++            from sparkinfer.norm.mhc import run_post as b12x_mhc_post
++
++            s = b12x_mhc_post(x, residual, post_mix, res_mix)
++        else:
++            s = mhc_post_tilelang(x, residual, post_mix, res_mix)
++        s = s + (s.reshape(-1, s.shape[-1]) @ self.layer_heal).reshape(s.shape)
++        eye = torch.eye(self.hc_mult, dtype=res_mix.dtype, device=s.device)
++        return torch.zeros_like(x), s, torch.zeros_like(post_mix), eye.expand_as(res_mix).contiguous()
++
+     def forward(
+         self,
+         x: torch.Tensor,
+@@ -1333,10 +1354,21 @@
          res_mix: torch.Tensor | None = None,
          residual: torch.Tensor | None = None,
      ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -30,6 +52,8 @@
 +        # of the attention pre. The probe (eager only) gets the merged state before the attention and the FFN.
 +        skip = self.layer_skip
 +        if skip == "L":
++            if self.layer_heal is not None:
++                return self._layer_heal_state(x, residual, post_mix, res_mix)
 +            return x, residual, post_mix, res_mix
          if self._should_run_b12x_mhc(int(x.shape[0])):
              attn_norm_weight = self.attn_norm.weight.data
@@ -41,7 +65,7 @@
                  assert x.dim() == 2
                  assert self.hc_attn_fn_broadcast is not None
                  residual, post_mix, res_mix, x = self.hc_pre(
-@@ -1362,7 +1377,12 @@
+@@ -1362,7 +1394,16 @@
                      norm_eps=attn_norm_eps,
                  )
  
@@ -51,11 +75,15 @@
 +                    self.layer_probe.event(self.layer_idx, "A", residual)
 +                x = self.attn(positions, x, None)
 +                if skip == "F":
++                    if self.layer_heal is not None:
++                        return self._layer_heal_state(x, residual, post_mix, res_mix)
 +                    return x, residual, post_mix, res_mix
++            elif self.layer_heal is not None:
++                x, residual, post_mix, res_mix = self._layer_heal_state(x, residual, post_mix, res_mix)
  
              ffn_norm_weight = self.ffn_norm.weight.data
              ffn_norm_eps = self.ffn_norm.variance_epsilon
-@@ -1378,12 +1398,16 @@
+@@ -1378,12 +1419,16 @@
                  norm_eps=ffn_norm_eps,
                  hc_fn_bf16=self.hc_ffn_fn_bf16,
              )
@@ -73,7 +101,7 @@
              # Run standalone mhc_pre on first layer
              if x.dim() == 2:
                  assert self.hc_attn_fn_broadcast is not None
-@@ -1437,7 +1461,12 @@
+@@ -1437,7 +1482,16 @@
              )
  
          # attn_norm is fused into mhc_pre_tilelang / mhc_fused_post_pre above.
@@ -83,11 +111,15 @@
 +                self.layer_probe.event(self.layer_idx, "A", residual)
 +            x = self.attn(positions, x, None)
 +            if skip == "F":
++                if self.layer_heal is not None:
++                    return self._layer_heal_state(x, residual, post_mix, res_mix)
 +                return x, residual, post_mix, res_mix
++        elif self.layer_heal is not None:
++            x, residual, post_mix, res_mix = self._layer_heal_state(x, residual, post_mix, res_mix)
  
          ffn_norm_weight = self.ffn_norm.weight.data
          ffn_norm_eps = self.ffn_norm.variance_epsilon
-@@ -1459,6 +1488,8 @@
+@@ -1459,6 +1513,8 @@
              norm_weight=ffn_norm_weight,
              norm_eps=ffn_norm_eps,
          )
@@ -96,7 +128,7 @@
  
          x = self.ffn(x, input_ids)
          return x, residual, post_mix, res_mix
-@@ -1544,6 +1575,23 @@
+@@ -1544,6 +1600,23 @@
              ),
              prefix=f"{prefix}.layers",
          )
@@ -120,7 +152,7 @@
  
          if get_pp_group().is_last_rank:
              self.norm = RMSNorm(config.hidden_size, self.rms_norm_eps)
-@@ -1631,6 +1679,8 @@
+@@ -1631,6 +1704,8 @@
  
          if self.use_mega_moe:
              input_ids = input_ids.to(torch.int64)
@@ -129,7 +161,7 @@
  
          aux_hidden_states: list[torch.Tensor] = []
          residual, post_mix, res_mix = None, None, None
-@@ -1682,6 +1732,8 @@
+@@ -1682,6 +1757,8 @@
                  hidden_states = mhc_post_tilelang(
                      hidden_states, residual, post_mix, res_mix
                  )
@@ -138,11 +170,12 @@
  
          if not get_pp_group().is_last_rank:
              return IntermediateTensors({"hidden_states": hidden_states})
-@@ -2053,6 +2105,8 @@
+@@ -2053,6 +2130,9 @@
          self.model.finalize_mega_moe_weights()
          self.model.finalize_mhc_broadcast_weights()
          self.model.setup_b12x_wo_projection()
 +        # dsv4-specialize layer skip (plans/PLAN_FEWER_LAYERS.md §6.1): the one boot line that the run scripts check
++        self.model.layer_skip.place_heal()
 +        logger.warning(self.model.layer_skip.boot_line())
          return loaded_params
  
