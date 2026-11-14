@@ -9,7 +9,7 @@ windows. The model runs with the vLLM 0.33 venv, alone on port 8889. No change t
 
 | Step | Status |
 |---|---|
-| §5 Phase A: the data, the tools and the tests (no downtime, about 2 days) | 🔨 2026-11-13: the data builder is done (§5.1); next the capture change, the prune tool and the window scripts |
+| §5 Phase A: the data, the tools and the tests (no downtime, about 2 days) | 🔨 2026-11-13: the data builder (§5.1), the capture option and the prune tool (§5.2) are done; next the two window scripts |
 | §6 Phase B: the capture window (about 85 min downtime) | ⬜ |
 | §7 Phase C: the builds and the gate window (about 80 min downtime) | ⬜ |
 | §8 Phase D: both servers at the same time (`PLAN_SECOND_MODEL_FIT.md` §7) | ⬜ |
@@ -154,6 +154,20 @@ machine, in estimated tokens (characters / 4):
   replaced 18 strings.
 - The system prompt is the Hermes prompt of the bot's data. Give me the prompt of your coding agent when it exists,
   and the builder takes that.
+
+### 5.2 The prune tool (2026-11-13)
+
+`qwen_prune.py` ran on the real checkpoint with a dummy rank (no downtime, no model boot):
+
+- K 176 wrote 16.25 GiB in 75 seconds, with the check. That is 5.74 GiB less than the source, as §2.3 says.
+- It kept 85,956 tensors and dropped 38,400 (80 experts × 40 layers × 12 tensors). Every kept tensor equals its
+  source byte for byte.
+- The safetensors library opens all five files. The router has 176 rows in each layer, and the stacked tensors of
+  the draft have 176 experts.
+- The tool holds one source file in memory at a time (at most 4.7 GiB).
+- `capture.py --experts 256` sets the expert count (the default stays 216).
+
+What only a boot can show: that vLLM 0.33 loads the folder. The gate window boots it first.
 
 Two questions that Phase A cannot answer, with the fallback for each:
 
