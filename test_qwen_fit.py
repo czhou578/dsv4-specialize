@@ -150,6 +150,18 @@ class WindowTest(unittest.TestCase):
         self.assertTrue(log.split("STUB launch p192")[1].splitlines()[0].endswith("pypath=none"))
         self.assertIn('STUB launch r256 Qwen3.6-35B-A3B-NVFP4-Fast ctx=128000 pin=1965377034 budget=2048 draft={"method":"mtp"', log)
 
+    def test_the_overhead_points_and_k208(self):
+        stub = STUB + "MODEL[k0]=$STUB_DIR/k208; MODEL[k1]=$STUB_DIR/k208\n"
+        rc, log, _ = self.run_script(POINTS="o0 o1 o2 o3 o4 k0 k1", stub=stub, files={"k208/config.json": "{}"})
+        self.assertEqual(rc, 0, log)
+        self.assertIn("available beside the main server:", log)
+        line = lambda p: log.split(f"STUB launch {p} ")[1].splitlines()[0]
+        self.assertTrue(line("o0").startswith('Qwen3.6-35B-A3B-NVFP4-Fast ctx=128000 pin=1965377034 budget=2048 draft={"method":"mtp","num_speculative_tokens":3}'))
+        self.assertIn("budget=512", line("o1"))
+        self.assertTrue(line("o2").endswith("--language-model-only --enforce-eager pypath=none"))
+        self.assertRegex(line("k1"), r'^k208 ctx=128000 pin=1965377034 budget=512 draft=\{"method":"mtp","model":"[^"]*snapshots/.* pypath=\S+/qwen_mtp_patch$')
+        self.assertIn("qwen-o0 processes (name, RSS kB, peak RSS kB, pid): ", log)
+
     def test_the_server_of_a_patch_point_gets_the_patch_on_its_python_path(self):
         fake = "#!/usr/bin/env bash\necho \"PP=${PYTHONPATH:-}\" >> $STUB_DIR/calls.log\nexit 1\n"
         # the real launch(): the stub without its launch()
@@ -158,6 +170,13 @@ class WindowTest(unittest.TestCase):
         rc, log, d = self.run_script(POINTS="g208 p208", stub=stub, files={"vllm": fake, "k208/config.json": "{}"})
         self.assertEqual(rc, 1, log)                                                      # two failed boots: restore
         self.assertEqual((d / "calls.log").read_text().splitlines(), [f"PP={HERE}/qwen_mtp_patch", "PP="])
+
+    def test_the_extra_environment_reaches_the_server(self):
+        fake = "#!/usr/bin/env bash\necho \"AC=${PYTORCH_CUDA_ALLOC_CONF:-}\" >> $STUB_DIR/calls.log\nexit 1\n"
+        stub = STUB[:STUB.index("N=0\n")] + STUB[STUB.index("tests() {"):] + "QV=$STUB_DIR\n"
+        rc, log, d = self.run_script(POINTS="o0 o3", stub=stub, files={"vllm": fake})
+        self.assertEqual(rc, 1, log)
+        self.assertEqual((d / "calls.log").read_text().splitlines(), ["AC=", "AC=expandable_segments:True"])
 
     def test_failed_boots_skip_the_point_and_two_in_a_row_restore(self):
         rc, log, _ = self.run_script(STUB_FAIL="f2")

@@ -25,6 +25,11 @@
 #               when its g point has no score (SKIPIF): the fallback if the patch fails
 #   r256        the full model with the MTP draft again: the score and the bot decode test, for the noise between two
 #               windows (the reference g256 of an earlier window)
+#   o0 ... o4   §7.3 the overhead of vLLM itself, the full model with the MTP draft at 128k: o0 the settings of c2,
+#               o1 a prefill budget of 512, o2 --enforce-eager (no CUDA graphs, no torch.compile), o3 the allocator with
+#               expandable segments, o4 = o1 + o3. Tests: smoke, one prompt of 120,000 tokens, the bot decode test
+#   k0 k1       §7.3 K 208 with the draft of the snapshot (qwen_mtp_patch): k0 the settings of c2, k1 those of o4
+# Each point also logs the resident and the peak resident memory of the server processes (procs.txt).
 # All points: a KV pin of 1.04x of the need, FP8 KV, --max-num-seqs 1, no images. The f, q and n points use
 # --max-model-len 256000 and these tests: smoke (a short request and a tool call), one prompt of about 250,000
 # tokens, and the bot decode test (5 sessions, 1 run). The available memory is sampled every 5 s.
@@ -55,7 +60,7 @@ declare -A BUDGET=([f1]=2048 [f2]=8192 [f3]=2048 [q1]=2048 [q2]=2048 [n1]=2048 [
   PIN0=([f1]=8933531976 [f2]=8933531976 [f3]=8933531976 [q1]=2800000000 [q2]=2800000000 [n1]=820000000 [n2]=820000000)
 QM=unsloth/Qwen3.6-35B-A3B-NVFP4-Fast MB=${MB:-$HOME/Projects/model-benchmarks}
 NGRAM='{"method":"ngram","num_speculative_tokens":4,"prompt_lookup_max":4,"prompt_lookup_min":2}'
-declare -A CTX TESTS NEED PYPATH SKIPIF   # PYPATH: put first on PYTHONPATH of the server; SKIPIF: skip when that point has a score; the context (default 256000), the tests (default "smoke long speed"), the minutes (default 20)
+declare -A CTX TESTS NEED PYPATH SKIPIF ENVS LONG   # ENVS: more environment for the server; LONG: the tokens of the long prompt; PYPATH: put first on PYTHONPATH of the server; SKIPIF: skip when that point has a score; the context (default 256000), the tests (default "smoke long speed"), the minutes (default 20)
 QSNAP=$(ls -d $HOME/.cache/huggingface/hub/models--unsloth--Qwen3.6-35B-A3B-NVFP4-Fast/snapshots/*/ 2>/dev/null | head -1)
 # The first pins come from the capture window: 1.76 GiB of KV need at 128k with the MTP draft, 1.41 GiB without a draft
 for p in c1 c2 c3 g256 g208 g192 g176 g160; do
@@ -67,6 +72,12 @@ done
 for k in 208 192 176; do
   BUDGET[p$k]=2048 CTX[p$k]=128000 MODEL[p$k]=$S/qwen-k$k FLAGS[p$k]=$Q35 PIN0[p$k]=1574535010 TESTS[p$k]="smoke score tools" NEED[p$k]=30 SKIPIF[p$k]=g$k
 done
+for p in o0 o1 o2 o3 o4 k0 k1; do
+  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$QM FLAGS[$p]=$Q35 DRAFT[$p]=$MTP PIN0[$p]=1965377034 TESTS[$p]="smoke long speed" NEED[$p]=12 LONG[$p]=120000
+done
+BUDGET[o1]=512 FLAGS[o2]="$Q35 --enforce-eager" ENVS[o3]=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True BUDGET[o4]=512 ENVS[o4]=${ENVS[o3]}
+for p in k0 k1; do MODEL[$p]=$S/qwen-k208 DRAFT[$p]=${DRAFT[g208]} PYPATH[$p]=$S/qwen_mtp_patch; done
+BUDGET[k1]=512 ENVS[k1]=${ENVS[o3]}
 BUDGET[r256]=2048 CTX[r256]=128000 MODEL[r256]=$QM FLAGS[r256]=$Q35 DRAFT[r256]=$MTP PIN0[r256]=1965377034 TESTS[r256]="score speed" NEED[r256]=15
 FLAGS[c1]="$Q35 --enable-return-routed-experts" FLAGS[c2]=${FLAGS[c1]} DRAFT[c3]=$NGRAM
 unset "DRAFT[c1]"; PIN0[c1]=1574535010 PIN0[c3]=1853707884   # no draft weights: the KV need is smaller
@@ -86,10 +97,17 @@ qstop() {  # stop Qwen and wait until it is gone (the sampler goes on: a boot re
   qrunning && pkill -KILL -f "$QPAT"
   QPID=
 }
+procs() {  # $1 point: the name, resident and peak resident memory (kB) of the server and its children
+  local pid f=$R/qwen-fit-$1-procs.txt
+  for pid in ${QPID:+$QPID $(pgrep -P $QPID 2>/dev/null)}; do
+    awk -v p=$pid '/^Name:/ {n=$2} /^VmRSS:/ {r=$2} /^VmHWM:/ {h=$2} END {print n, r, h, p}' /proc/$pid/status 2>/dev/null
+  done > $f
+  log "qwen-$1 processes (name, RSS kB, peak RSS kB, pid): $(tr '\n' ';' < $f)"
+}
 launch() {  # $1 point, $2 server log: start vllm and wait for /health; 0 healthy, 1 failed
   local p=$1 extra=() t0
   [ -n "${DRAFT[$p]:-}" ] && extra=(--speculative-config "${DRAFT[$p]}")
-  env ${PYPATH[$p]:+PYTHONPATH=${PYPATH[$p]}} HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 CUTE_DSL_ARCH=sm_121a PATH=$QV:$PATH setsid "$QV/vllm" serve ${MODEL[$p]} \
+  env ${PYPATH[$p]:+PYTHONPATH=${PYPATH[$p]}} ${ENVS[$p]:-} HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 CUTE_DSL_ARCH=sm_121a PATH=$QV:$PATH setsid "$QV/vllm" serve ${MODEL[$p]} \
     --host 127.0.0.1 --port 8889 --served-model-name $QNAME --tensor-parallel-size 1 --gpu-memory-utilization 0.30 \
     --kv-cache-memory-bytes $PIN --max-model-len ${CTX[$p]:-256000} --max-num-seqs 1 --max-num-batched-tokens ${BUDGET[$p]} \
     --kv-cache-dtype fp8_e4m3 --enable-chunked-prefill --async-scheduling --enable-auto-tool-choice \
@@ -128,7 +146,7 @@ tests() {  # $1 point: the tests of TESTS, in order
     case $t in
       smoke) $PY $S/qwen_fit.py --base-url $QURL --model $QNAME --smoke > $o-smoke.json 2>&1
         log "qwen-$p smoke: exit $?; $(tail -1 $o-smoke.json | cut -c1-200)";;
-      long) timeout $left $PY $S/qwen_fit.py --base-url $QURL --model $QNAME --long 250000 > $o-long.json 2>&1
+      long) timeout $left $PY $S/qwen_fit.py --base-url $QURL --model $QNAME --long ${LONG[$p]:-250000} > $o-long.json 2>&1
         log "qwen-$p long prompt: exit $?; $(tail -1 $o-long.json | cut -c1-200)";;
       speed) (cd $W && timeout $left $PY -m model_eval.speed --base-url $QURL --model $QNAME --sessions 5 --runs 1 \
           --out $o-speed.jsonl > $o-speed.log 2>&1)
@@ -171,6 +189,7 @@ fpoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
   healthy=$(avail_mb) healthy_at=$(now)
   log "qwen-$p healthy: $healthy MB available; $(grep -oE 'Model loading took [0-9.]+ GiB|GPU KV cache size: [0-9,]+ tokens' $R/qwen-fit-$p-server.log | sort -u | tr '\n' ';')"
   tests $p
+  procs $p
   nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader > $R/qwen-fit-$p-gpu.txt 2>&1
   sample_stop; qstop
   $PY $S/qwen_fit.py --report --before $before --healthy $healthy --healthy-at $healthy_at --pin $PIN --mem-log $m \
@@ -182,6 +201,7 @@ for need in $QV/vllm $S/qwen_fit.py $W/model_eval/speed.py; do [ -e $need ] || {
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done
 [ "$(now)" -ge $BOOT_BY_S ] && { log "after $BOOT_BY: no boot"; exit 1; }
 
+log "available beside the main server: $(avail_mb) MB"
 FAILS=0
 for p in $POINTS; do
   fpoint $p; rc=$?
