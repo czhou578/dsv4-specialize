@@ -46,30 +46,3 @@ def test_patch_wraps_init_once():
     mp.patch(module)
     MTP(vllm_config=configs(176, 256))
     assert seen == [256]
-
-
-def test_the_runner_patch_releases_the_cache_after_the_load(monkeypatch):
-    import torch
-    calls = []
-    monkeypatch.setattr(torch.cuda, "empty_cache", lambda: calls.append("empty_cache"))
-    monkeypatch.setattr(torch.cuda, "memory_allocated", lambda: 2**30)
-    monkeypatch.setattr(torch.cuda, "memory_reserved", lambda: 2**31)
-
-    class Runner:
-        def load_model(self, *a, **k):
-            calls.append("load")
-            return "loaded"
-
-        def capture_model(self):
-            calls.append("capture")
-            return 7
-
-    module = types.SimpleNamespace(GPUModelRunner=Runner)
-    mp.patch_runner(module)
-    mp.patch_runner(module)   # a second patch changes nothing
-    assert Runner().load_model(load_dummy_weights=False) == "loaded" and Runner().capture_model() == 7
-    assert calls == ["load", "empty_cache", "capture"]
-
-
-def test_the_runner_patch_is_opt_in():
-    assert mp.RUNNER not in mp.PATCHES or __import__("os").environ.get("QWEN_EMPTY_CACHE") == "1"

@@ -170,13 +170,13 @@ class WindowTest(unittest.TestCase):
         self.assertRegex(line, r'^k208 ctx=128000 pin=1965377034 budget=2048 draft=\{"method":"mtp","model":"\S+/qwen-draft-nvfp4",'
                                r'"num_speculative_tokens":3,"moe_backend":"marlin"\} .* pypath=\S+/qwen_mtp_patch$')
 
-    def test_the_cache_release_points_reach_the_server(self):
-        fake = "#!/usr/bin/env bash\necho \"EC=${QWEN_EMPTY_CACHE:-} AC=${PYTORCH_CUDA_ALLOC_CONF:-} $*\" >> $STUB_DIR/calls.log\nexit 1\n"
+    def test_the_warm_and_expandable_points_reach_the_server(self):
+        fake = "#!/usr/bin/env bash\necho \"AC=${PYTORCH_CUDA_ALLOC_CONF:-} $*\" >> $STUB_DIR/calls.log\nexit 1\n"
         stub = STUB[:STUB.index("N=0\n")] + STUB[STUB.index("tests() {"):] + "QV=$STUB_DIR; MODEL[d2]=$STUB_DIR/k208; MODEL[d3]=$STUB_DIR/k208\n"
         rc, log, d = self.run_script(POINTS="d2 d3", stub=stub, files={"vllm": fake, "k208/config.json": "{}"})
         calls = (d / "calls.log").read_text().splitlines()
-        self.assertTrue(calls[0].startswith("EC=1 AC= serve") and "qwen-draft-nvfp4" in calls[0] and '"moe_backend":"marlin"' in calls[0])
-        self.assertTrue(calls[1].startswith("EC= AC=expandable_segments:True serve") and "qwen-draft-nvfp4" in calls[1])
+        self.assertTrue(calls[0].startswith("AC= serve") and "qwen-draft-nvfp4" in calls[0] and '"moe_backend":"marlin"' in calls[0])
+        self.assertTrue(calls[1].startswith("AC=expandable_segments:True serve") and "qwen-draft-nvfp4" in calls[1])
 
     def test_the_server_of_a_patch_point_gets_the_patch_on_its_python_path(self):
         fake = "#!/usr/bin/env bash\necho \"PP=${PYTHONPATH:-}\" >> $STUB_DIR/calls.log\nexit 1\n"
