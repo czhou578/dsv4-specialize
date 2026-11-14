@@ -1,9 +1,10 @@
 # Plan: prune the experts of Qwen3.6-35B-A3B for the fast route
 
-**Status:** 2026-11-13: **closed, no prune.** Every pruned point fails G1: the NLL of Qwen's own turns rises by
-+4.2% at K 208, +8.0% at K 192 and +11.1% at K 176 (limit +3%), and the full model repeats within 0.1% (§7.2). G1
-needs about K 224, which saves about 2.1 GiB and leaves a margin of about 1 GiB, far from the 4 GiB of G6. No K
-passes both. Nothing is deployed ·
+**Status:** 2026-11-14: the overhead of vLLM frees nothing (§7.4): the four levers leave the full model with its
+draft at 29.6 GiB, about −0.1 GiB of margin. K 208 with its draft uses 26.5 GiB at the peak with a 120k prompt: a
+margin of 2.3 to 3.0 GiB, or 3.4 to 4.1 GiB with the DeepSeek context cap (D1), at 98 tok/s. Its cost stays the G1
+loss of +4.15% (§7.2). It is the choice to report; the G1 limit and Phase D are your decision. Nothing is deployed.
+2026-11-13: every pruned point failed G1 (§7.2) ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_SECOND_MODEL_FIT.md` (§5.5 the measured fit and speed of the candidates), `PLAN_PHYSICAL_PRUNE.md`
 and `PRUNE.md` (the method on DeepSeek), `PLAN_BETTER_RANK.md` (the ranks), `PLAN_MODEL_ROUTER.md` in the bot's repo
@@ -439,6 +440,51 @@ its source).
   loss of quality.
 - Else, K 208 with the draft (k0 or k1) is the choice to report, with its margin and its G1 loss (+4.15%, §7.2). The
   G1 limit is your decision. Nothing is deployed.
+
+### 7.4 Result of the overhead window (2026-11-14, 00:08 to 00:56)
+
+The live server stopped at 00:08 and was healthy again at 00:56:20 (reply "OK.", gateway active): 48 minutes of
+downtime. The memory available beside DeepSeek: 28.83 GiB before the stop (29,524 MiB in `free -m`), three minutes after
+the K 208 build wrote 19 GB; 29.56 GiB at 00:05 and 29.48 GiB at 00:58. The margins below use this range,
+28.8 to 29.5 GiB. Files (not in git): `results/qwen-fit-{o0..o4,k0,k1}*`, `logs/qwen-overhead.log`.
+
+| Point | Change | Use at the peak | GPU process | Long prompt (119,745 tokens) | Decode with the draft |
+|---|---|---|---|---|---|
+| o0 | None (full model with its draft) | 29.64 GiB | 25.2 GiB | 46.1 s | 101.8 tok/s |
+| o1 | Prefill budget 512 | 29.60 GiB | 25.0 GiB | 59.0 s | 98.9 tok/s |
+| o2 | `--enforce-eager` | 29.62 GiB | 25.3 GiB | 51.6 s | 72.6 tok/s |
+| o3 | Expandable segments | 29.71 GiB | 25.2 GiB | 46.1 s | 96.5 tok/s |
+| o4 | o1 + o3 | 29.57 GiB | 25.0 GiB | 59.6 s | 99.7 tok/s |
+| **k0** | **K 208 with the draft of 256 experts, the settings of o0** | **26.51 GiB** | **22.1 GiB** | **45.5 s** | **97.7 tok/s** |
+| k1 | K 208 with the settings of o4 | 26.60 GiB | 21.8 GiB | 57.5 s | 99.2 tok/s |
+
+**The overhead frees nothing.** No lever moves the peak by more than 0.07 GiB (the rule asks 0.75 GiB), and eager mode
+costs 29% of the decode speed. The overhead (about 6.6 GiB at the peak, 6.2 to 6.6 GiB after the boot) is a fixed
+cost in two parts:
+
+- **About 2.2 GiB in the engine process on the GPU**, beyond the weights and the KV pin: the CUDA context, the
+  kernel workspaces and the CUDA graphs (0.24 GiB). The prefill budget, the graphs and the allocator do not change it.
+- **About 4.4 GiB of host memory of the two processes of `vllm serve`**: the API server holds 1.9 GB resident and the
+  engine core 3.1 GB (7.2 GB during the load), for Python, PyTorch, the CUDA libraries and the tokenizer. `vllm serve`
+  cannot run the engine in its own process.
+
+**K 208 with the draft (k0) is the choice to report.** Its use at the peak, with one prompt of 120k tokens and the bot
+decode test, is 26.51 GiB: 3.13 GiB below o0, as the prune predicts. Its margin beside DeepSeek:
+
+| Setup | Peak | Margin (28.8 to 29.5 GiB available) | With the DeepSeek context cap D1 (+1.1 GiB) |
+|---|---|---|---|
+| Full model with its draft (o0) | 29.64 GiB | −0.8 to −0.1 GiB | +0.3 to +1.0 GiB |
+| K 208 with its draft (k0) | 26.51 GiB | 2.3 to 3.0 GiB | 3.4 to 4.1 GiB |
+
+K 208 with the draft and D1 reaches the 4 GiB of G6 only at the top of the range, so read it as a margin of about
+3.5 GiB. Its quality cost is the
+G1 loss of +4.15% (§7.2); the decisions, the tool names and the tool-call suite do not move, and the draft keeps its
+speed (97.7 to 101 tok/s). k1 gains nothing over k0, so k0 keeps the default settings.
+
+**What K 208 needs, if you choose it** (none of it is done): the K 208 folder (`qwen_prune.py --draft keep`, about 75
+seconds; this window's copy was deleted after the test, as you asked on 2026-11-14); `qwen_mtp_patch` on the
+`PYTHONPATH` of its server; the DeepSeek context cap D1; and Phase D, both servers at the same time with the memory
+watch, because the margin is at or below the 4 GiB of G6. A looser G1 limit and the smaller margin are your decisions.
 
 ## 8. Phase D: both servers at the same time
 

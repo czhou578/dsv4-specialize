@@ -213,8 +213,14 @@ between the two windows. The decisions, the tool names and the tool-call suite d
 about K 224, which saves about 2.1 GiB and leaves a margin of about 1 GiB. Qwen loses about twice as much as DeepSeek
 at the same coverage of the routing.
 
+A third window (2026-11-14) tested the overhead of vLLM itself: about 6.6 GiB that is neither weights nor KV cache.
+A smaller prefill budget, eager mode and the expandable allocator free nothing: the overhead is the CUDA context and
+workspaces (about 2.2 GiB) and the host memory of the two server processes (about 4.4 GiB). K 208 with its draft
+uses 26.5 GiB at the peak with a 120k prompt and decodes at 98 tok/s: a margin of 2.3 to 3.0 GiB, or 3.4 to 4.1 GiB
+with the DeepSeek context cap. It is the setup to report, at the G1 cost of +4.15%; the choice is the user's.
+
 - Plan: [PLAN_QWEN_PRUNE.md](plans/PLAN_QWEN_PRUNE.md) §6.1 (the capture), §7.1 and §7.2 (the gate windows and the
-  decision).
+  decision), §7.3 and §7.4 (the overhead window).
 - Tools: [qwen_data.py](qwen_data.py) (the calibration data), [capture.py](capture.py) (the routing counts),
   [qwen_prune.py](qwen_prune.py) (the prune), [qwen_gate.py](qwen_gate.py) (the replay gate), and
   [qwen_mtp_patch/sitecustomize.py](qwen_mtp_patch/sitecustomize.py): in vLLM 0.33, the MTP draft of a pruned Qwen
