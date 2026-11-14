@@ -1,9 +1,10 @@
 # Plan: prune the experts of Qwen3.6-35B-A3B for the fast route
 
-**Status:** 2026-11-14: the overhead of vLLM frees nothing (§7.4): the four levers leave the full model with its
-draft at 29.6 GiB, about −0.1 GiB of margin. K 208 with its draft uses 26.5 GiB at the peak with a 120k prompt: a
-margin of 2.3 to 3.0 GiB, or 3.4 to 4.1 GiB with the DeepSeek context cap (D1), at 98 tok/s. Its cost stays the G1
-loss of +4.15% (§7.2). It is the choice to report; the G1 limit and Phase D are your decision. Nothing is deployed.
+**Status:** 2026-11-14: the facts and side-by-side test (§7.6): on 80 rare facts, K 208 answers 10 right against
+15 for the full model, and 46 wrong against 43 (both below the noise of 80 questions; p = 0.18 for the right answers).
+On 30 of your held-out turns, a blind judge finds no visible loss (K 208 better on 8 turns, worse on 10, p = 0.81).
+The overhead of vLLM frees nothing (§7.4); K 208 with its draft uses 26.5 GiB at the peak, a margin of 3.4 to
+4.1 GiB with the DeepSeek context cap. The choice is yours. Nothing is deployed.
 2026-11-13: every pruned point failed G1 (§7.2) ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_SECOND_MODEL_FIT.md` (§5.5 the measured fit and speed of the candidates), `PLAN_PHYSICAL_PRUNE.md`
@@ -507,6 +508,54 @@ decisions, the tool names and the tool-call suite, but no test of facts. This wi
 How to read it: K 208 hallucinates more if its incorrect answers rise above the noise of 200 questions (about ±5);
 its loss is visible if the judge prefers the recorded turn over K 208's turn clearly more often than over the full
 model's own new turn.
+
+### 7.6 Result of the facts and side-by-side test (2026-11-14, 09:48 to 10:59)
+
+The live server stopped at 09:48 and was healthy again at 10:58:54 (reply "OK.", gateway active): 70 minutes of
+downtime. The judging ran after the window on the live DeepSeek, from 11:00 to 12:25. Files (not in git):
+`results/qwen-fit-h{256,208}-{facts,graded,pairs,judged}.jsonl`, `logs/qwen-facts.log`.
+
+**Facts.** Each model had 20 minutes: the full model answered 87 questions, K 208 answered 80 (its answers are a
+little longer: 1,485 tokens on average against 1,385, and 26 of 80 hit the limit of 2,048 tokens against 22 of 87).
+On the 80 common questions:
+
+| | Full model | K 208 |
+|---|---|---|
+| Correct | 15 | 10 |
+| Incorrect (a hallucination) | 43 | 46 |
+| Not attempted (an "I don't know", or no answer in 2,048 tokens) | 22 | 24 |
+| Incorrect of the attempted answers | 74% | 82% |
+| Science and technology: correct, incorrect | 9, 21 | 4, 25 |
+
+Per question: the full model knows 7 answers that K 208 gets wrong or leaves open, and K 208 knows 2 that the full
+model misses (a sign test gives p = 0.18: the sample is too small to prove a loss, and its direction agrees with the
+G1 loss). Five of the 7 lost answers are science and technology. Some lost answers are confident inventions: "Dolly
+the sheep was cloned into three identical copies" (she gave birth to triplets), 450 hp for an engine of 550 hp. The
+full model itself is wrong on 3 of 4 of these rare facts, so neither model should answer such questions without a
+search.
+
+**Side-by-side.** The judge compared a new turn with the recorded turn of the full model, on 30 held-out turns in
+both orders:
+
+| New turn | New better | Recorded better | Tie | Unjudged | Score (wins + ties / 2) |
+|---|---|---|---|---|---|
+| Full model, a new sample (the noise) | 28 | 17 | 14 | 1 | 0.58 |
+| K 208 | 24 | 24 | 11 | 1 | 0.49 |
+
+Per turn (both orders added), K 208 scores better than the full model's new sample on 8 turns, worse on 10, and the
+same on 12 (p = 0.81). The judge prefers the turn that it reads first (17 against 11 wins for the new turn), which is
+why each pair runs in both orders. The score falls by 0.09, but the per-turn test cannot tell it from the noise.
+
+**What it means for your use:**
+
+- On your own work (coding, tool calls, research with its context), the judge does not see a difference. This agrees
+  with §7.2: the decisions, the tool names and the tool-call suite did not move.
+- On rare facts with no search, K 208 knows less: about one third fewer correct answers in this sample, with a few new
+  confident errors. The extra hallucinations are small (+3 of 80) and inside the noise.
+- The risk is in questions that need stored knowledge of rare things: niche libraries, versions, numbers, names. With
+  web search or the content in the context, the risk falls.
+
+The K 208 folder was deleted again after the window.
 
 ## 8. Phase D: both servers at the same time
 
