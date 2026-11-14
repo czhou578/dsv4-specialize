@@ -400,6 +400,46 @@ the folders `qwen-k176`, `qwen-k192` and `qwen-k208` were deleted on 2026-11-14.
 3. **K 208 with a looser G1:** it passes every other gate and saves 2.8 GiB, but its margin is about 2.3 GiB (3.4
    with D1). This changes a gate, so it is your decision.
 
+### 7.3 The overhead window: the memory of vLLM itself, then K 208 (your goal of 2026-11-14)
+
+Your goal: test whether the overhead of vLLM frees memory; if it frees nothing, test K 208 with the draft.
+
+**What the overhead is.** The full model with its draft at 128k uses 29.9 GiB at the peak: 21.22 GiB of weights
+(1.57 GiB of them the draft), 1.83 GiB of KV pin, and about 6.9 GiB more. Of the 6.9 GiB, 6.5 GiB stays after the
+boot with no request, so a request adds little. `nvidia-smi` gives the engine process 25.2 to 26.8 GiB: about 2 to 3.5
+GiB more than the weights, the pin and the CUDA graphs (0.24 GiB). The rest, about 4.5 GiB, is outside the GPU
+allocations: mostly the two processes of `vllm serve` (the API server and the engine core) with Python, PyTorch, the
+CUDA libraries and the tokenizer. vLLM already frees the allocator cache after the warm-up.
+
+**The levers.** Two levers drop out before the window: `vllm serve` always runs the engine core in its own process
+(`VLLM_ENABLE_V1_MULTIPROCESSING=0` applies to the offline engine only), and a shorter context saves little (the KV
+pin at 128k is 1.83 GiB, because only 10 of the 40 layers use attention). The window tests the rest, all on the full
+model with its draft at 128k, each with the smoke test, one prompt of 120,000 tokens and the bot decode test. Each
+point also logs the resident and peak resident memory of each server process.
+
+| Point | Change from c2 | What it can free |
+|---|---|---|
+| o0 | None: the baseline of this window | |
+| o1 | Prefill budget 512 (from 2,048) | The activations of a prefill step. Prefill gets slower |
+| o2 | `--enforce-eager` | The CUDA graphs and the torch.compile code. Decode gets slower |
+| o3 | `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` | The fragments that the allocator holds |
+| o4 | o1 + o3 | Both, with no loss of decode speed |
+| k0 | K 208 with the draft of 256 experts (`qwen_mtp_patch`), the settings of c2 | The prune: 3.13 GiB of weights |
+| k1 | K 208 with the settings of o4 | The prune and the levers |
+
+K 208 runs in the same window, whatever the result of the o points: the auto mode of Claude Code lets only you start a
+window, and you are asleep. The K 208 folder was rebuilt for this window (`--draft keep`, every kept tensor equal to
+its source).
+
+**The decision rule, written before the window:**
+
+- A lever frees memory when its peak is at least 0.75 GiB below o0 and its decode rate is within 5% of o0.
+- If the full model with its draft and the levers that free memory leaves a margin of at least 4 GiB beside DeepSeek
+  (the memory that the window logs before the first stop, alone or with the context cap D1), that is the choice: no
+  loss of quality.
+- Else, K 208 with the draft (k0 or k1) is the choice to report, with its margin and its G1 loss (+4.15%, §7.2). The
+  G1 limit is your decision. Nothing is deployed.
+
 ## 8. Phase D: both servers at the same time
 
 As `PLAN_SECOND_MODEL_FIT.md` §7: DeepSeek first, then the pruned Qwen with a very small utilization value or after
