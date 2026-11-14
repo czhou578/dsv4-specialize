@@ -1,8 +1,8 @@
 # Plan: the fit of a second model (Qwen 27B) beside DeepSeek
 
-**Status:** 2026-11-13: Phases A and B done. Qwen at 256k needs 34.0 GiB with no draft and about 37 GiB with its
-draft; about 29 GiB is available. No set of DeepSeek savings closes that gap (§5.1). Qwen also decodes slower than
-DeepSeek: 30.8 tok/s with its draft, 11.1 without. The next step is your decision (§5.2) ·
+**Status:** 2026-11-13: Qwen 27B at 256k does not fit and is slower than DeepSeek (§4.4, §5.1). Your goal is a fast
+second model for a router, so the candidates are now two MoE models with 3B active parameters (§5.4). The script
+has their points, the dry run passes, and the window waits for your go ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_MODEL_ROUTER.md` in the bot's repo (§3 the memory budget, §7 the fast model, §9 the run of both
 servers), `PLAN_MD_DEPLOY.md` (the live server), `../serve-tune/PLAN_SERVE_TUNE.md` (§6 the KV pin, §8 the wide
@@ -234,6 +234,47 @@ is what the second model is for.
 | B. A smaller second model | A model that needs about 20 GiB in all, for example a MoE with few active parameters. It can be faster than DeepSeek, which Qwen 27B is not |
 | C. Qwen at 128k with no draft, beside DeepSeek | Phase C with D1, D2 and D4 (three windows, one with a known crash risk), then Phase D. The result is a second model at 11 tok/s with a margin of about 4 GiB |
 | D. Stop | DeepSeek alone, as now |
+
+### 5.4 The fast-model candidates (2026-11-13)
+
+**Your goal (2026-11-13):** a routing layer that sends a request to a strong reasoning model (DeepSeek) or to a model
+that answers very fast. Priority: the decode speed, with enough context. This is option B of §5.2.
+
+**Why a MoE with few active parameters.** The decode on this machine is bound by the bytes that one token reads.
+The dense Qwen 27B (19 GiB) decodes at 11 to 12 tok/s. A dense model then needs under about 5B parameters to pass
+70 tok/s. A MoE with about 3B active parameters reads a small part of its weights per token.
+
+| Candidate | Weights on disk | Decode on this machine | Context | KV cache at 256k (estimate) | State |
+|---|---|---|---|---|---|
+| `unsloth/Qwen3.6-35B-A3B-NVFP4-Fast` | 22.0 GiB, with a vision encoder | 85.6 tok/s with the MTP draft, 74.9 without (July 2026, vLLM 0.25.1, short prompts). The nvidia build: 77.7 to 79.0 | 262k | 2.7 GiB: 10 of 40 layers use full attention, 10.5 KB per token | Measured here in July, with 16 sequences |
+| `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` | 20.1 GiB, text only; its DSpark draft: 1.26 GiB | Not measured here. Its card recommends the DSpark draft on the DGX Spark | 1M | 0.8 GiB: 6 of 52 blocks are attention, 3.1 KB per token | Not measured |
+
+DeepSeek decodes the bot test at 35.3 tok/s, so the first candidate is at 2.1x to 2.4x. The router plan asks for 2x
+(§7.1 there).
+
+**The fit on paper.** Qwen 35B-A3B: about 21 GiB of weights with no images, 2.7 GiB of KV cache, and an overhead of
+5 to 7 GiB (the 27B had 6.7): 29 to 31 GiB, against about 29 GiB available. So the margin is near zero today, and a
+margin of 4 GiB needs 4 to 6 GiB from DeepSeek (§3.1). Nemotron needs about 1 to 2 GiB less on paper. The context
+is not the lever for these models: 128k saves 1.3 GiB at most.
+
+**What is not known.** The quality of both models on the bot's skills (the gate of the router plan §7.3), the speed
+on the bot's long prompts, and the memory at one sequence. The tool accuracy of the July suite (39% to 41% for the
+35B-A3B) used a scoring that was fixed later, so it does not compare with the 27B.
+
+**The points** (`qwen_fit.sh`, `POINTS='q1 n1 q2 n2'`, about 40 minutes of downtime):
+
+| Point | Model | Draft | Flags that differ |
+|---|---|---|---|
+| q1 | Qwen 35B-A3B | None | `--moe-backend flashinfer_cutlass`, `--tool-call-parser qwen3_xml`, `--language-model-only` (the July run with the best speed) |
+| q2 | Qwen 35B-A3B | MTP, K 3 | The same |
+| n1 | Nemotron | None | `--moe-backend marlin`, `--mamba-backend flashinfer`, `--reasoning-parser nemotron_v3`, `--tool-call-parser qwen3_coder` (the DGX Spark recipe of the model card) |
+| n2 | Nemotron | DSpark, K 3 | The same |
+
+All four use a 256k context, one sequence, a prefill budget of 2,048 tokens and the default loader. The order
+q1, n1, q2, n2 keeps one bad model from the rule of two failed boots in a row. Each point gives the memory at the
+peak, the peak of the load, and the bot decode rate. vLLM 0.33 accepts both command lines (its argument parser, no
+boot). The gate of the window: the model with the best bot decode rate whose use at the peak leaves a margin of 4 GiB
+after the DeepSeek savings that you accept.
 
 ### 5.3 The decision table (written before Phase A)
 
