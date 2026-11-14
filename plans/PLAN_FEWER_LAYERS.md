@@ -1,6 +1,6 @@
 # Plan: fewer layers (depth pruning)
 
-**Status:** 2026-11-13: refreshed for the live MD prune (§0); Phase A in work ·
+**Status:** 2026-11-13: refreshed for the live MD prune (§0); Phase A done (PRs #39 to #45); Phase B ready to start ·
 **Author:** colin-spark · **Date:** 2026-11-10, refreshed 2026-11-13
 **Source:** a note on depth pruning: rank the layers by Block Influence, confirm the best ones with the replay gate,
 heal the cut with a linear map, then remove the layers from the files. This plan checks each step against this stack.
@@ -12,7 +12,7 @@ to the live server.
 
 | Step | Status |
 |---|---|
-| §6 Phase A: the patch, the tools and the tests (no downtime, about 2 days) | ⬜ |
+| §6 Phase A: the patch, the tools and the tests (no downtime, about 2 days) | ✅ 2026-11-13: A1a to A3a (PRs #40 to #45); all tests pass; A3b (`skip_replay.sh`) waits for Phase B (§6.4) |
 | §7 Phase B: the probe window (about 3 h downtime) | ⬜ |
 | §8 Phase C: the replay window (about 4 to 5 h downtime) | ⬜ |
 | §9 Phase D: heal maps for sets (only if §8.4 says so) | ⬜ |
@@ -284,6 +284,13 @@ It imports the replay's request from the eval worktree, as `capture.py` does.
   two-failure rule and the restore of `run_lib.sh`.
 - `run_lib.sh` gets one change: its memory watch also stops `layer_screen.py`. Make this change only when no window
   runs.
+- `skip_probe.sh` (2026-11-13): it refuses to start when `results/skip-probe.jsonl` exists, because the client
+  resumes from its log (`RESUME=1` resumes on purpose). It picks the sets if `results/skip-sets.json` is missing. If
+  the eager boot fails with Model Runner V2, it boots once with Model Runner V1 (`compose-skip-v1.yml`). It checks the
+  probe line of the boot log, runs the client to 15 min before `RESTORE_AT` (one rerun after a client error), stops
+  the probe boot, restores the live server, and writes `results/skip-probe-report.md`.
+- `skip_replay.sh` waits for Phase B. The refresh of §0 makes Phase C unlikely, so it is built only if §7.6 does not
+  say "stop", before the Phase C window.
 
 ### 6.5 The tests and the gate
 
@@ -300,6 +307,9 @@ It imports the replay's request from the eval worktree, as `capture.py` does.
   map), and the report.
 - `bash -n` passes on both run scripts. A dry run with stub boots and stub replays handles these cases: a pass, a
   fail, a failed boot, a wrong skip line, and a graph from the compile cache.
+- `test_skip_scripts.py` runs the dry run: the script sources a stub file (`SKIP_STUB`) after `run_lib.sh`. For
+  `skip_probe.sh`: a normal window, the V1 boot after a failed V2 boot, two failed boots, a boot log with no probe
+  line, and an old client log. The cases of `skip_replay.sh` come with it.
 - `docker compose -f compose-mask.yml -f compose-tune.yml -f compose-skip.yml config` resolves.
 
 **Gate.** All tests pass, and the dry runs choose right.
@@ -313,7 +323,8 @@ Each pull request changes at most 400 lines:
    mHC kernels, `test_layer_skip_gpu.py` and `test_layer_skip.sh`.
 3. A2: `layer_screen.py` and `test_layer_screen.py`, in three pull requests: A2a the data pick and the skip file,
    A2b the BI pass, the screen and the Gram sums, A2c the greedy rounds and the report.
-4. A3: `skip_probe.sh`, `skip_replay.sh` and the change of `run_lib.sh`.
+4. A3a: `skip_probe.sh`, `compose-skip-v1.yml`, the change of `run_lib.sh`, and the dry run `test_skip_scripts.py`.
+5. A3b: `skip_replay.sh` and its dry run, only if Phase B does not say "stop" (§6.4).
 
 A1 and A2 grew past 400 lines, so they are five pull requests (2026-11-13).
 
