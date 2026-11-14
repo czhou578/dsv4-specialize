@@ -111,7 +111,7 @@ def count(routed, start=0, experts=EXPERTS):
     return counts, int((~filled).sum())
 
 
-def capture_one(base, model, s, g, i, tools, effort, seen_prefixes, sums=None):
+def capture_one(base, model, s, g, i, tools, effort, seen_prefixes, sums=None, experts=EXPERTS):
     seg = s["segments"][g]
     body = capture_body(model, s, seg, i, tools, effort)
     before = read_sums(sums) if sums else None
@@ -132,7 +132,7 @@ def capture_one(base, model, s, g, i, tools, effort, seen_prefixes, sums=None):
     prefix = common_prefix(shared, prompt)
     key = hashlib.sha256(json.dumps(prompt[:prefix]).encode()).hexdigest()
     new_prefix = key not in seen_prefixes
-    counts, unfilled = count(routed, 0 if new_prefix else prefix)
+    counts, unfilled = count(routed, 0 if new_prefix else prefix, experts)
     row = {"prompt_tokens": len(prompt), "prefix_tokens": prefix, "prefix": key,
            "prefix_counted": new_prefix, "layers": routed.shape[1], "top_k": routed.shape[2],
            "unfilled_rows": unfilled, "counts": counts.tolist()}
@@ -149,7 +149,7 @@ def capture_one(base, model, s, g, i, tools, effort, seen_prefixes, sums=None):
     return row
 
 
-def run(base, model, out, limit=None, effort="medium", data=DATA, sources=SOURCES, sums=None):
+def run(base, model, out, limit=None, effort="medium", data=DATA, sources=SOURCES, sums=None, experts=EXPERTS):
     sessions = [json.loads(line) for line in (data / "sessions.jsonl").open()]
     tools = json.loads((data / "tools.json").read_text())["tools"]
     todo = list(segments(sessions, sources=sources))[:limit]
@@ -164,7 +164,7 @@ def run(base, model, out, limit=None, effort="medium", data=DATA, sources=SOURCE
             row = {"session": s["id"], "segment": g, "index": i, "skill": s["skill"]}
             began = time.monotonic()
             try:
-                row.update(capture_one(base, model, s, g, i, tools, effort, seen, sums))
+                row.update(capture_one(base, model, s, g, i, tools, effort, seen, sums, experts))
                 if row["prefix_counted"]:
                     seen.add(row["prefix"])
             except Exception as exc:  # a failed segment is recorded, the run goes on
@@ -271,6 +271,8 @@ def main(argv=None):
     parser.add_argument("--sources", default=",".join(SOURCES),
                         help="session sources to capture, comma-separated (e2e and cron for the rank data)")
     parser.add_argument("--sums", type=Path, help="the routing_sums.npz of the patched capture container")
+    parser.add_argument("--experts", type=int, default=EXPERTS,
+                        help="the routed experts per layer of the model (216 for DeepSeek V4 Flash, 256 for Qwen3.6-35B-A3B)")
     args = parser.parse_args(argv)
     if args.rank:
         result = rank(load(args.rank[0]), args.order, args.min_skill_tokens)
@@ -284,7 +286,7 @@ def main(argv=None):
     with urllib.request.urlopen(args.base_url + "/v1/models", timeout=30) as resp:
         model = args.model or json.load(resp)["data"][0]["id"]
     run(args.base_url, model, args.out, args.limit, args.effort, args.data,
-        tuple(args.sources.split(",")), args.sums)
+        tuple(args.sources.split(",")), args.sums, args.experts)
 
 
 if __name__ == "__main__":
