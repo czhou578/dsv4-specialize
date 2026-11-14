@@ -40,7 +40,8 @@ def test_the_watch_stops_qwen_below_the_floor_and_only_qwen(tmp_path):
         watch(tmp_path, 1500, qwen.pid, qv)
         assert qwen.wait(timeout=5) is not None          # below the floor: Qwen is stopped
         assert "the Qwen server (pid" in (tmp_path / "watch.log").read_text()
-        assert len((tmp_path / "mem.log").read_text().splitlines()) == 3
+        rows = [line.split() for line in (tmp_path / "mem.log").read_text().splitlines()]
+        assert [r[1] for r in rows] == ["5000", "1500", "1500"] and all(len(r) == 3 and r[2].isdigit() for r in rows)
     finally:
         for p in (qwen, other):
             p.kill()
