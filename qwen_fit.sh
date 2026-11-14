@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Phase A of plans/PLAN_SECOND_MODEL_FIT.md §4: measure the memory of Qwen 27B NVFP4 alone, at the settings of a second
-# model beside DeepSeek (256k context, one sequence), then restore the live server. Qwen runs as a plain process of
-# the vLLM 0.33 venv on port 8889, with no restart. The points (POINTS, default "f1 f2 f3"):
-#   f1  prefill budget 2,048 tokens, no draft: the smallest setup
-#   f2  prefill budget 8,192 tokens, no draft: what the prefill budget costs
-#   f3  prefill budget 2,048 tokens, the MTP draft (K 3): what the draft costs and gains
+# Phase A of plans/PLAN_SECOND_MODEL_FIT.md §4 and §6: measure the memory and the speed of a second model alone, at the
+# settings of a model beside DeepSeek (256k context, one sequence), then restore the live server. The model runs as a
+# plain process of the vLLM 0.33 venv on port 8889, with no restart. The points (POINTS, default "f1 f2 f3"):
+#   f1 f2 f3  Qwen3.8-27B NVFP4: prefill budget 2,048 with no draft, 8,192 with no draft, 2,048 with the MTP draft
+#   q1 q2     Qwen3.6-35B-A3B NVFP4 (unsloth "Fast", a MoE with 3B active parameters): no draft, the MTP draft (K 3)
+#   n1 n2     Nemotron-3.5-Lightning-30B-A3B NVFP4 (the recipe of its model card): no draft, the DSpark draft (K 3)
+# The q and n points use a prefill budget of 2,048 tokens and the default loader (the fastsafetensors loader of the
+# f points has a large peak at the load). Download a model first: the boots run with HF_HUB_OFFLINE=1.
 # All points: --max-model-len 256000, a KV pin of 1.04x of the need, FP8 KV, --max-num-seqs 1, no images.
 # Each point: the free GPU memory that torch sees, boot, smoke (a short request and a tool call), one prompt of
 # about 250,000 tokens, the bot decode test (5 sessions, 1 run), stop. The available memory is sampled every 5 s.
@@ -20,10 +22,20 @@ source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 POINTS=${POINTS:-f1 f2 f3}
 QV=${QV:-$HOME/venvs/vllm033/bin}          # the venv of vLLM 0.33.0 (model-benchmarks docs/dgx-spark.md)
-QMODEL=nvidia/Qwen3.8-27B-NVFP4 QNAME=qwen3.8-27b-fit QURL=http://127.0.0.1:8889
-PIN0=${PIN0:-8933531976}                   # 8.32 GiB: 256,000 tokens x 33.6 KB x 1.04 (the benchmark: 16 GiB hold 512,023)
-declare -A BUDGET=([f1]=2048 [f2]=8192 [f3]=2048) DRAFT=([f1]=0 [f2]=0 [f3]=1)
-QPID= SAMPLER= PIN=$PIN0
+QNAME=second-model-fit QURL=http://127.0.0.1:8889
+MTP='{"method":"mtp","num_speculative_tokens":3}' NEMO=nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
+Q27="--attention-backend flashinfer --reasoning-parser qwen3 --tool-call-parser qwen3_coder --load-format fastsafetensors --limit-mm-per-prompt {\"image\":0,\"video\":0}"
+Q35="--attention-backend flashinfer --moe-backend flashinfer_cutlass --reasoning-parser qwen3 --tool-call-parser qwen3_xml --language-model-only"
+NEM="--moe-backend marlin --mamba-backend flashinfer --reasoning-parser nemotron_v3 --tool-call-parser qwen3_coder"
+# The first KV pin of a point is 1.04x of the estimated need for 256,000 tokens: 33.6 KB per token for the 27B
+# (measured), 10.5 KB for the 35B-A3B (10 attention layers), 3.1 KB for Nemotron (6 attention layers). qboot corrects it.
+declare -A BUDGET=([f1]=2048 [f2]=8192 [f3]=2048 [q1]=2048 [q2]=2048 [n1]=2048 [n2]=2048) \
+  DRAFT=([f3]="$MTP" [q2]="$MTP" [n2]="{\"model\":\"$NEMO-DSpark\",\"num_speculative_tokens\":3}") \
+  MODEL=([f1]=nvidia/Qwen3.8-27B-NVFP4 [f2]=nvidia/Qwen3.8-27B-NVFP4 [f3]=nvidia/Qwen3.8-27B-NVFP4 \
+         [q1]=unsloth/Qwen3.6-35B-A3B-NVFP4-Fast [q2]=unsloth/Qwen3.6-35B-A3B-NVFP4-Fast [n1]=$NEMO [n2]=$NEMO) \
+  FLAGS=([f1]="$Q27" [f2]="$Q27" [f3]="$Q27" [q1]="$Q35" [q2]="$Q35" [n1]="$NEM" [n2]="$NEM") \
+  PIN0=([f1]=8933531976 [f2]=8933531976 [f3]=8933531976 [q1]=2800000000 [q2]=2800000000 [n1]=820000000 [n2]=820000000)
+QPID= SAMPLER= PIN=
 QPAT='^[^ ]*python[^ ]* [^ ]*vllm serve '   # a real server process only: a shell that names the command does not match
 qrunning() { pgrep -f "$QPAT" > /dev/null; }
 sample_start() {  # $1 file: the available memory every 5 s
@@ -39,13 +51,12 @@ qstop() {  # stop Qwen and wait until it is gone (the sampler goes on: a boot re
 }
 launch() {  # $1 point, $2 server log: start vllm and wait for /health; 0 healthy, 1 failed
   local p=$1 extra=() t0
-  [ ${DRAFT[$p]} = 1 ] && extra=(--speculative-config '{"method":"mtp","num_speculative_tokens":3}')
-  HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 PATH=$QV:$PATH setsid "$QV/vllm" serve $QMODEL --host 127.0.0.1 --port 8889 \
-    --served-model-name $QNAME --tensor-parallel-size 1 --gpu-memory-utilization 0.30 --kv-cache-memory-bytes $PIN \
-    --max-model-len 256000 --max-num-seqs 1 --max-num-batched-tokens ${BUDGET[$p]} --kv-cache-dtype fp8_e4m3 \
-    --attention-backend flashinfer --enable-chunked-prefill --async-scheduling --reasoning-parser qwen3 \
-    --tool-call-parser qwen3_coder --enable-auto-tool-choice --generation-config vllm --load-format fastsafetensors \
-    --limit-mm-per-prompt '{"image":0,"video":0}' "${extra[@]}" > "$2" 2>&1 &
+  [ -n "${DRAFT[$p]:-}" ] && extra=(--speculative-config "${DRAFT[$p]}")
+  HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 CUTE_DSL_ARCH=sm_121a PATH=$QV:$PATH setsid "$QV/vllm" serve ${MODEL[$p]} \
+    --host 127.0.0.1 --port 8889 --served-model-name $QNAME --tensor-parallel-size 1 --gpu-memory-utilization 0.30 \
+    --kv-cache-memory-bytes $PIN --max-model-len 256000 --max-num-seqs 1 --max-num-batched-tokens ${BUDGET[$p]} \
+    --kv-cache-dtype fp8_e4m3 --enable-chunked-prefill --async-scheduling --enable-auto-tool-choice \
+    --generation-config vllm ${FLAGS[$p]} "${extra[@]}" > "$2" 2>&1 &
   QPID=$!
   t0=$(now)
   while [ $(( $(now) - t0 )) -lt 900 ]; do
@@ -56,12 +67,16 @@ launch() {  # $1 point, $2 server log: start vllm and wait for /health; 0 health
   return 1
 }
 qboot() {  # $1 point: launch; if the KV pin is too small, one more launch with the need of the error plus 4%
-  local p=$1 f=$R/qwen-fit-$1-server.log need
+  local p=$1 f=$R/qwen-fit-$1-server.log need o
+  PIN=${PIN0[$p]}
   launch $p $f && return 0
   qstop
   need=$(grep -oE '[0-9.]+ GiB KV cache is needed' $f | head -1 | cut -d' ' -f1)
   [ -n "$need" ] || { log "ERROR: qwen-$p did not boot: $(grep -iE 'error|exception' $f | tail -2 | cut -c1-200)"; return 1; }
   PIN=$(awk -v n=$need 'BEGIN {printf "%d", n * 1.04 * 2^30}')
+  for o in "${!PIN0[@]}"; do   # the later points of this model and draft setting start with the corrected pin
+    [ "${MODEL[$o]}" = "${MODEL[$p]}" ] && [ "${DRAFT[$o]:+d}" = "${DRAFT[$p]:+d}" ] && PIN0[$o]=$PIN
+  done
   log "qwen-$p: the KV pin was too small, the need is $need GiB: one more boot with $PIN bytes"
   wait_mem 120 100
   launch $p $f && return 0
@@ -92,7 +107,7 @@ fpoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
   qrunning && { log "ERROR: a vllm serve process runs"; return 9; }
   wait_mem 300 100 || { log "ERROR: less than 100 GiB available ($(avail_gib))"; return 9; }
   before=$(avail_mb)
-  log "qwen-$p: prefill budget ${BUDGET[$p]}, draft ${DRAFT[$p]}; $before MB available; torch sees $(gpu_free) free"
+  log "qwen-$p: ${MODEL[$p]}, prefill budget ${BUDGET[$p]}, draft ${DRAFT[$p]:-none}; $before MB available; torch sees $(gpu_free) free"
   rm -f $m; sample_start $m
   qboot $p || { sample_stop; return 1; }
   healthy=$(avail_mb) healthy_at=$(now)

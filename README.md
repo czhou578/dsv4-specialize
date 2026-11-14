@@ -194,7 +194,10 @@ fits, and nothing changed on the live server. The patch, the heal and the script
 measured Qwen alone at one sequence: it uses 34.0 GiB with no draft and about 37 GiB with its draft, and about
 29 GiB is available. The DeepSeek savings that do not change the output give at most 8.3 GiB, less than the gap with
 a margin. Qwen is also slower than DeepSeek here: 30.8 tok/s with its draft and 11.1 without, against 35.3. The
-next step is a decision: a swap, a smaller second model, or Qwen at 128k.
+next step was a faster and smaller second model. A second window measured two MoE candidates with 3B active
+parameters. Nemotron-3.5-Lightning-30B-A3B is the fastest and the smallest: 74 tok/s in 25.5 GiB with no draft (it
+fits today with a margin of about 3.5 GiB), and 127 tok/s in 28.8 GiB with its DSpark draft. Its quality on the
+bot's skills is not tested yet.
 
 - Plan: [PLAN_SECOND_MODEL_FIT.md](plans/PLAN_SECOND_MODEL_FIT.md).
 - Run script: [qwen_fit.sh](qwen_fit.sh), with its client [qwen_fit.py](qwen_fit.py) and the dry run

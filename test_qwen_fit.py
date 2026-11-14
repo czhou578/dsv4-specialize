@@ -26,9 +26,9 @@ sample_start() { printf '1 118000\n2 84000\n9999999999 80000\n' > "$1"; }
 sample_stop() { :; }
 N=0
 launch() {
-  N=$((N + 1)); log "STUB launch $1 pin=$PIN budget=${BUDGET[$1]} draft=${DRAFT[$1]}"
+  N=$((N + 1)); log "STUB launch $1 ${MODEL[$1]##*/} pin=$PIN budget=${BUDGET[$1]} draft=${DRAFT[$1]:-none} flags=${FLAGS[$1]}"
   case " ${STUB_FAIL:-} " in *" $1 "*) echo "RuntimeError: boom" > "$2"; return 1;; esac
-  if [ "${STUB_SMALL_PIN:-}" = "$1" ] && [ "$PIN" = "$PIN0" ]; then
+  if [ "${STUB_SMALL_PIN:-}" = "$1" ] && [ "$PIN" = 8933531976 ]; then
     echo "ValueError: 8.80 GiB KV cache is needed, which is larger than the available KV cache memory (8.32 GiB)" > "$2"; return 1
   fi
   printf 'INFO Model loading took 20.1 GiB memory and 7 seconds\nINFO GPU KV cache size: 266,240 tokens\n' > "$2"
@@ -79,9 +79,9 @@ class WindowTest(unittest.TestCase):
     def test_a_normal_window(self):
         rc, log, d = self.run_script()
         self.assertEqual(rc, 0, log)
-        self.assertIn("STUB launch f1 pin=8933531976 budget=2048 draft=0", log)
-        self.assertIn("STUB launch f2 pin=8933531976 budget=8192 draft=0", log)
-        self.assertIn("STUB launch f3 pin=8933531976 budget=2048 draft=1", log)
+        self.assertIn("STUB launch f1 Qwen3.8-27B-NVFP4 pin=8933531976 budget=2048 draft=none", log)
+        self.assertIn("STUB launch f2 Qwen3.8-27B-NVFP4 pin=8933531976 budget=8192 draft=none", log)
+        self.assertIn('STUB launch f3 Qwen3.8-27B-NVFP4 pin=8933531976 budget=2048 draft={"method":"mtp","num_speculative_tokens":3}', log)
         self.assertIn("qwen-f1: overhead X 8.69 GiB at the peak", log)       # (118000 - 80000) / 1024 - 20.1 - 8.32
         self.assertEqual(json.loads((d / "qwen-fit-f1.json").read_text())["kv_tokens"], 266240)
         self.assertEqual(log.count("STUB stop_main"), 3)
@@ -93,8 +93,19 @@ class WindowTest(unittest.TestCase):
         self.assertEqual(rc, 0, log)
         pin = int(8.80 * 1.04 * 2**30)
         self.assertIn(f"the need is 8.80 GiB: one more boot with {pin} bytes", log)
-        self.assertIn(f"STUB launch f2 pin={pin}", log)                       # the later points keep the larger pin
+        self.assertIn(f"STUB launch f2 Qwen3.8-27B-NVFP4 pin={pin}", log)     # the later points of the model keep the pin
         self.assertIn("STUB tests f1", log)
+
+    def test_the_points_of_the_fast_models(self):
+        rc, log, _ = self.run_script(POINTS="q1 n1 q2 n2")
+        self.assertEqual(rc, 0, log)
+        self.assertIn("STUB launch q1 Qwen3.6-35B-A3B-NVFP4-Fast pin=2800000000 budget=2048 draft=none flags=--attention-backend "
+                      "flashinfer --moe-backend flashinfer_cutlass --reasoning-parser qwen3 --tool-call-parser qwen3_xml "
+                      "--language-model-only", log)
+        self.assertIn('STUB launch q2 Qwen3.6-35B-A3B-NVFP4-Fast pin=2800000000 budget=2048 draft={"method":"mtp"', log)
+        self.assertIn("STUB launch n1 NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 pin=820000000 budget=2048 draft=none "
+                      "flags=--moe-backend marlin --mamba-backend flashinfer --reasoning-parser nemotron_v3", log)
+        self.assertIn('draft={"model":"nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark","num_speculative_tokens":3}', log)
 
     def test_failed_boots_skip_the_point_and_two_in_a_row_restore(self):
         rc, log, _ = self.run_script(STUB_FAIL="f2")
