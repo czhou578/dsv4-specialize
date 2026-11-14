@@ -50,8 +50,9 @@ PAIR_STUB = r'''
 healthy() { case "$1" in *8888) return 0;; *) [ -s "$PIDFILE" ];; esac; }
 tmux() { [ -e $STUB_DIR/watch_on ]; }
 avail_mb() { echo 30000; }
-boot() { sleep 60 & echo $! > "$PIDFILE"; return 0; }
-for t in idle qlong dlong qspeed dspeed both; do eval "t_$t() { echo $t >> $STUB_DIR/ran; }"; done
+boot() { setsid sleep 60 & echo $! > "$PIDFILE"; return 0; }   # a child of the script in its own group, as the real server
+for t in idle qlong dlong qspeed dspeed; do eval "t_$t() { echo $t >> $STUB_DIR/ran; }"; done
+speed_of() { echo "$3" >> $STUB_DIR/speed; }   # the real t_both runs: it must not wait for the server child
 rate() { echo "99.0 tok/s"; }
 '''
 
@@ -62,9 +63,11 @@ def pair(tmp, watch_on, keep="0"):
     if watch_on:
         (tmp / "watch_on").write_text("")
     (tmp / "mem.log").write_text(f"{int(time.time())} 29000\n")
+    for d in ("qwen-k208", "qwen-draft-nvfp4", "results"):
+        (tmp / "s" / d).mkdir(parents=True, exist_ok=True)
     for d in ("qwen-k208", "qwen-draft-nvfp4"):
-        assert (HERE / d / "config.json").exists()
-    env = {**os.environ, "PAIR_STUB": str(tmp / "stub.sh"), "STUB_DIR": str(tmp), "TAG": "test", "KEEP": keep,
+        (tmp / "s" / d / "config.json").write_text("{}")
+    env = {**os.environ, "PAIR_STUB": str(tmp / "stub.sh"), "STUB_DIR": str(tmp), "TAG": "test", "KEEP": keep, "PAIR_S": str(tmp / "s"),
            "LOG": str(tmp / "pair.log"), "MEM": str(tmp / "mem.log"), "PIDFILE": str(tmp / "q.pid")}
     proc = subprocess.run(["bash", str(HERE / "pair_run.sh")], env=env, capture_output=True, text=True, timeout=120)
     return proc.returncode, (tmp / "pair.log").read_text()
@@ -79,5 +82,6 @@ def test_phase_d_needs_the_watch(tmp_path):
 def test_phase_d_runs_the_tests_in_order(tmp_path):
     rc, log = pair(tmp_path, watch_on=True)
     assert rc == 0, log
-    assert (tmp_path / "ran").read_text().split() == ["idle", "qlong", "dlong", "qspeed", "dspeed", "both"]
+    assert (tmp_path / "ran").read_text().split() == ["idle", "qlong", "dlong", "qspeed", "dspeed"]
+    assert sorted(Path(x).name for x in (tmp_path / "speed").read_text().split()) == ["pair-test-bothd", "pair-test-bothq"]
     assert "pair-test idle: exit 0; lowest available" in log and "Qwen stopped" in log

@@ -679,6 +679,35 @@ DeepSeek. The cache now holds this setup.
 **The gate.** The lowest available memory of every test stays at or above 2 GiB (the watch never fires), and both
 servers stay healthy. Then 24 hours of normal use with the cron jobs and no out-of-memory event.
 
+### 8.2 Result without the context cap (2026-11-14, 14:25 to 14:48)
+
+DeepSeek did not stop. 28,799 MB was available beside it before the boot. Qwen booted in 3 minutes from the warm
+compile cache (`gpu_memory_utilization` is not part of vLLM's compile key). The lowest available memory during the
+boot was 8,505 MB.
+
+| Test | Lowest available | Result |
+|---|---|---|
+| Both idle, 60 s | 9,852 MB | |
+| Qwen: 119,745 tokens, while DeepSeek decodes | 8,220 MB | Qwen 52.7 s (45 s alone); DeepSeek 133 tokens in 18.6 s |
+| DeepSeek: 127,837 tokens, while Qwen decodes | 8,477 MB | DeepSeek 245 s; Qwen 44.9 tok/s |
+| Bot decode test, Qwen alone | 8,327 MB | 99.1 tok/s |
+| Bot decode test, DeepSeek alone | 7,517 MB | 36.9 tok/s |
+| Bot decode test, both at once | 7,459 MB | Qwen 46.8 tok/s, DeepSeek 19.3 tok/s |
+
+**The gate holds.** The lowest available memory of the run is 7,459 MB (7.3 GiB), far above the floor of 2 GiB;
+the watch never fired; both servers stayed healthy. Most of that memory is reclaimable file cache (with both idle:
+1.6 GB free, 8.9 GB cached). The use of Qwen beside DeepSeek (about 18.7 GB of available memory) is lower than the
+25.4 GiB that the windows measured with DeepSeek stopped: the windows count the fall of `MemAvailable` from a machine
+with about 118 GB available, and that fall is not the same as the cost beside a full server.
+
+**Speed.** One model alone keeps its speed. When both decode at the same time, they share the memory bandwidth:
+Qwen falls from 99 to 47 tok/s and DeepSeek from 37 to 19 tok/s. A router that sends one request at a time to one
+model keeps full speed.
+
+**A fault of the script.** The last test waited with a bare `wait`, which also waits for the Qwen server (a child of
+the script), so the script did not write its summary; the results above come from its files. The fix waits for the
+client by its pid. Qwen stayed up.
+
 As `PLAN_SECOND_MODEL_FIT.md` §7: DeepSeek first, then the pruned Qwen with a very small utilization value or after
 a drop of the page cache, a memory watch that stops Qwen below 2 GiB, the load tests on both, and the 24-hour gate
 of the router plan.
