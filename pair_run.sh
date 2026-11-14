@@ -15,7 +15,8 @@
 # CAUTION: out of memory, the Spark can do a hard reset. The watch stops Qwen below 2 GiB. Start this only with the
 # user's go:   tmux new -d -s pair "TAG=nocap ~/Projects/dsv4-specialize/pair_run.sh"
 set -u
-S=/home/colin-spark/Projects/dsv4-specialize R=$S/results W=/home/colin-spark/Projects/stock-research-model-eval
+S=${PAIR_S:-/home/colin-spark/Projects/dsv4-specialize}   # PAIR_S: a test folder (test_pair_scripts.py)
+R=$S/results W=/home/colin-spark/Projects/stock-research-model-eval
 PY=/home/colin-spark/.hermes/stock-research/.venv/bin/python QV=${QV:-$HOME/venvs/vllm033/bin}
 TAG=${TAG:?set TAG, e.g. nocap or cap}
 LOG=${LOG:-$S/logs/pair-$TAG.log} MEM=${MEM:-$R/pair-mem.log} PIDFILE=${PIDFILE:-$R/pair-qwen.pid}
@@ -34,7 +35,15 @@ lowest() {  # $1 $2: epochs; the lowest available MB of the watch between them
   awk -v a="$1" -v b="$2" '$1 >= a && $1 <= b && (m == "" || $2 < m) {m = $2} END {print m}' "$MEM"
 }
 rate() { $PY $S/qwen_fit.py --rate "$1" 2>&1 | tail -1; }
-stop_qwen() { qwen_up && kill -TERM -- -"$(cat "$PIDFILE")" 2>/dev/null; sleep 10; qwen_up && kill -KILL -- -"$(cat "$PIDFILE")"; rm -f "$PIDFILE"; }
+stop_qwen() {  # the process group of the server (setsid), or the pid alone
+  local pid
+  qwen_up || { rm -f "$PIDFILE"; return 0; }
+  pid=$(cat "$PIDFILE")
+  kill -TERM -- -"$pid" 2>/dev/null || kill -TERM "$pid"
+  sleep 10
+  kill -0 "$pid" 2>/dev/null && { kill -KILL -- -"$pid" 2>/dev/null || kill -KILL "$pid"; }
+  rm -f "$PIDFILE"
+}
 
 checks() {
   local h=$(date +%H) d=$(date +%u)
@@ -92,7 +101,12 @@ speed_of() {  # $1 url, $2 model, $3 out
 }
 t_qspeed() { speed_of $QURL $QNAME $R/pair-$TAG-qspeed; }
 t_dspeed() { speed_of $DS $DSNAME $R/pair-$TAG-dspeed; }
-t_both() { speed_of $QURL $QNAME $R/pair-$TAG-bothq & speed_of $DS $DSNAME $R/pair-$TAG-bothd; wait; }
+t_both() {   # wait for the Qwen client by its pid: a bare wait also waits for the Qwen server, a child of this shell
+  speed_of $QURL $QNAME $R/pair-$TAG-bothq &
+  local q=$!
+  speed_of $DS $DSNAME $R/pair-$TAG-bothd
+  wait $q
+}
 
 [ -n "${PAIR_STUB:-}" ] && source "$PAIR_STUB"   # the dry run of test_pair_scripts.py
 log "phase D ($TAG) start: $(avail_mb) MB available beside DeepSeek"
