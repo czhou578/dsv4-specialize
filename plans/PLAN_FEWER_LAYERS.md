@@ -575,6 +575,39 @@ on the boot of its replay.
 Also record, for each point, the rise on the replay divided by the rise on the screen. Phase D uses this ratio in
 place of the margins of §7.6.
 
+### 8.5 Result (2026-11-13, 12:00 to 16:07, on your "Start now")
+
+The window ran `POINTS='s0 s1h s1'` with `S1_SET=F24` and `HEAL_FILE=results/heal-F24.npz`. The live server stopped
+at 12:00 and was healthy again at 16:06:50 (reply "OK.", gateway active). The downtime was 4 h 6 min. Files:
+`logs/skip-replay.log`, `results/skip-{s0,s1h,s1}-{a,b}.jsonl`, `results/boot-skip-*.log` (not in git).
+
+| Point | Boot | Replay a, b | Mean NLL | Against K 216 (gate: +3%) | Against S0 | Reasoning, answer against S0 | Tool names (K 216: 0.9277) | Decisions (K 216: 41) | Gate |
+|---|---|---|---|---|---|---|---|---|---|
+| S0: no skip | 181 s, 69.79 GiB | 0.4569, 0.4578 | 0.4573 | +3.00% | — | — | 0.9398, 0.9398 | 40, 39 | Fail (by rounding) |
+| S1h: F24 with its heal map | 165 s, 69.82 GiB | 0.4585, 0.4599 | 0.4592 | +3.43% | **+0.42%** | +0.54%, +0.19% | 0.9639, 0.9639 | 38, 41 | Fail |
+| S1: F24 | 150 s, 69.79 GiB | 0.4623, 0.4620 | 0.4621 | +4.09% | **+1.06%** | +1.04%, +1.09% | 0.9398, 0.9639 | 39, 41 | Fail |
+
+- **The boot checks pass at every point:** the skip line of the set, the heal line of S1h (`heal F24 sha256
+  318a83fa408dfa10`), no graph from the compile cache, and the smoke test (the JSON schema and both tool choices).
+  These were the first compiled boots of the patch, with the draft. A boot with the compile cache off took 150 to
+  181 s.
+- **The S0 check passes:** the mean of S0 is +0.24% against the live replays (0.4562; the limit is 1%). So the patch
+  does not change the model with no skip. The S0 speed is the live speed: the bot decode 35.33 tok/s with 2.19
+  accepted tokens per draft step (the live server: 35.30 tok/s), the code decode 37.57 tok/s.
+- **No point passes the replay gate.** S0 itself sits on the gate in this window (0.4573). The budget of §0
+  (0.0011 NLL) was inside the noise of the replay, and here it is zero. No speed test ran for S1h and S1 (§8.2).
+- **The heal works.** It removes 61% of the rise of S1 (from +1.06% to +0.42% against S0). The two replays of each
+  point agree within 0.31%, and the difference of S1 and S1h (0.63 points) is larger than that. The heal helps the
+  answer tokens most (+1.09% to +0.19%).
+- **The screen understates the replay.** F24 rose by +0.54% on the screen and by +1.06% on the replay: a ratio of
+  2.0 (§8.4). The loss of S1 is the same in the reasoning and in the answer tokens.
+- **The boot line** gave "skipped weights 0.02 GiB" for F24. The EXL3 runtime keeps the routed experts (about
+  1.3 GiB for F24) outside the module, so the line did not count them. The line now says "registered weights ...
+  (EXL3 experts not counted)". The checks of the scripts do not read this field.
+
+By the table of §8.4: no point passes, and the heal removes at least half of the rise of S1. That row sends the plan
+to Phase D. §9.1 gives the decision.
+
 ## 9. Phase D: heal maps for sets (only if §8.4 says so)
 
 **The map.** It follows Ghosted Layers. At the boundary of a skipped block, the state s becomes s + s·M, with

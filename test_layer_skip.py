@@ -109,7 +109,8 @@ def test_controller_fixed_set_and_boot_line():
     assert [(m.layer_idx, m.layer_skip, m.layer_probe) for m in mods.values()] == \
         [(i, {2: "L", 4: "F"}.get(i), None) for i in range(8)] and not c.runtime
     gib = (2 * 16 * 16 + 16 * 64 * 2) * 4 / 2**30
-    assert c.boot_line() == f"layer skip: set L2,F4 (fixed); skipped weights {gib:.2f} GiB; heal none; probe off"
+    assert c.boot_line() == (f"layer skip: set L2,F4 (fixed); registered weights {gib:.2f} GiB (EXL3 experts not "
+                             "counted); heal none; probe off")
 
 
 def test_heal_file_rules_and_boot_line(tmp_path):

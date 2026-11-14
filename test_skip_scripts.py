@@ -21,7 +21,7 @@ boot() {
   log "STUB boot $1 compose $TEST_COMPOSE"
   case " ${STUB_BOOT_FAIL:-} " in *" $1 "*) return 1;; esac
   [ "${STUB_NO_LINE:-0}" = 1 ] && { echo "no line" > $R/boot-$1.log; return 0; }
-  { echo "WARNING layer skip: set none (run-time file $SKIP_FILE); skipped weights 0.00 GiB; heal none; probe on"
+  { echo "WARNING layer skip: set none (run-time file $SKIP_FILE); registered weights 0.00 GiB (EXL3 experts not counted); heal none; probe on"
     echo "INFO Initializing a V1 LLM engine with config: enable_prefix_caching=${STUB_CACHE:-False}, x"; } > $R/boot-$1.log
 }
 client() {
@@ -115,7 +115,7 @@ boot() {
   local s=${LAYER_SKIP:-none} h=none
   [ " ${STUB_WRONG_LINE:-} " = " $1 " ] && s=L99
   [ -n "${LAYER_HEAL:-}" ] && h="F24 sha256 abc"
-  { echo "WARNING layer skip: set $s (fixed); skipped weights 1.30 GiB; heal $h; probe off"
+  { echo "WARNING layer skip: set $s (fixed); registered weights 0.02 GiB (EXL3 experts not counted); heal $h; probe off"
     [ " ${STUB_CACHE:-} " = " $1 " ] && echo "INFO Directly load AOT compilation from path /cache/x"; } > $R/boot-$1.log
   return 0
 }
