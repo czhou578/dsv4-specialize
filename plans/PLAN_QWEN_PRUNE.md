@@ -1,7 +1,8 @@
 # Plan: prune the experts of Qwen3.6-35B-A3B for the fast route
 
 **Status:** 2026-11-13: Phase B done (§6.1): 99 segments captured, the rank built, and K 176, 192 and 208 built. The
-spread of the routing makes K 176 unlikely to pass (§6.1). The gate window (Phase C) runs next ·
+spread of the routing makes K 176 unlikely to pass (§6.1). Gate window 1 measured the reference; the pruned points
+did not boot, because vLLM builds the draft with the target config (§7.1). Gate window 2 runs with a patch ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_SECOND_MODEL_FIT.md` (§5.5 the measured fit and speed of the candidates), `PLAN_PHYSICAL_PRUNE.md`
 and `PRUNE.md` (the method on DeepSeek), `PLAN_BETTER_RANK.md` (the ranks), `PLAN_MODEL_ROUTER.md` in the bot's repo
@@ -12,7 +13,7 @@ windows. The model runs with the vLLM 0.33 venv, alone on port 8889. No change t
 |---|---|
 | §5 Phase A: the data, the tools and the tests (no downtime, about 2 days) | ✅ 2026-11-13: PRs #54 to #57 (§5.1 to §5.3) |
 | §6 Phase B: the capture window (about 85 min downtime) | ✅ 2026-11-13, 20:20 to 21:39 (§6.1) |
-| §7 Phase C: the builds and the gate window (about 80 min downtime) | ⬜ |
+| §7 Phase C: the builds and the gate window (about 80 min downtime) | 🟡 window 1 on 2026-11-13: the reference only (§7.1) |
 | §8 Phase D: both servers at the same time (`PLAN_SECOND_MODEL_FIT.md` §7) | ⬜ |
 
 ---
@@ -313,6 +314,42 @@ How to read the result:
 | Only K 208 passes | Phase D with K 208 and D1 (margin about 3.4 GiB). Your decision on the smaller margin |
 | No point passes G1 or G3 | Stop the prune. The choices are Qwen without its draft at 128k (about 27.4 GiB), or Nemotron |
 | A point passes the quality gates, but the speed with the draft falls | Rebuild the draft experts by the rank of the pruned target, as the bot-rank draft of DeepSeek. Else your decision |
+
+### 7.1 Gate window 1 (2026-11-13, 21:50 to 22:23)
+
+The live server stopped at 21:50 and was healthy again at 22:22:53 (reply "OK.", gateway active): 33 minutes of
+downtime. Files (not in git): `results/qwen-fit-g256*`, `logs/qwen-gate.log`, and the two failed boots in
+`results/qwen-gate1-g{208,192}-server.log`.
+
+**The reference (g256: the full model with the MTP draft, 128k):**
+
+| Measure | Value |
+|---|---|
+| The score of the 60 recorded turns | NLL 0.3144 per token; 89.3% of the tokens rank first; 60 of 60 decisions; 100% of the tool names |
+| The tool-call suite | 52 of 85 tasks, composite 5.06 (c1 in the capture window: 51 of 85). With the draft, the suite took 10 minutes |
+| The bot decode test | 97.8 tok/s (c2: 98.2) |
+| The use at the peak | 31.69 GiB, with the score and suite clients (c2 with no clients: 29.9 GiB) |
+
+**The fault.** K 208 and K 192 did not boot ("IndexError: index 208 is out of bounds for dimension 0 with size
+208"), and the window restored the live server after two failed boots in a row, as designed. The cause is in vLLM
+0.33: the proposer builds the draft with the `vllm_config` of the target, and `Qwen3_5MTP` reads `num_experts` from
+the target config. The `model` field of the speculative config changes only the folder of the draft weights. The draft
+of 256 experts then goes into tensors of 208 rows. In stock vLLM, the draft of a pruned target must have the same
+expert count as the target.
+
+**The fix: `qwen_mtp_patch/sitecustomize.py`.** On `PYTHONPATH`, it wraps `Qwen3_5MTP.__init__`: when the draft config
+has another expert count than the target, the draft gets a shallow copy of `vllm_config` with a copy of the text
+config that has the expert count of the draft. It changes nothing else, and nothing when the counts are equal. It was
+checked with the real configs of vLLM 0.33 (the draft view has 256 experts, the target keeps 208, and the quant and
+compile settings stay shared). The first GPU boot with the patch is in window 2. For Phase D, the server of the
+pruned model needs the same `PYTHONPATH`.
+
+**Gate window 2:** the points g208, g192 and g176 with the patch; p208, p192 and p176 (the same folders with no
+draft: smoke, score and tool-call suite) run only when their g point has no score, so the quality gates G1 to G3 are
+measured even if the patch fails. The draft does not change the outputs of the target, so G1 to G3 do not depend on
+it. G5 and G6 need the draft. The last point, r256, scores the full model again, for the noise between the two
+windows. The pruned points are compared with g256 of window 1: the vLLM build, the flags and the recorded set are the
+same.
 
 ## 8. Phase D: both servers at the same time
 
