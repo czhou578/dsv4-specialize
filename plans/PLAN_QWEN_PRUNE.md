@@ -1,8 +1,9 @@
 # Plan: prune the experts of Qwen3.6-35B-A3B for the fast route
 
-**Status:** 2026-11-13: Phase B done (§6.1): 99 segments captured, the rank built, and K 176, 192 and 208 built. The
-spread of the routing makes K 176 unlikely to pass (§6.1). Gate window 1 measured the reference; the pruned points
-did not boot, because vLLM builds the draft with the target config (§7.1). Gate window 2 runs with a patch ·
+**Status:** 2026-11-13: **closed, no prune.** Every pruned point fails G1: the NLL of Qwen's own turns rises by
++4.2% at K 208, +8.0% at K 192 and +11.1% at K 176 (limit +3%), and the full model repeats within 0.1% (§7.2). G1
+needs about K 224, which saves about 2.1 GiB and leaves a margin of about 1 GiB, far from the 4 GiB of G6. No K
+passes both. Nothing is deployed ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_SECOND_MODEL_FIT.md` (§5.5 the measured fit and speed of the candidates), `PLAN_PHYSICAL_PRUNE.md`
 and `PRUNE.md` (the method on DeepSeek), `PLAN_BETTER_RANK.md` (the ranks), `PLAN_MODEL_ROUTER.md` in the bot's repo
@@ -13,7 +14,7 @@ windows. The model runs with the vLLM 0.33 venv, alone on port 8889. No change t
 |---|---|
 | §5 Phase A: the data, the tools and the tests (no downtime, about 2 days) | ✅ 2026-11-13: PRs #54 to #57 (§5.1 to §5.3) |
 | §6 Phase B: the capture window (about 85 min downtime) | ✅ 2026-11-13, 20:20 to 21:39 (§6.1) |
-| §7 Phase C: the builds and the gate window (about 80 min downtime) | 🟡 window 1 on 2026-11-13: the reference only (§7.1) |
+| §7 Phase C: the builds and the gate window (about 80 min downtime) | ✅ 2026-11-13, two windows (§7.1, §7.2): no point passes G1 |
 | §8 Phase D: both servers at the same time (`PLAN_SECOND_MODEL_FIT.md` §7) | ⬜ |
 
 ---
@@ -350,6 +351,54 @@ measured even if the patch fails. The draft does not change the outputs of the t
 it. G5 and G6 need the draft. The last point, r256, scores the full model again, for the noise between the two
 windows. The pruned points are compared with g256 of window 1: the vLLM build, the flags and the recorded set are the
 same.
+
+### 7.2 Gate window 2 and the decision (2026-11-13, 22:30 to 23:56)
+
+The live server stopped at 22:30 and was healthy again at 23:55:47 (reply "OK.", gateway active): 85 minutes of
+downtime. Files (not in git): `results/qwen-fit-{g208,g192,g176,r256}*`,
+`logs/qwen-gate2.log`. The patch of §7.1 worked: each pruned point booted with the draft of 256 experts on the first
+try ("qwen_mtp_patch: the MTP draft keeps 256 experts (the target has 208)"), so the p points did not run.
+
+| Point | Loaded | NLL change (G1, limit +3%) | Tokens that rank first | Decisions, tool names (G2) | Tool-call suite (G3) | Speed with the draft (G5) | Use at the peak (G6) |
+|---|---|---|---|---|---|---|---|
+| K 256, window 1 (g256, the reference) | 21.22 GiB | | 89.3% | 60 of 60, 100% | 52 of 85 | 97.8 tok/s | 31.69 GiB |
+| K 256, window 2 (r256) | 21.22 GiB | −0.10% | 89.2% | 60 of 60, 100% | | 98.5 tok/s | 31.14 GiB |
+| K 208 | 18.09 GiB | **+4.15%** (+4.25% against r256) | 88.7% | 60 of 60, 100% | 50 of 85 | 101.2 tok/s | 28.85 GiB |
+| K 192 | 17.00 GiB | **+8.04%** (+8.15%) | 88.4% | 60 of 60, 100% | 51 of 85 | 101.4 tok/s | 27.55 GiB |
+| K 176 | 15.98 GiB | **+11.11%** (+11.23%) | 88.2% | 60 of 60, 100% | 51 of 85 | 94.2 tok/s | 26.56 GiB |
+
+The use at the peak holds the score and suite clients; the clean peak of the full model with its draft at 128k is
+29.9 GiB (§6.1). Each point frees in use what it frees in weights.
+
+**What the numbers say:**
+
+- **The loss is real.** The full model repeats within 0.1% between the windows, so +4.15% is 40 times the noise.
+- **The loss is broad.** At K 208, 37 of the 60 turns get worse, and most skills lose 4% to 6%: the repositories,
+  the stock research, the subagents, and the held-out repository (nanoGPT-inference, +4.0%). No single kind of work
+  causes it, so a narrower calibration does not fix it.
+- **Qwen loses more than DeepSeek at the same coverage.** K 208 keeps about 96% of the routing and loses 4.2%; the
+  live DeepSeek prune keeps 95.4% and loses 1.9%. Qwen is smaller and mixes 8 experts per token from a more even
+  routing, so each expert carries more.
+- **The decisions, the tool names and the tool-call suite do not move** (50 to 52 of 85, inside the noise of the
+  suite). The loss is in the wording of Qwen's turns, not yet in the choice of a tool. The gates of §4 put G1 first,
+  as on DeepSeek, because a broad NLL loss shows up in long sessions before it shows up in a short suite.
+- **The patched draft keeps its speed** at K 208 and K 192 (about 101 tok/s). At K 176 the acceptance falls (94 tok/s).
+
+**The decision: no prune.** The first 48 experts cost +4.15% and the next 16 cost +3.9%, so G1 holds only above about
+K 224. K 224 saves about 2.1 GiB, and the full model with its draft at 128k leaves about −0.9 GiB (29.9 GiB against
+about 29 GiB available): the margin at K 224 is about 1.2 GiB, or about 2.3 GiB with the DeepSeek context cap (D1).
+G6 asks for 4 GiB. No K passes both G1 and G6, so nothing is accepted and nothing is deployed. On your request,
+the folders `qwen-k176`, `qwen-k192` and `qwen-k208` were deleted on 2026-11-14. The rank file
+(`results/qwen-rank.json`) stays, and `qwen_prune.py --draft keep` rebuilds a folder in about 75 seconds.
+
+**The choices for the fast route, none taken:**
+
+1. **Nemotron-3.5-Lightning-30B-A3B** (`PLAN_SECOND_MODEL_FIT.md` §5.5): 74 tok/s in 25.5 GiB with no draft at 256k
+   (a margin of about 3.5 GiB), 127 tok/s in 28.8 GiB with its DSpark draft. Its quality on your work is not tested.
+2. **Qwen3.6-35B-A3B in full with a shorter context or no draft:** 58.8 tok/s with no draft at 128k (about 27.4 GiB),
+   or the draft at a context short enough for the margin.
+3. **K 208 with a looser G1:** it passes every other gate and saves 2.8 GiB, but its margin is about 2.3 GiB (3.4
+   with D1). This changes a gate, so it is your decision.
 
 ## 8. Phase D: both servers at the same time
 

@@ -203,6 +203,23 @@ bot's skills is not tested yet.
 - Run script: [qwen_fit.sh](qwen_fit.sh), with its client [qwen_fit.py](qwen_fit.py) and the dry run
   [test_qwen_fit.py](test_qwen_fit.py).
 
+### Next: a prune of Qwen3.6-35B-A3B (2026-11-13: no prune)
+
+**Question:** can a prune of the routed experts let Qwen3.6-35B-A3B run with its MTP draft at 128k beside DeepSeek,
+with a margin of 4 GiB? No. The rank comes from 99 segments of the Claude Code transcripts, the bot sessions and the
+user's repositories (2.44M tokens). Every pruned point fails the NLL gate on 60 held-out turns of the full model:
++4.2% at K 208 of 256, +8.0% at K 192 and +11.1% at K 176, against a limit of +3%. The full model repeats within 0.1%
+between the two windows. The decisions, the tool names and the tool-call suite do not move. The gate holds only above
+about K 224, which saves about 2.1 GiB and leaves a margin of about 1 GiB. Qwen loses about twice as much as DeepSeek
+at the same coverage of the routing.
+
+- Plan: [PLAN_QWEN_PRUNE.md](plans/PLAN_QWEN_PRUNE.md) §6.1 (the capture), §7.1 and §7.2 (the gate windows and the
+  decision).
+- Tools: [qwen_data.py](qwen_data.py) (the calibration data), [capture.py](capture.py) (the routing counts),
+  [qwen_prune.py](qwen_prune.py) (the prune), [qwen_gate.py](qwen_gate.py) (the replay gate), and
+  [qwen_mtp_patch/sitecustomize.py](qwen_mtp_patch/sitecustomize.py): in vLLM 0.33, the MTP draft of a pruned Qwen
+  keeps its own expert count.
+
 ## Documents
 
 | Document | Read it for |
