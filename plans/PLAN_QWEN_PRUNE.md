@@ -708,6 +708,23 @@ model keeps full speed.
 the script), so the script did not write its summary; the results above come from its files. The fix waits for the
 client by its pid. Qwen stayed up.
 
+### 8.3 The context cap is not applied; the 24-hour gate (your decision of 2026-11-14)
+
+You asked for the cap when the projected margin was 3.4 to 4.1 GiB. Without it, the run left 7.3 GiB at its lowest,
+and the cap adds only about 0.35 GiB, at the cost of the 256k context of DeepSeek, a change to Hermes and a restart.
+You chose to skip it. `cap_switch.sh` stays in the repository, unused; its dry run wrote
+`compose-md149t5-c160.yml` into the server folder, and that file is removed. DeepSeek and Hermes are unchanged.
+
+**The 24-hour gate** started at 14:28 on 2026-11-14: Qwen K 208 with the NVFP4 draft stays up on port 8889 (pid in
+`results/pair-qwen.pid`), with the watch in tmux `pair-watch` (`results/pair-mem.log`, `logs/pair-watch.log`). It
+ends at 14:28 on 2026-11-15, before the cron jobs of 2026-11-16. The gate passes if `logs/pair-watch.log` has no
+WATCH line, both servers are healthy, and `journalctl -k` shows no out-of-memory event. Nothing routes requests to
+Qwen yet; the gate covers the normal traffic of DeepSeek beside an idle Qwen.
+
+If DeepSeek restarts by itself (`restart: on-failure:1`) while Qwen runs, its boot needs the memory that Qwen holds:
+the watch then stops Qwen below 2 GiB. To stop Qwen by hand: `kill -TERM -- -$(cat results/pair-qwen.pid)`, then
+`tmux kill-session -t pair-watch`.
+
 As `PLAN_SECOND_MODEL_FIT.md` §7: DeepSeek first, then the pruned Qwen with a very small utilization value or after
 a drop of the page cache, a memory watch that stops Qwen below 2 GiB, the load tests on both, and the 24-hour gate
 of the router plan.
