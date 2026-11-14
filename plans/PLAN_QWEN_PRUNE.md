@@ -1,6 +1,7 @@
 # Plan: prune the experts of Qwen3.6-35B-A3B for the fast route
 
-**Status:** 2026-11-13: plan written; the sizes of §2 are measured; nothing built ·
+**Status:** 2026-11-13: Phase A done (§5.1 to §5.3): the data, the prune tool, the two clients and the window points
+are built, and all 32 tests pass. The capture window (Phase B) waits for your go ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_SECOND_MODEL_FIT.md` (§5.5 the measured fit and speed of the candidates), `PLAN_PHYSICAL_PRUNE.md`
 and `PRUNE.md` (the method on DeepSeek), `PLAN_BETTER_RANK.md` (the ranks), `PLAN_MODEL_ROUTER.md` in the bot's repo
@@ -9,7 +10,7 @@ windows. The model runs with the vLLM 0.33 venv, alone on port 8889. No change t
 
 | Step | Status |
 |---|---|
-| §5 Phase A: the data, the tools and the tests (no downtime, about 2 days) | 🔨 2026-11-13: the data builder (§5.1), the capture option and the prune tool (§5.2) are done; next the two window scripts |
+| §5 Phase A: the data, the tools and the tests (no downtime, about 2 days) | ✅ 2026-11-13: PRs #54 to #57 (§5.1 to §5.3) |
 | §6 Phase B: the capture window (about 85 min downtime) | ⬜ |
 | §7 Phase C: the builds and the gate window (about 80 min downtime) | ⬜ |
 | §8 Phase D: both servers at the same time (`PLAN_SECOND_MODEL_FIT.md` §7) | ⬜ |
@@ -169,6 +170,33 @@ machine, in estimated tokens (characters / 4):
 
 What only a boot can show: that vLLM 0.33 loads the folder. The gate window boots it first.
 
+### 5.3 The clients and the window points (2026-11-13)
+
+- `qwen_gate.py`: the record, the score and the comparison of §4 (G1, G2). On the real data, the pick gives 60
+  distinct targets: 30 from the transcripts, 24 from the bot's sessions and 6 from the held-out repository.
+- `capture.py --generate 256`: after each segment the model writes up to 256 tokens, and their routing counts.
+- The windows are points of `qwen_fit.sh`, not two new scripts: the script already has the boot, the KV pin retry,
+  the memory samples and the restore. `c1`, `c2` and `c3` are the capture window. `g256`, `g192`, `g176` and `g160`
+  are the gate window. Each point has its own context (128k), tests and time need.
+- vLLM 0.33 accepts the four new command lines (its argument parser, no boot).
+- **No `suffix` point.** The suffix draft of vLLM needs the package `arctic_inference`, which is not in the venv. The
+  window tests the `ngram` draft only.
+- The sampling of the recorded set is the thinking-mode setting of the Qwen model card (temperature 0.6, top-p 0.95,
+  top-k 20) with a fixed seed per turn. The +3% limit of G1 comes from the DeepSeek replay, which also scored sampled
+  turns. Read it as a first threshold: the window reports the number, and a result near the limit is your decision.
+
+The commands:
+
+```
+# Phase B, the capture window (about 100 min of downtime)
+POINTS='c1 c2 c3' START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ./qwen_fit.sh
+# after it, with no downtime: the rank and the builds
+python capture.py --rank results/qwen-capture.jsonl results/qwen-rank.json
+python qwen_prune.py --source <snapshot> --rank results/qwen-rank.json --keep 176 --out qwen-k176
+# Phase C, the gate window (about 100 min of downtime)
+POINTS='g256 g176 g192 g160' START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ./qwen_fit.sh
+```
+
 Two questions that Phase A cannot answer, with the fallback for each:
 
 | Question | Check | Fallback |
@@ -187,7 +215,7 @@ All boots: the full model, 128k context, one sequence, port 8889, the default lo
 | 3 | The recorded set: 60 held-out turns at temperature 0 | 10 |
 | 4 | The tool-call suite: the reference of G3 | 10 |
 | 5 | Boot with the MTP draft; the capture of the draft layer on a part of the set; the bot decode test: the reference of G5 | 15 |
-| 6 | Two points with a memory-free draft: `ngram` and `suffix`. A boot and the bot decode test for each | 2 × 9 |
+| 6 | One point with the `ngram` draft, which needs no weights: a boot and the bot decode test | 9 |
 | 7 | The restore of the live server | 3 |
 
 Step 6 tells whether a draft without weights gives a useful part of the gain of the MTP draft. If one does, the

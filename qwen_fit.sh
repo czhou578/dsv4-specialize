@@ -7,9 +7,20 @@
 #   n1 n2     Nemotron-3.5-Lightning-30B-A3B NVFP4 (the recipe of its model card): no draft, the DSpark draft (K 3)
 # The q and n points use a prefill budget of 2,048 tokens and the default loader (the fastsafetensors loader of the
 # f points has a large peak at the load). Download a model first: the boots run with HF_HUB_OFFLINE=1.
-# All points: --max-model-len 256000, a KV pin of 1.04x of the need, FP8 KV, --max-num-seqs 1, no images.
-# Each point: the free GPU memory that torch sees, boot, smoke (a short request and a tool call), one prompt of
-# about 250,000 tokens, the bot decode test (5 sessions, 1 run), stop. The available memory is sampled every 5 s.
+# The windows of plans/PLAN_QWEN_PRUNE.md, all with Qwen3.6-35B-A3B at a context of 128,000 tokens:
+#   c1          §6 the capture: the full model with --enable-return-routed-experts. The capture of qwen-data with 256
+#               generated tokens per segment (capture.py), the recorded set (qwen_gate.py --record), the tool-call
+#               suite of model-benchmarks, the bot decode test
+#   c2          the full model with the MTP draft and the capture flag: a short capture (does it cover the draft
+#               layer?), the bot decode test
+#   c3          the full model with the ngram draft, which needs no weights: the bot decode test
+#   g256        §7 the reference of the gate window: the full model with the MTP draft. The score of the recorded set
+#               (qwen_gate.py --score), the tool-call suite, the bot decode test
+#   g192 g176 g160   the pruned folders qwen-k192, qwen-k176, qwen-k160 (qwen_prune.py) with the MTP draft: the same
+#               tests, and the comparison with g256 (qwen_gate.py --compare)
+# All points: a KV pin of 1.04x of the need, FP8 KV, --max-num-seqs 1, no images. The f, q and n points use
+# --max-model-len 256000 and these tests: smoke (a short request and a tool call), one prompt of about 250,000
+# tokens, and the bot decode test (5 sessions, 1 run). The available memory is sampled every 5 s.
 # The report of a point (results/qwen-fit-<point>.json) gives the overhead X of §2.3: the available memory before the
 # boot, minus its lowest value after the health check, minus the loaded weights and the KV pin. The load itself has
 # a short, larger peak (--load-format fastsafetensors); the report gives it as load_peak.
@@ -35,6 +46,16 @@ declare -A BUDGET=([f1]=2048 [f2]=8192 [f3]=2048 [q1]=2048 [q2]=2048 [n1]=2048 [
          [q1]=unsloth/Qwen3.6-35B-A3B-NVFP4-Fast [q2]=unsloth/Qwen3.6-35B-A3B-NVFP4-Fast [n1]=$NEMO [n2]=$NEMO) \
   FLAGS=([f1]="$Q27" [f2]="$Q27" [f3]="$Q27" [q1]="$Q35" [q2]="$Q35" [n1]="$NEM" [n2]="$NEM") \
   PIN0=([f1]=8933531976 [f2]=8933531976 [f3]=8933531976 [q1]=2800000000 [q2]=2800000000 [n1]=820000000 [n2]=820000000)
+QM=unsloth/Qwen3.6-35B-A3B-NVFP4-Fast MB=${MB:-$HOME/Projects/model-benchmarks}
+NGRAM='{"method":"ngram","num_speculative_tokens":4,"prompt_lookup_max":4,"prompt_lookup_min":2}'
+declare -A CTX TESTS NEED   # the context (default 256000), the tests (default "smoke long speed"), the minutes (default 20)
+for p in c1 c2 c3 g256 g192 g176 g160; do
+  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$QM FLAGS[$p]=$Q35 DRAFT[$p]=$MTP PIN0[$p]=1730000000 TESTS[$p]="smoke score tools speed" NEED[$p]=25
+done
+for p in g192 g176 g160; do MODEL[$p]=$S/qwen-k${p#g}; done
+FLAGS[c1]="$Q35 --enable-return-routed-experts" FLAGS[c2]=${FLAGS[c1]} DRAFT[c3]=$NGRAM
+unset "DRAFT[c1]"; PIN0[c1]=1480000000 PIN0[c3]=1480000000   # no draft weights: the KV need is smaller
+TESTS[c1]="smoke capture record tools speed" NEED[c1]=60 TESTS[c2]="smoke draftcapture speed" TESTS[c3]="smoke speed"
 QPID= SAMPLER= PIN=
 QPAT='^[^ ]*python[^ ]* [^ ]*vllm serve '   # a real server process only: a shell that names the command does not match
 qrunning() { pgrep -f "$QPAT" > /dev/null; }
@@ -54,7 +75,7 @@ launch() {  # $1 point, $2 server log: start vllm and wait for /health; 0 health
   [ -n "${DRAFT[$p]:-}" ] && extra=(--speculative-config "${DRAFT[$p]}")
   HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 CUTE_DSL_ARCH=sm_121a PATH=$QV:$PATH setsid "$QV/vllm" serve ${MODEL[$p]} \
     --host 127.0.0.1 --port 8889 --served-model-name $QNAME --tensor-parallel-size 1 --gpu-memory-utilization 0.30 \
-    --kv-cache-memory-bytes $PIN --max-model-len 256000 --max-num-seqs 1 --max-num-batched-tokens ${BUDGET[$p]} \
+    --kv-cache-memory-bytes $PIN --max-model-len ${CTX[$p]:-256000} --max-num-seqs 1 --max-num-batched-tokens ${BUDGET[$p]} \
     --kv-cache-dtype fp8_e4m3 --enable-chunked-prefill --async-scheduling --enable-auto-tool-choice \
     --generation-config vllm ${FLAGS[$p]} "${extra[@]}" > "$2" 2>&1 &
   QPID=$!
@@ -74,26 +95,44 @@ qboot() {  # $1 point: launch; if the KV pin is too small, one more launch with 
   need=$(grep -oE '[0-9.]+ GiB KV cache is needed' $f | head -1 | cut -d' ' -f1)
   [ -n "$need" ] || { log "ERROR: qwen-$p did not boot: $(grep -iE 'error|exception' $f | tail -2 | cut -c1-200)"; return 1; }
   PIN=$(awk -v n=$need 'BEGIN {printf "%d", n * 1.04 * 2^30}')
-  for o in "${!PIN0[@]}"; do   # the later points of this model and draft setting start with the corrected pin
-    [ "${MODEL[$o]}" = "${MODEL[$p]}" ] && [ "${DRAFT[$o]:+d}" = "${DRAFT[$p]:+d}" ] && PIN0[$o]=$PIN
+  for o in "${!PIN0[@]}"; do   # the points with the same flags, context and kind of draft start with the corrected pin
+    [ "${FLAGS[$o]/ --enable-return-routed-experts/}" = "${FLAGS[$p]/ --enable-return-routed-experts/}" ] &&
+      [ "${CTX[$o]:-256000}" = "${CTX[$p]:-256000}" ] && [ "${DRAFT[$o]:-}" = "${DRAFT[$p]:-}" ] && PIN0[$o]=$PIN
   done
   log "qwen-$p: the KV pin was too small, the need is $need GiB: one more boot with $PIN bytes"
   wait_mem 120 100
   launch $p $f && return 0
   qstop; log "ERROR: qwen-$p did not boot with the larger pin"; return 1
 }
-tests() {  # $1 point: smoke, the long prompt, the bot decode test
-  local p=$1 left
-  $PY $S/qwen_fit.py --base-url $QURL --model $QNAME --smoke > $R/qwen-fit-$p-smoke.json 2>&1
-  log "qwen-$p smoke: exit $?; $(tail -1 $R/qwen-fit-$p-smoke.json | cut -c1-200)"
-  left=$(( RESTORE_S - $(now) - 300 ))
-  timeout $left $PY $S/qwen_fit.py --base-url $QURL --model $QNAME --long 250000 > $R/qwen-fit-$p-long.json 2>&1
-  log "qwen-$p long prompt: exit $?; $(tail -1 $R/qwen-fit-$p-long.json | cut -c1-200)"
-  left=$(( RESTORE_S - $(now) - 300 ))
-  (cd $W && timeout $left $PY -m model_eval.speed --base-url $QURL --model $QNAME --sessions 5 --runs 1 \
-    --out $R/qwen-fit-$p-speed.jsonl > $R/qwen-fit-$p-speed.log 2>&1)
-  log "qwen-$p bot decode test: exit $?; $(tail -1 $R/qwen-fit-$p-speed.log | cut -c1-200)"
-  log "qwen-$p decode rate from the rows: $($PY $S/qwen_fit.py --rate $R/qwen-fit-$p-speed.jsonl 2>&1 | tail -1)"
+tests() {  # $1 point: the tests of TESTS, in order
+  local p=$1 t left o=$R/qwen-fit-$1 gate="$PY $S/qwen_gate.py --base-url $QURL --model $QNAME --data $S/qwen-data --recorded $R/qwen-recorded.jsonl"
+  local cap="$PY $S/capture.py --base-url $QURL --model $QNAME --data $S/qwen-data --sources claude,discord,repo --experts 256"
+  for t in ${TESTS[$p]:-smoke long speed}; do
+    left=$(( RESTORE_S - $(now) - 300 ))
+    case $t in
+      smoke) $PY $S/qwen_fit.py --base-url $QURL --model $QNAME --smoke > $o-smoke.json 2>&1
+        log "qwen-$p smoke: exit $?; $(tail -1 $o-smoke.json | cut -c1-200)";;
+      long) timeout $left $PY $S/qwen_fit.py --base-url $QURL --model $QNAME --long 250000 > $o-long.json 2>&1
+        log "qwen-$p long prompt: exit $?; $(tail -1 $o-long.json | cut -c1-200)";;
+      speed) (cd $W && timeout $left $PY -m model_eval.speed --base-url $QURL --model $QNAME --sessions 5 --runs 1 \
+          --out $o-speed.jsonl > $o-speed.log 2>&1)
+        log "qwen-$p bot decode test: exit $?; $(tail -1 $o-speed.log | cut -c1-200)"
+        log "qwen-$p decode rate from the rows: $($PY $S/qwen_fit.py --rate $o-speed.jsonl 2>&1 | tail -1)";;
+      capture) timeout $left $cap --generate 256 --out $R/qwen-capture.jsonl > $o-capture.log 2>&1
+        log "qwen-$p capture: exit $?; $(wc -l < $R/qwen-capture.jsonl 2>/dev/null) rows, $(grep -c '"error"' $R/qwen-capture.jsonl 2>/dev/null) errors";;
+      draftcapture) timeout $left $cap --limit 24 --out $R/qwen-capture-draft.jsonl > $o-capture.log 2>&1
+        log "qwen-$p capture with the draft: exit $?; layers $(grep -oE '"layers": [0-9]+' $R/qwen-capture-draft.jsonl 2>/dev/null | sort -u | tr '\n' ' ')";;
+      record) timeout $left $gate --record > $o-record.log 2>&1
+        log "qwen-$p record: exit $?; $(tail -1 $o-record.log | cut -c1-200)";;
+      score) timeout $left $gate --score --out $o-score.jsonl > $o-score.log 2>&1
+        log "qwen-$p score: exit $?; $(tail -1 $o-score.log | cut -c1-200)"
+        [ $p != g256 ] && [ -s $R/qwen-fit-g256-score.jsonl ] && [ -s $o-score.jsonl ] &&
+          log "qwen-$p against g256: $($gate --compare $R/qwen-fit-g256-score.jsonl $o-score.jsonl 2>&1 | grep -E 'nll change|PASS|FAIL' | tr '\n' ';')";;
+      tools) (cd $MB && timeout $left $QV/python -m benchmarks.tool_calling --base-url $QURL/v1 --model $QNAME \
+          --output $o-tools.json > $o-tools.log 2>&1)
+        log "qwen-$p tool-call suite: exit $?; $(grep -oE '"total_(tasks|correct)": [0-9]+|"composite_score": [0-9.]+' $o-tools.json 2>/dev/null | tr '\n' ' ')";;
+    esac
+  done
 }
 gpu_free() { PATH=$QV:$PATH python -c "import torch; f, t = torch.cuda.mem_get_info(); print(f'{f / 2**30:.1f} of {t / 2**30:.1f} GiB')" 2>&1 | tail -1; }
 finish() { sample_stop; qstop; restore; }
@@ -101,13 +140,15 @@ finish() { sample_stop; qstop; restore; }
 
 fpoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
   local p=$1 before healthy healthy_at m=$R/qwen-fit-$1-mem.log
-  [ $(( $(now) + 20 * 60 )) -gt $RESTORE_S ] && { log "qwen-$p: needs 20 min, no time before $RESTORE_AT"; return 2; }
+  [ -n "${MODEL[$p]:-}" ] || { log "ERROR: no point $p"; return 2; }
+  [ $(( $(now) + ${NEED[$p]:-20} * 60 )) -gt $RESTORE_S ] && { log "qwen-$p: needs ${NEED[$p]:-20} min, no time before $RESTORE_AT"; return 2; }
+  case ${MODEL[$p]} in /*) [ -f ${MODEL[$p]}/config.json ] || { log "ERROR: no folder ${MODEL[$p]}"; return 2; };; esac
   [ "$(now)" -ge $BOOT_BY_S ] && { log "qwen-$p: after $BOOT_BY, not booted"; return 2; }
   stop_main || return 9
   qrunning && { log "ERROR: a vllm serve process runs"; return 9; }
   wait_mem 300 100 || { log "ERROR: less than 100 GiB available ($(avail_gib))"; return 9; }
   before=$(avail_mb)
-  log "qwen-$p: ${MODEL[$p]}, prefill budget ${BUDGET[$p]}, draft ${DRAFT[$p]:-none}; $before MB available; torch sees $(gpu_free) free"
+  log "qwen-$p: ${MODEL[$p]}, context ${CTX[$p]:-256000}, prefill budget ${BUDGET[$p]}, draft ${DRAFT[$p]:-none}; $before MB available; torch sees $(gpu_free) free"
   rm -f $m; sample_start $m
   qboot $p || { sample_stop; return 1; }
   healthy=$(avail_mb) healthy_at=$(now)
