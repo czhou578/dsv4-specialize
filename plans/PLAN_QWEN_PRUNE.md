@@ -657,6 +657,28 @@ DeepSeek. The cache now holds this setup.
 
 ## 8. Phase D: both servers at the same time
 
+### 8.1 The procedure (your go of 2026-11-14: first without the context cap, then with it)
+
+- `pair_watch.sh` (tmux `pair-watch`): every second, the available memory to `results/pair-mem.log`. Below 2 GiB it
+  kills the Qwen server, and only it: the process group of the pid that `pair_run.sh` records, and only when that
+  command line is the vLLM 0.33 venv with `--port 8889`. DeepSeek also shows on the host as a vLLM process (port
+  8888), so a plain name match would be unsafe.
+- `pair_run.sh TAG=nocap|cap`: checks (DeepSeek healthy, no Qwen, the watch on, at least 28.6 GB available, not in the
+  cron window), boots K 208 with the NVFP4 draft beside DeepSeek (`--gpu-memory-utilization 0.005`: with a pinned KV
+  cache, vLLM uses it only for the free-memory check at the boot), then the tests of §7.3 of the fit plan, each with
+  the lowest available memory: both idle; Qwen with 120,000 tokens while DeepSeek decodes; DeepSeek with 128,000
+  tokens while Qwen decodes; the bot decode test on Qwen alone, on DeepSeek alone, and on both at once. Qwen then
+  stays up for the 24-hour gate.
+- `cap_switch.sh`: stops Qwen, waits for an idle bot, and recreates the DeepSeek container from
+  `compose-md149t5-c160.yml` (the live file with `MAX_MODEL_LEN` 160000 and a KV pin of 7,431,600,000 bytes; the
+  project name and the container name stay). A pin that is too small gets one more boot with the need plus 4%; a
+  failed boot rolls back to `compose-md149t5.yml`. After a healthy boot, Hermes gets `context_length` 160000 and the
+  compression threshold 0.8 (backup of `config.yaml`), and the gateway restarts.
+- The order: watch, `pair_run.sh TAG=nocap`, `cap_switch.sh`, `pair_run.sh TAG=cap`.
+
+**The gate.** The lowest available memory of every test stays at or above 2 GiB (the watch never fires), and both
+servers stay healthy. Then 24 hours of normal use with the cron jobs and no out-of-memory event.
+
 As `PLAN_SECOND_MODEL_FIT.md` §7: DeepSeek first, then the pruned Qwen with a very small utilization value or after
 a drop of the page cache, a memory watch that stops Qwen below 2 GiB, the load tests on both, and the 24-hour gate
 of the router plan.
