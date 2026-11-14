@@ -16,8 +16,9 @@
 #   c3          the full model with the ngram draft, which needs no weights: the bot decode test
 #   g256        §7 the reference of the gate window: the full model with the MTP draft. The score of the recorded set
 #               (qwen_gate.py --score), the tool-call suite, the bot decode test
-#   g192 g176 g160   the pruned folders qwen-k192, qwen-k176, qwen-k160 (qwen_prune.py) with the MTP draft: the same
-#               tests, and the comparison with g256 (qwen_gate.py --compare)
+#   g208 g192 g176 g160   the pruned folders qwen-k208 ... qwen-k160 (qwen_prune.py --draft keep) with the MTP draft
+#               of the original snapshot (vLLM reads one num_experts per folder, so the draft keeps its 256 experts):
+#               the same tests, and the comparison with g256 (qwen_gate.py --compare)
 # All points: a KV pin of 1.04x of the need, FP8 KV, --max-num-seqs 1, no images. The f, q and n points use
 # --max-model-len 256000 and these tests: smoke (a short request and a tool call), one prompt of about 250,000
 # tokens, and the bot decode test (5 sessions, 1 run). The available memory is sampled every 5 s.
@@ -49,12 +50,16 @@ declare -A BUDGET=([f1]=2048 [f2]=8192 [f3]=2048 [q1]=2048 [q2]=2048 [n1]=2048 [
 QM=unsloth/Qwen3.6-35B-A3B-NVFP4-Fast MB=${MB:-$HOME/Projects/model-benchmarks}
 NGRAM='{"method":"ngram","num_speculative_tokens":4,"prompt_lookup_max":4,"prompt_lookup_min":2}'
 declare -A CTX TESTS NEED   # the context (default 256000), the tests (default "smoke long speed"), the minutes (default 20)
-for p in c1 c2 c3 g256 g192 g176 g160; do
-  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$QM FLAGS[$p]=$Q35 DRAFT[$p]=$MTP PIN0[$p]=1730000000 TESTS[$p]="smoke score tools speed" NEED[$p]=25
+QSNAP=$(ls -d $HOME/.cache/huggingface/hub/models--unsloth--Qwen3.6-35B-A3B-NVFP4-Fast/snapshots/*/ 2>/dev/null | head -1)
+# The first pins come from the capture window: 1.76 GiB of KV need at 128k with the MTP draft, 1.41 GiB without a draft
+for p in c1 c2 c3 g256 g208 g192 g176 g160; do
+  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$QM FLAGS[$p]=$Q35 DRAFT[$p]=$MTP PIN0[$p]=1965377034 TESTS[$p]="smoke score tools speed" NEED[$p]=25
 done
-for p in g192 g176 g160; do MODEL[$p]=$S/qwen-k${p#g}; done
+for p in g208 g192 g176 g160; do
+  MODEL[$p]=$S/qwen-k${p#g} DRAFT[$p]="{\"method\":\"mtp\",\"model\":\"${QSNAP%/}\",\"num_speculative_tokens\":3}"
+done
 FLAGS[c1]="$Q35 --enable-return-routed-experts" FLAGS[c2]=${FLAGS[c1]} DRAFT[c3]=$NGRAM
-unset "DRAFT[c1]"; PIN0[c1]=1480000000 PIN0[c3]=1480000000   # no draft weights: the KV need is smaller
+unset "DRAFT[c1]"; PIN0[c1]=1574535010 PIN0[c3]=1853707884   # no draft weights: the KV need is smaller
 TESTS[c1]="smoke capture record tools speed" NEED[c1]=60 TESTS[c2]="smoke draftcapture speed" TESTS[c3]="smoke speed"
 QPID= SAMPLER= PIN=
 QPAT='^[^ ]*python[^ ]* [^ ]*vllm serve '   # a real server process only: a shell that names the command does not match

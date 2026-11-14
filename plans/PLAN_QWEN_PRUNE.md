@@ -1,7 +1,7 @@
 # Plan: prune the experts of Qwen3.6-35B-A3B for the fast route
 
-**Status:** 2026-11-13: Phase A done (§5.1 to §5.3): the data, the prune tool, the two clients and the window points
-are built, and all 32 tests pass. The capture window (Phase B) waits for your go ·
+**Status:** 2026-11-13: Phase B done (§6.1): 99 segments captured, the rank built, and K 176, 192 and 208 built. The
+spread of the routing makes K 176 unlikely to pass (§6.1). The gate window (Phase C) runs next ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_SECOND_MODEL_FIT.md` (§5.5 the measured fit and speed of the candidates), `PLAN_PHYSICAL_PRUNE.md`
 and `PRUNE.md` (the method on DeepSeek), `PLAN_BETTER_RANK.md` (the ranks), `PLAN_MODEL_ROUTER.md` in the bot's repo
@@ -11,7 +11,7 @@ windows. The model runs with the vLLM 0.33 venv, alone on port 8889. No change t
 | Step | Status |
 |---|---|
 | §5 Phase A: the data, the tools and the tests (no downtime, about 2 days) | ✅ 2026-11-13: PRs #54 to #57 (§5.1 to §5.3) |
-| §6 Phase B: the capture window (about 85 min downtime) | ⬜ |
+| §6 Phase B: the capture window (about 85 min downtime) | ✅ 2026-11-13, 20:20 to 21:39 (§6.1) |
 | §7 Phase C: the builds and the gate window (about 80 min downtime) | ⬜ |
 | §8 Phase D: both servers at the same time (`PLAN_SECOND_MODEL_FIT.md` §7) | ⬜ |
 
@@ -228,6 +228,66 @@ After the window, with no downtime: the report of the routing (the share of the 
 192 experts of each layer cover), and the builds. A coverage that is far lower than on DeepSeek at the same ratio is
 an early sign that the prune costs more.
 
+### 6.1 Result (2026-11-13, 20:20 to 21:39, on your "start the capture window")
+
+The live server stopped at 20:20 and was healthy again at 21:39:29 (reply "OK.", gateway active). The downtime was
+79 minutes. Files (not in git): `results/qwen-capture.jsonl`, `results/qwen-rank.json`, `results/qwen-recorded.jsonl`,
+`results/qwen-fit-c{1,2,3}*`, `logs/qwen-capture.log`.
+
+**A fault, fixed in the window.** Every capture request of the window failed: the Qwen 3.5/3.6 chat template refuses a
+message list with no user message ("No user query found in messages."), and the capture tokenized the shared prefix
+as the system message alone. The DeepSeek template accepted that. The fix adds a short user message to that list;
+the common prefix stops where the two token lists differ, so it does not count. I reran the capture by hand on the
+same boot (c1), beside the window's other tests, and stopped the window's failing capture process.
+
+| Point | Result |
+|---|---|
+| c1: the capture | 99 of 99 segments, 40 layers, 8 experts per token, no unfilled row. 2.44M prompt tokens counted (each shared prefix once), and 20,450 tokens that Qwen wrote, with 174k tokens of tool results after the targets |
+| c1: the recorded set | 60 turns of the full model: 48 with tool calls, all with reasoning, 377 tokens on average, 12 at the limit of 800 tokens |
+| c1: the tool-call suite (G3 reference) | 51 of 85 tasks, composite 4.93 |
+| c1: the bot decode, no draft | 58.8 tok/s |
+| c2: the MTP draft | 98.2 tok/s, 2.24 tokens accepted per step. The use at the peak at 128k: **29.9 GiB** (the load: 30.0 GiB) |
+| c2: the capture with the draft | 40 layers: vLLM does not return the routing of the draft layer |
+| c3: the `ngram` draft | 62.7 tok/s, 0.47 tokens accepted per step: little gain over no draft |
+
+c1's peak (31.4 GiB) holds the memory of the capture clients, which read replies of up to 90k tokens. The peak of c2
+is the clean number for the model with its draft at 128k.
+
+**The coverage of the rank** (the share of the routed slots that the top K experts of a layer carry):
+
+| Point | Mean over the layers | Lowest layer (layer 2) |
+|---|---|---|
+| Qwen K 208 of 256 | About 96% | About 88% |
+| Qwen K 192 of 256 | 93.9% | 82.8% |
+| Qwen K 176 of 256 | 91.0% | 77.7% |
+| Qwen K 160 of 256 | 87.6% | 72.4% |
+| DeepSeek K 160 of 216, the live prune (passed: +1.9% NLL) | 95.4% | 86.5% |
+| DeepSeek K 144 of 216 (failed: +3.3% to +3.9%) | 92.5% | 81.9% |
+
+- Every expert of every layer is routed at least once. The routing of this traffic is spread more evenly than on
+  DeepSeek: K 176 keeps less than the DeepSeek point that failed. By this measure, K 192 is near the limit, and K 176
+  and K 160 are likely to fail. The measure is a proxy: Qwen mixes 8 experts per token, DeepSeek 6.
+- The transcripts and the bot's sessions agree on 154 of their top 176 experts per layer.
+
+**Three changes for Phase C:**
+
+1. **The draft stays whole.** vLLM does not report the routing of the draft, so there is no rank for its experts.
+   vLLM builds an MTP draft from the `model` field of its speculative config, so the pruned points take the draft
+   from the original snapshot, with all 256 experts. The draft then saves nothing (0.47 GiB less than §2.3 at K 176),
+   and a speed change in the gate window comes from the target prune alone. `qwen_prune.py --draft keep` copies the
+   draft tensors unchanged.
+2. **K 208 replaces K 160.** K 160 keeps far less than the failed DeepSeek point. K 208 gives a safer point.
+3. **The margins with the measured peak** (29.9 GiB at 128k with the draft; about 29 GiB available beside DeepSeek):
+
+| Point | Saving | Use at the peak | Margin |
+|---|---|---|---|
+| K 208 | 3.16 GiB | About 26.7 GiB | About 2.3 GiB (3.4 with the DeepSeek context cap) |
+| K 192 | 4.22 GiB | About 25.7 GiB | About 3.3 GiB (4.4 with the cap) |
+| K 176 | 5.27 GiB | About 24.6 GiB | About 4.4 GiB |
+
+The builds (no downtime): K 176 (16.72 GiB), K 192 (17.78 GiB) and K 208 (18.84 GiB), each in about 75 seconds, and
+every kept tensor equals its source.
+
 ## 7. Phase C: the builds and the gate window (about 80 min downtime)
 
 Builds (no downtime): K 192, K 176 and K 160, each about 12 to 17 GB on disk, with `--check`.
@@ -237,15 +297,16 @@ Builds (no downtime): K 192, K 176 and K 160, each about 12 to 17 GB on disk, wi
 | 1 | K 256 with the draft, 128k | G4, G5, G6: the reference of the window | 15 |
 | 2 | K 176 with the draft | G1 to G6 | 20 |
 | 3 | K 192 with the draft | G1 to G6 | 20 |
-| 4 | K 160 with the draft | G1 to G6, only if K 176 passes G1 and G2 | 20 |
+| 4 | K 208 with the draft (in place of K 160, §6.1) | G1 to G6 | 20 |
 | 5 | The restore of the live server | | 3 |
 
 How to read the result:
 
 | Result | Next step |
 |---|---|
-| K 176 passes all gates | Phase D with K 176. K 160 is a reserve for a larger margin |
-| Only K 192 passes | Phase D with K 192 and the DeepSeek context cap (D1) |
+| K 176 passes all gates | Phase D with K 176 |
+| K 192 passes and K 176 fails | Phase D with K 192 (margin about 3.3 GiB; 4.4 with the DeepSeek context cap, D1) |
+| Only K 208 passes | Phase D with K 208 and D1 (margin about 3.4 GiB). Your decision on the smaller margin |
 | No point passes G1 or G3 | Stop the prune. The choices are Qwen without its draft at 128k (about 27.4 GiB), or Nemotron |
 | A point passes the quality gates, but the speed with the draft falls | Rebuild the draft experts by the rank of the pruned target, as the bot-rank draft of DeepSeek. Else your decision |
 
