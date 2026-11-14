@@ -1,0 +1,112 @@
+--- a/vllm/models/deepseek_v4/nvidia/model.py
++++ b/vllm/models/deepseek_v4/nvidia/model.py
+@@ -81,6 +81,7 @@
+     DeepseekV4FlashInferSM120Attention,
+ )
+ from vllm.models.deepseek_v4.nvidia.flashmla import DeepseekV4FlashMLAAttention
++from vllm.models.deepseek_v4.nvidia import layer_skip
+ from vllm.models.deepseek_v4.nvidia.ops.prepare_megamoe import prepare_megamoe_inputs
+ from vllm.platforms import current_platform
+ from vllm.sequence import IntermediateTensors
+@@ -905,6 +906,11 @@
+ 
+         config = vllm_config.model_config.hf_config
+         self.layer_name = prefix
++        # dsv4-specialize layer skip (plans/PLAN_FEWER_LAYERS.md §6.1): DeepseekV4Model sets these on its own layers
++        # (layer_skip.Controller); a draft or MTP layer keeps them.
++        self.layer_skip: str | None = None
++        self.layer_probe = None
++        self.layer_idx = -1
+         self._use_b12x_mhc = _use_b12x_mhc()
+         if self._use_b12x_mhc:
+             if not prefix:
+@@ -1381,9 +1387,18 @@
+             x = self.ffn(x, input_ids)
+             return x, residual, post_mix, res_mix
+ 
++        # dsv4-specialize layer skip (plans/PLAN_FEWER_LAYERS.md §6.1). L: return the inputs, so the next layer
++        # merges the FFN output of the layer before. A: no attention pre and no attention; the FFN pre merges the
++        # inputs. F: return the attention output unmerged, with the mix values of the attention pre. The probe
++        # (eager only) gets the merged state before the attention and before the FFN.
++        skip = self.layer_skip
++        if skip == "L":
++            return x, residual, post_mix, res_mix
+         attn_norm_weight = self.attn_norm.weight.data
+         attn_norm_eps = self.attn_norm.variance_epsilon
+-        if residual is None:
++        if skip == "A":
++            pass
++        elif residual is None:
+             # Run standalone mhc_pre on first layer
+             if x.dim() == 2:
+                 assert self.hc_attn_fn_broadcast is not None
+@@ -1437,7 +1452,12 @@
+             )
+ 
+         # attn_norm is fused into mhc_pre_tilelang / mhc_fused_post_pre above.
+-        x = self.attn(positions, x, None)
++        if skip != "A":
++            if self.layer_probe is not None:
++                self.layer_probe.event(self.layer_idx, "A", residual)
++            x = self.attn(positions, x, None)
++            if skip == "F":
++                return x, residual, post_mix, res_mix
+ 
+         ffn_norm_weight = self.ffn_norm.weight.data
+         ffn_norm_eps = self.ffn_norm.variance_epsilon
+@@ -1459,6 +1479,8 @@
+             norm_weight=ffn_norm_weight,
+             norm_eps=ffn_norm_eps,
+         )
++        if self.layer_probe is not None:
++            self.layer_probe.event(self.layer_idx, "F", residual)
+ 
+         x = self.ffn(x, input_ids)
+         return x, residual, post_mix, res_mix
+@@ -1544,6 +1566,19 @@
+             ),
+             prefix=f"{prefix}.layers",
+         )
++        # dsv4-specialize layer skip (plans/PLAN_FEWER_LAYERS.md §6.1): the skip set of the target layers and the
++        # probe. The hash layers and the layers that the draft reads cannot skip.
++        draft_layers = getattr(config, "dspark_target_layer_ids", None) or [config.num_hidden_layers - 3]
++        self.layer_skip = layer_skip.Controller(
++            {i: self.layers[i] for i in range(self.start_layer, self.end_layer)},
++            config.num_hidden_layers,
++            protect_first=int(getattr(config, "num_hash_layers", 0) or 0),
++            protect_last=config.num_hidden_layers - min(draft_layers),
++            eager=vllm_config.model_config.enforce_eager,
++            b12x_mhc=_use_b12x_mhc(),
++            compile_cache=not envs.VLLM_DISABLE_COMPILE_CACHE,
++        )
++        self.layer_skip_runtime = self.layer_skip.runtime
+ 
+         if get_pp_group().is_last_rank:
+             self.norm = RMSNorm(config.hidden_size, self.rms_norm_eps)
+@@ -1631,6 +1666,8 @@
+ 
+         if self.use_mega_moe:
+             input_ids = input_ids.to(torch.int64)
++        if self.layer_skip_runtime:  # eager only: the skip file and the probe (PLAN_FEWER_LAYERS.md §6.2)
++            self.layer_skip.step_begin(positions)
+ 
+         aux_hidden_states: list[torch.Tensor] = []
+         residual, post_mix, res_mix = None, None, None
+@@ -1682,6 +1719,8 @@
+                 hidden_states = mhc_post_tilelang(
+                     hidden_states, residual, post_mix, res_mix
+                 )
++        if self.layer_skip_runtime:  # the state after the last layer ends the last blocks of the probe
++            self.layer_skip.step_end(hidden_states)
+ 
+         if not get_pp_group().is_last_rank:
+             return IntermediateTensors({"hidden_states": hidden_states})
+@@ -2053,6 +2092,8 @@
+         self.model.finalize_mega_moe_weights()
+         self.model.finalize_mhc_broadcast_weights()
+         self.model.setup_b12x_wo_projection()
++        # dsv4-specialize layer skip (plans/PLAN_FEWER_LAYERS.md §6.1): the one boot line that the run scripts check
++        logger.warning(self.model.layer_skip.boot_line())
+         return loaded_params
+ 
+     def get_expert_mapping(self) -> list[tuple[str, str, int, str]]:
