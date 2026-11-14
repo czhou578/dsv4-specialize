@@ -1,8 +1,9 @@
 # Plan: the fit of a second model (Qwen 27B) beside DeepSeek
 
-**Status:** 2026-11-13: Qwen 27B at 256k does not fit and is slower than DeepSeek (§4.4, §5.1). Your goal is a fast
-second model for a router, so the candidates are now two MoE models with 3B active parameters (§5.4). The script
-has their points, the dry run passes, and the window waits for your go ·
+**Status:** 2026-11-13: the fast-model window is done (§5.5). Nemotron-3.5-Lightning-30B-A3B is the fastest and the
+smallest candidate: 74 tok/s in 25.5 GiB with no draft, 127 tok/s in 28.8 GiB with its DSpark draft, at a 256k
+context. DeepSeek decodes at 35.3 tok/s, and about 29 GiB is available. With no draft it fits today with a margin of
+about 3.5 GiB. Qwen 27B does not fit (§5.1). Next: your choice of the setup, then Phases C and D ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_MODEL_ROUTER.md` in the bot's repo (§3 the memory budget, §7 the fast model, §9 the run of both
 servers), `PLAN_MD_DEPLOY.md` (the live server), `../serve-tune/PLAN_SERVE_TUNE.md` (§6 the KV pin, §8 the wide
@@ -275,6 +276,50 @@ q1, n1, q2, n2 keeps one bad model from the rule of two failed boots in a row. E
 peak, the peak of the load, and the bot decode rate. vLLM 0.33 accepts both command lines (its argument parser, no
 boot). The gate of the window: the model with the best bot decode rate whose use at the peak leaves a margin of 4 GiB
 after the DeepSeek savings that you accept.
+
+### 5.5 Result of the fast-model window (2026-11-13, 18:27 to 19:14, on your "start the window")
+
+The live server stopped at 18:27 and was healthy again at 19:13:58 (reply "OK.", gateway active). The downtime was
+46 minutes. Files: `logs/fit-fast.log`, `results/qwen-fit-{q1,n1,q2,n2}*` (not in git). All four points booted,
+passed the smoke test (a short request and a tool call) and took the 250,000-token prompt.
+
+| Point | Weights | KV pin for 256k | Used at the peak | Peak of the load | Bot decode | Against DeepSeek (35.3) | 250k prompt |
+|---|---|---|---|---|---|---|---|
+| q1: Qwen 35B-A3B, no draft | 19.65 | 2.75 | 28.81 | 28.17 | 57.9 tok/s | 1.6x | 138 s |
+| q2: Qwen 35B-A3B, MTP draft | 21.22 | 3.22 | 32.29 | 32.58 | 99.3 tok/s | 2.8x | 144 s |
+| n1: Nemotron, no draft | 17.82 | 0.92 | **25.51** | 26.37 | **74.1 tok/s** | 2.1x | 82 s |
+| n2: Nemotron, DSpark draft | 19.37 | 2.09 | **28.78** | 29.92 | **127.2 tok/s** | 3.6x | 77 s |
+
+Memory values are GiB. The bot decode is `model_eval.speed` with 5 sessions and 1 run (prompts of 30,000 to 73,000
+tokens), so each rate is one measurement.
+
+- **Nemotron wins on every axis:** it is faster than the Qwen 35B-A3B with and without a draft, it needs 3.3 to
+  3.5 GiB less, and its prefill is faster (about 3,100 against 1,900 tokens per second on the long prompt).
+- **The drafts work.** The MTP draft of Qwen accepts 2.28 tokens per step, and the DSpark draft of Nemotron 2.10.
+  Each costs memory: 3.5 GiB for Qwen and 3.3 GiB for Nemotron (weights, a larger KV need and overhead).
+- **The first KV pins were too small at all four points** (the needs: 2.64, 3.10, 0.88 and 2.01 GiB). The script
+  booted once more each time, as designed. A draft raises the KV need.
+- **The default loader has no large peak at the load:** at most 1.1 GiB over the steady use. The peak of the 27B
+  boots came from `--load-format fastsafetensors`. A boot with the default loader takes about 3.5 minutes.
+- **The overhead is 6.4 to 7.9 GiB at every point,** as for the 27B (6.7). So the overhead is a cost of the vLLM
+  process on this machine more than of the model.
+- **The bot prompts are slower than short prompts:** the Qwen 35B-A3B gave 57.9 tok/s here and 74.9 in July.
+
+**The fit** (about 29 GiB available beside DeepSeek; the saving that DeepSeek must give for a margin of 4 GiB, by the
+steady peak and by the peak of the load):
+
+| Setup | Margin today | DeepSeek must free | Which savings (§3.1) |
+|---|---|---|---|
+| Nemotron, no draft (74 tok/s) | About 3.5 GiB | 0.5 to 1.4 GiB | D1, the context cap (1.1 GiB), or nothing with a margin of 3 GiB |
+| Nemotron, DSpark draft (127 tok/s) | About 0.2 GiB | 3.8 to 4.9 GiB | D1, D2 and D4; or D1 and D3 (no DeepSeek draft) |
+| Qwen 35B-A3B, no draft (58 tok/s) | About 0.2 GiB | 3.8 GiB | As above, for less speed |
+| Qwen 35B-A3B, MTP draft (99 tok/s) | None: 3.3 GiB over | 7.3 GiB | D1, D3 and D4 |
+
+**The choice.** Nemotron-3.5-Lightning-30B-A3B is the second model. With no draft it fits now. With its DSpark draft
+it is 1.7x faster again, and it needs about 4 to 5 GiB from DeepSeek.
+
+**What is not measured:** the quality of Nemotron on the bot's skills (the gate of the router plan §7.3). The window
+proves only that it answers and calls a tool. Each speed is one run.
 
 ### 5.3 The decision table (written before Phase A)
 
