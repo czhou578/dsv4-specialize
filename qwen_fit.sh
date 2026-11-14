@@ -23,7 +23,8 @@ QMODEL=nvidia/Qwen3.8-27B-NVFP4 QNAME=qwen3.8-27b-fit QURL=http://127.0.0.1:8889
 PIN0=${PIN0:-8933531976}                   # 8.32 GiB: 256,000 tokens x 33.6 KB x 1.04 (the benchmark: 16 GiB hold 512,023)
 declare -A BUDGET=([f1]=2048 [f2]=8192 [f3]=2048) DRAFT=([f1]=0 [f2]=0 [f3]=1)
 QPID= SAMPLER= PIN=$PIN0
-qrunning() { pgrep -f "vllm serve" > /dev/null; }
+QPAT='^[^ ]*python[^ ]* [^ ]*vllm serve '   # a real server process only: a shell that names the command does not match
+qrunning() { pgrep -f "$QPAT" > /dev/null; }
 sample_start() {  # $1 file: the available memory every 5 s
   ( while true; do echo "$(date +%s) $(avail_mb)" >> "$1"; sleep 5; done ) & SAMPLER=$!
 }
@@ -33,7 +34,7 @@ qstop() {  # stop Qwen and wait until it is gone
   [ -n "$QPID" ] && kill -TERM -- -"$QPID" 2>/dev/null
   local t0=$(now)
   while qrunning && [ $(( $(now) - t0 )) -lt 60 ]; do sleep 2; done
-  qrunning && pkill -KILL -f "vllm serve"
+  qrunning && pkill -KILL -f "$QPAT"
   QPID=
 }
 launch() {  # $1 point, $2 server log: start vllm and wait for /health; 0 healthy, 1 failed

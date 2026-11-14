@@ -103,6 +103,16 @@ class WindowTest(unittest.TestCase):
         self.assertNotIn("STUB launch f3", log)
         self.assertIn("STUB restore", log)
 
+    def test_the_process_check_matches_a_server_only(self):
+        pat = subprocess.run(["bash", "-c", f"source <(grep '^QPAT=' {HERE / 'qwen_fit.sh'}); echo \"$QPAT\""],
+                             capture_output=True, text=True).stdout.strip()
+        import re
+        real = "/home/u/venvs/vllm033/bin/python3 /home/u/venvs/vllm033/bin/vllm serve nvidia/Qwen3.8-27B-NVFP4 --port 8889"
+        self.assertTrue(re.search(pat, real))
+        for other in ['bash -c pgrep -f "vllm serve" | head', "tmux new -d -s x ./qwen_fit.sh", "grep vllm serve log",
+                      "/usr/bin/python3 -m vllm.entrypoints.cli.main serve /models/tp1"]:
+            self.assertFalse(re.search(pat, other), other)
+
     def test_a_past_boot_deadline_ends_before_any_server_action(self):
         rc, log, _ = self.run_script(boot_by=-1)
         self.assertEqual(rc, 1)
