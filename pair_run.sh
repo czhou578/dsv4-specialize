@@ -12,6 +12,7 @@
 #      dlong   DeepSeek: one prompt of 128,000 tokens, while Qwen runs the bot decode test
 #      qspeed  the bot decode test on Qwen alone;  dspeed  on DeepSeek alone;  both  on both at the same time
 #   4. KEEP=1 (default) leaves Qwen up for the 24-hour gate; KEEP=0 stops it.
+# VISION=1 loads the vision tower (one image per prompt; §8.4). TESTS names the tests to run (default: all six).
 # CAUTION: out of memory, the Spark can do a hard reset. The watch stops Qwen below 2 GiB. Start this only with the
 # user's go:   tmux new -d -s pair "TAG=nocap ~/Projects/dsv4-specialize/pair_run.sh"
 set -u
@@ -56,6 +57,7 @@ checks() {
   [ -f $S/qwen-k208/config.json ] && [ -f $S/qwen-draft-nvfp4/config.json ] || { log "ERROR: the K 208 or draft folder is missing"; return 1; }
 }
 
+MM="--language-model-only"; [ "${VISION:-0}" = 1 ] && MM='--limit-mm-per-prompt {"image":1,"video":0}'
 boot() {
   local t0
   env PYTHONPATH=$S/qwen_mtp_patch HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 CUTE_DSL_ARCH=sm_121a PATH=$QV:$PATH \
@@ -63,7 +65,7 @@ boot() {
     --tensor-parallel-size 1 --gpu-memory-utilization 0.005 --kv-cache-memory-bytes 1965377034 --max-model-len 128000 \
     --max-num-seqs 1 --max-num-batched-tokens 2048 --kv-cache-dtype fp8_e4m3 --enable-chunked-prefill --async-scheduling \
     --enable-auto-tool-choice --generation-config vllm --attention-backend flashinfer --moe-backend flashinfer_cutlass \
-    --reasoning-parser qwen3 --tool-call-parser qwen3_xml --language-model-only --speculative-config "$DRAFT" \
+    --reasoning-parser qwen3 --tool-call-parser qwen3_xml $MM --speculative-config "$DRAFT" \
     > $R/pair-$TAG-server.log 2>&1 &
   echo $! > "$PIDFILE"
   t0=$(now)
@@ -111,13 +113,13 @@ t_both() {   # wait for the Qwen client by its pid: a bare wait also waits for t
 [ -n "${PAIR_STUB:-}" ] && source "$PAIR_STUB"   # the dry run of test_pair_scripts.py
 log "phase D ($TAG) start: $(avail_mb) MB available beside DeepSeek"
 checks || exit 1
-log "boot Qwen K 208 with the NVFP4 draft on port 8889"
+log "boot Qwen K 208 with the NVFP4 draft on port 8889 ($MM)"
 if ! boot; then
   log "ERROR: Qwen did not boot: $(grep -iE 'error|exception' $R/pair-$TAG-server.log | tail -2 | cut -c1-300)"
   stop_qwen; exit 1
 fi
 log "Qwen healthy: $(avail_mb) MB available; $(grep -oE 'Model loading took [0-9.]+ GiB|GPU KV cache size: [0-9,]+ tokens|torch.compile took [0-9.]+ s' $R/pair-$TAG-server.log | sort -u | tr '\n' ';')"
-for t in idle qlong dlong qspeed dspeed both; do run_test $t t_$t || break; done
+for t in ${TESTS:-idle qlong dlong qspeed dspeed both}; do run_test $t t_$t || break; done
 log "rates: Qwen alone $(rate $R/pair-$TAG-qspeed.jsonl); DeepSeek alone $(rate $R/pair-$TAG-dspeed.jsonl); together Qwen $(rate $R/pair-$TAG-bothq.jsonl), DeepSeek $(rate $R/pair-$TAG-bothd.jsonl)"
 log "long prompts: Qwen $(tail -1 $R/pair-$TAG-qlong.json 2>/dev/null | cut -c1-120); DeepSeek $(tail -1 $R/pair-$TAG-dlong.json 2>/dev/null | cut -c1-120)"
 if [ "$KEEP" = 1 ] && qwen_up; then

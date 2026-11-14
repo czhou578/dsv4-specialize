@@ -729,6 +729,35 @@ As `PLAN_SECOND_MODEL_FIT.md` §7: DeepSeek first, then the pruned Qwen with a v
 a drop of the page cache, a memory watch that stops Qwen below 2 GiB, the load tests on both, and the 24-hour gate
 of the router plan.
 
+### 8.4 The image test (your request of 2026-11-14)
+
+You want to paste screenshots and diagrams into the chat. Every window so far ran Qwen with `--language-model-only`.
+The vision tower is intact in the K 208 folder (27 blocks, 0.83 GiB in BF16; the prune copied it unchanged), but the
+rank of the prune counted text tokens only, so the experts that image tokens use were never counted.
+
+**The test** (`qwen_vision.py`): 12 images rendered with headless Chromium, 3 questions each with a known answer that
+is visible in the image: 4 code screenshots (Python, shell, a diff, a traceback), 3 charts, 3 UI screens (a form, a
+table, a dialog) and 2 diagrams. A model answers each question about its image, at the sampling of the fast route
+with a fixed seed. The live DeepSeek (text only) then grades each answer against the known answer.
+
+**The window** (it stops the Qwen of the 24-hour gate, which starts again after it):
+
+| Point | Model | Tests |
+|---|---|---|
+| i208 | K 208 with the NVFP4 draft, vision on (one image per prompt) | Smoke, the 36 image questions. The first boot compiles the new graph |
+| i256 | The full model with its draft, vision on | Smoke, the 36 image questions: the reference |
+| m208 | i208 again, with a warm compile cache | Smoke, 6 image questions, a prompt of 120,000 tokens, the bot decode test: the memory with vision |
+
+**The decision rule, written before the window:**
+
+- K 208 keeps its vision if it answers at most 3 questions fewer than the full model (the noise of 36 sampled
+  questions), and no kind of image loses more than 2.
+- The memory of m208 is reported against d2 (25.42 GiB with no vision). The margin beside DeepSeek falls by the cost
+  of the tower; it is below the 4 GiB of G6 either way, so whether vision stays on is your decision.
+- After the window, Qwen starts again beside DeepSeek (`pair_run.sh`, with `VISION=1` if the test passes), and the
+  24-hour gate starts again. In its first 90 minutes (14:28 to 15:57) the gate had no WATCH line, `oom_kill` 0, and at
+  least 8.6 GiB of swap free.
+
 ## 9. Risks
 
 | Risk | Effect | Guard |

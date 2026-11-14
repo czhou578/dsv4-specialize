@@ -37,6 +37,11 @@
 #               the bot decode test. The baseline is k0 (the BF16 draft)
 #   d2 d3       d1 again with a warm torch.compile cache (d1 compiled the new graph cold and held about 1 GiB more),
 #               and d1 with the allocator's expandable segments
+#   i208 i256   §8.4 the image test, with the vision tower (no --language-model-only, one image per prompt): K 208 with
+#               the NVFP4 draft, and the full model with its draft. Tests: smoke, the 36 image questions
+#               (qwen_vision.py --answer; build the images first with --build)
+#   m208        i208 again, with the compile cache that i208 filled: the memory with vision. Tests: smoke, 6 image
+#               questions, a prompt of 120,000 tokens, the bot decode test
 # Each point also logs the resident and the peak resident memory of the server processes (procs.txt).
 # All points: a KV pin of 1.04x of the need, FP8 KV, --max-num-seqs 1, no images. The f, q and n points use
 # --max-model-len 256000 and these tests: smoke (a short request and a tool call), one prompt of about 250,000
@@ -68,7 +73,7 @@ declare -A BUDGET=([f1]=2048 [f2]=8192 [f3]=2048 [q1]=2048 [q2]=2048 [n1]=2048 [
   PIN0=([f1]=8933531976 [f2]=8933531976 [f3]=8933531976 [q1]=2800000000 [q2]=2800000000 [n1]=820000000 [n2]=820000000)
 QM=unsloth/Qwen3.6-35B-A3B-NVFP4-Fast MB=${MB:-$HOME/Projects/model-benchmarks}
 NGRAM='{"method":"ngram","num_speculative_tokens":4,"prompt_lookup_max":4,"prompt_lookup_min":2}'
-declare -A CTX TESTS NEED PYPATH SKIPIF ENVS LONG   # ENVS: more environment for the server; LONG: the tokens of the long prompt; PYPATH: put first on PYTHONPATH of the server; SKIPIF: skip when that point has a score; the context (default 256000), the tests (default "smoke long speed"), the minutes (default 20)
+declare -A CTX TESTS NEED PYPATH SKIPIF ENVS LONG IMGLIMIT   # IMGLIMIT: the image questions of a point (default: all); ENVS: more environment for the server; LONG: the tokens of the long prompt; PYPATH: put first on PYTHONPATH of the server; SKIPIF: skip when that point has a score; the context (default 256000), the tests (default "smoke long speed"), the minutes (default 20)
 QSNAP=$(ls -d $HOME/.cache/huggingface/hub/models--unsloth--Qwen3.6-35B-A3B-NVFP4-Fast/snapshots/*/ 2>/dev/null | head -1)
 # The first pins come from the capture window: 1.76 GiB of KV need at 128k with the MTP draft, 1.41 GiB without a draft
 for p in c1 c2 c3 g256 g208 g192 g176 g160; do
@@ -98,6 +103,13 @@ done
 ENVS[d3]=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 LONG[d1]=120000 PYPATH[d1]=$S/qwen_mtp_patch DRAFT[d1]="{\"method\":\"mtp\",\"model\":\"$S/qwen-draft-nvfp4\",\"num_speculative_tokens\":3,\"moe_backend\":\"marlin\"}"
 DRAFT[d2]=${DRAFT[d1]} DRAFT[d3]=${DRAFT[d1]}
+Q35V="${Q35/ --language-model-only/} --limit-mm-per-prompt {\"image\":1,\"video\":0}"
+for p in i208 i256 m208; do
+  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$S/qwen-k208 FLAGS[$p]=$Q35V PIN0[$p]=1965377034 TESTS[$p]="smoke images" NEED[$p]=16
+  DRAFT[$p]=${DRAFT[d1]} PYPATH[$p]=$S/qwen_mtp_patch
+done
+MODEL[i256]=$QM DRAFT[i256]=$MTP; unset "PYPATH[i256]"
+TESTS[m208]="smoke images long speed" IMGLIMIT[m208]=6 LONG[m208]=120000 NEED[m208]=12
 BUDGET[r256]=2048 CTX[r256]=128000 MODEL[r256]=$QM FLAGS[r256]=$Q35 DRAFT[r256]=$MTP PIN0[r256]=1965377034 TESTS[r256]="score speed" NEED[r256]=15
 FLAGS[c1]="$Q35 --enable-return-routed-experts" FLAGS[c2]=${FLAGS[c1]} DRAFT[c3]=$NGRAM
 unset "DRAFT[c1]"; PIN0[c1]=1574535010 PIN0[c3]=1853707884   # no draft weights: the KV need is smaller
@@ -177,6 +189,9 @@ tests() {  # $1 point: the tests of TESTS, in order
       pairs) timeout $left $PY $S/qwen_gate.py --base-url $QURL --model $QNAME --data $S/qwen-data --recorded $o-pairs.jsonl \
           --record --seed-offset 1 > $o-pairs.log 2>&1
         log "qwen-$p new sample of the recorded turns: exit $?; $(tail -1 $o-pairs.log | cut -c1-200)";;
+      images) timeout $(( left < 720 ? left : 720 )) $PY $S/qwen_vision.py --base-url $QURL --model $QNAME --answer \
+          ${IMGLIMIT[$p]:+--limit ${IMGLIMIT[$p]}} --out $o-images.jsonl > $o-images.log 2>&1
+        log "qwen-$p image questions: exit $?; $(tail -1 $o-images.log | cut -c1-200)";;
       capture) timeout $left $cap --generate 256 --out $R/qwen-capture.jsonl > $o-capture.log 2>&1
         log "qwen-$p capture: exit $?; $(wc -l < $R/qwen-capture.jsonl 2>/dev/null) rows, $(grep -c '"error"' $R/qwen-capture.jsonl 2>/dev/null) errors";;
       draftcapture) timeout $left $cap --limit 24 --out $R/qwen-capture-draft.jsonl > $o-capture.log 2>&1
