@@ -18,7 +18,13 @@
 #               (qwen_gate.py --score), the tool-call suite, the bot decode test
 #   g208 g192 g176 g160   the pruned folders qwen-k208 ... qwen-k160 (qwen_prune.py --draft keep) with the MTP draft
 #               of the original snapshot (vLLM reads one num_experts per folder, so the draft keeps its 256 experts):
-#               the same tests, and the comparison with g256 (qwen_gate.py --compare)
+#               the same tests, and the comparison with g256 (qwen_gate.py --compare). vLLM builds the draft with the
+#               config of the target, so these points load qwen_mtp_patch (PYTHONPATH), which gives the draft its own
+#               expert count (PLAN_QWEN_PRUNE.md §7.1)
+#   p208 p192 p176  the same folders with no draft: the quality gates only (smoke, score, tools). A p point runs only
+#               when its g point has no score (SKIPIF): the fallback if the patch fails
+#   r256        the full model with the MTP draft again: the score and the bot decode test, for the noise between two
+#               windows (the reference g256 of an earlier window)
 # All points: a KV pin of 1.04x of the need, FP8 KV, --max-num-seqs 1, no images. The f, q and n points use
 # --max-model-len 256000 and these tests: smoke (a short request and a tool call), one prompt of about 250,000
 # tokens, and the bot decode test (5 sessions, 1 run). The available memory is sampled every 5 s.
@@ -49,15 +55,19 @@ declare -A BUDGET=([f1]=2048 [f2]=8192 [f3]=2048 [q1]=2048 [q2]=2048 [n1]=2048 [
   PIN0=([f1]=8933531976 [f2]=8933531976 [f3]=8933531976 [q1]=2800000000 [q2]=2800000000 [n1]=820000000 [n2]=820000000)
 QM=unsloth/Qwen3.6-35B-A3B-NVFP4-Fast MB=${MB:-$HOME/Projects/model-benchmarks}
 NGRAM='{"method":"ngram","num_speculative_tokens":4,"prompt_lookup_max":4,"prompt_lookup_min":2}'
-declare -A CTX TESTS NEED   # the context (default 256000), the tests (default "smoke long speed"), the minutes (default 20)
+declare -A CTX TESTS NEED PYPATH SKIPIF   # PYPATH: put first on PYTHONPATH of the server; SKIPIF: skip when that point has a score; the context (default 256000), the tests (default "smoke long speed"), the minutes (default 20)
 QSNAP=$(ls -d $HOME/.cache/huggingface/hub/models--unsloth--Qwen3.6-35B-A3B-NVFP4-Fast/snapshots/*/ 2>/dev/null | head -1)
 # The first pins come from the capture window: 1.76 GiB of KV need at 128k with the MTP draft, 1.41 GiB without a draft
 for p in c1 c2 c3 g256 g208 g192 g176 g160; do
   BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$QM FLAGS[$p]=$Q35 DRAFT[$p]=$MTP PIN0[$p]=1965377034 TESTS[$p]="smoke score tools speed" NEED[$p]=25
 done
 for p in g208 g192 g176 g160; do
-  MODEL[$p]=$S/qwen-k${p#g} DRAFT[$p]="{\"method\":\"mtp\",\"model\":\"${QSNAP%/}\",\"num_speculative_tokens\":3}"
+  MODEL[$p]=$S/qwen-k${p#g} DRAFT[$p]="{\"method\":\"mtp\",\"model\":\"${QSNAP%/}\",\"num_speculative_tokens\":3}" PYPATH[$p]=$S/qwen_mtp_patch
 done
+for k in 208 192 176; do
+  BUDGET[p$k]=2048 CTX[p$k]=128000 MODEL[p$k]=$S/qwen-k$k FLAGS[p$k]=$Q35 PIN0[p$k]=1574535010 TESTS[p$k]="smoke score tools" NEED[p$k]=30 SKIPIF[p$k]=g$k
+done
+BUDGET[r256]=2048 CTX[r256]=128000 MODEL[r256]=$QM FLAGS[r256]=$Q35 DRAFT[r256]=$MTP PIN0[r256]=1965377034 TESTS[r256]="score speed" NEED[r256]=15
 FLAGS[c1]="$Q35 --enable-return-routed-experts" FLAGS[c2]=${FLAGS[c1]} DRAFT[c3]=$NGRAM
 unset "DRAFT[c1]"; PIN0[c1]=1574535010 PIN0[c3]=1853707884   # no draft weights: the KV need is smaller
 TESTS[c1]="smoke capture record tools speed" NEED[c1]=60 TESTS[c2]="smoke draftcapture speed" TESTS[c3]="smoke speed"
@@ -79,7 +89,7 @@ qstop() {  # stop Qwen and wait until it is gone (the sampler goes on: a boot re
 launch() {  # $1 point, $2 server log: start vllm and wait for /health; 0 healthy, 1 failed
   local p=$1 extra=() t0
   [ -n "${DRAFT[$p]:-}" ] && extra=(--speculative-config "${DRAFT[$p]}")
-  HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 CUTE_DSL_ARCH=sm_121a PATH=$QV:$PATH setsid "$QV/vllm" serve ${MODEL[$p]} \
+  env ${PYPATH[$p]:+PYTHONPATH=${PYPATH[$p]}} HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 CUTE_DSL_ARCH=sm_121a PATH=$QV:$PATH setsid "$QV/vllm" serve ${MODEL[$p]} \
     --host 127.0.0.1 --port 8889 --served-model-name $QNAME --tensor-parallel-size 1 --gpu-memory-utilization 0.30 \
     --kv-cache-memory-bytes $PIN --max-model-len ${CTX[$p]:-256000} --max-num-seqs 1 --max-num-batched-tokens ${BUDGET[$p]} \
     --kv-cache-dtype fp8_e4m3 --enable-chunked-prefill --async-scheduling --enable-auto-tool-choice \
@@ -147,6 +157,7 @@ finish() { sample_stop; qstop; restore; }
 fpoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
   local p=$1 before healthy healthy_at m=$R/qwen-fit-$1-mem.log
   [ -n "${MODEL[$p]:-}" ] || { log "ERROR: no point $p"; return 2; }
+  [ -n "${SKIPIF[$p]:-}" ] && [ -s $R/qwen-fit-${SKIPIF[$p]}-score.jsonl ] && { log "qwen-$p: skipped, ${SKIPIF[$p]} has its score"; return 2; }
   [ $(( $(now) + ${NEED[$p]:-20} * 60 )) -gt $RESTORE_S ] && { log "qwen-$p: needs ${NEED[$p]:-20} min, no time before $RESTORE_AT"; return 2; }
   case ${MODEL[$p]} in /*) [ -f ${MODEL[$p]}/config.json ] || { log "ERROR: no folder ${MODEL[$p]}"; return 2; };; esac
   [ "$(now)" -ge $BOOT_BY_S ] && { log "qwen-$p: after $BOOT_BY, not booted"; return 2; }

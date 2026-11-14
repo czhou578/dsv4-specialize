@@ -27,7 +27,7 @@ sample_start() { printf '1 118000\n2 84000\n9999999999 80000\n' > "$1"; }
 sample_stop() { :; }
 N=0
 launch() {
-  N=$((N + 1)); log "STUB launch $1 ${MODEL[$1]##*/} ctx=${CTX[$1]:-256000} pin=$PIN budget=${BUDGET[$1]} draft=${DRAFT[$1]:-none} flags=${FLAGS[$1]}"
+  N=$((N + 1)); log "STUB launch $1 ${MODEL[$1]##*/} ctx=${CTX[$1]:-256000} pin=$PIN budget=${BUDGET[$1]} draft=${DRAFT[$1]:-none} flags=${FLAGS[$1]} pypath=${PYPATH[$1]:-none}"
   case " ${STUB_FAIL:-} " in *" $1 "*) echo "RuntimeError: boom" > "$2"; return 1;; esac
   if [ "${STUB_SMALL_PIN:-}" = "$1" ] && [ "$PIN" = 8933531976 ]; then
     echo "ValueError: 8.80 GiB KV cache is needed, which is larger than the available KV cache memory (8.32 GiB)" > "$2"; return 1
@@ -137,6 +137,27 @@ class WindowTest(unittest.TestCase):
         self.assertEqual(calls.count("--long"), 0)                                        # 128k points send no 250k prompt
         self.assertEqual(calls.count("model_eval.speed"), 5)                              # c1, c2, c3, g256 and g176
         self.assertIn("qwen-g176: overhead X", log)
+
+    def test_the_patch_points_the_fallback_and_the_noise_check(self):
+        stub = STUB + "MODEL[g208]=$STUB_DIR/k208; MODEL[p208]=$STUB_DIR/k208; MODEL[p192]=$STUB_DIR/k192\n"
+        rc, log, _ = self.run_script(POINTS="g208 p208 p192 r256", stub=stub, files={
+            "k208/config.json": "{}", "k192/config.json": "{}", "qwen-fit-g208-score.jsonl": '{"tokens": 1}\n'})
+        self.assertEqual(rc, 0, log)
+        self.assertRegex(log, r"STUB launch g208 k208 ctx=128000 pin=1965377034 .* pypath=\S+/qwen_mtp_patch\n")
+        self.assertIn("qwen-p208: skipped, g208 has its score", log)
+        self.assertNotIn("STUB launch p208", log)
+        self.assertIn("STUB launch p192 k192 ctx=128000 pin=1574535010 budget=2048 draft=none", log)   # g192 has no score
+        self.assertTrue(log.split("STUB launch p192")[1].splitlines()[0].endswith("pypath=none"))
+        self.assertIn('STUB launch r256 Qwen3.6-35B-A3B-NVFP4-Fast ctx=128000 pin=1965377034 budget=2048 draft={"method":"mtp"', log)
+
+    def test_the_server_of_a_patch_point_gets_the_patch_on_its_python_path(self):
+        fake = "#!/usr/bin/env bash\necho \"PP=${PYTHONPATH:-}\" >> $STUB_DIR/calls.log\nexit 1\n"
+        # the real launch(): the stub without its launch()
+        stub = STUB[:STUB.index("N=0\n")] + STUB[STUB.index("tests() {"):] + \
+            "QV=$STUB_DIR; MODEL[g208]=$STUB_DIR/k208; MODEL[p208]=$STUB_DIR/k208\n"
+        rc, log, d = self.run_script(POINTS="g208 p208", stub=stub, files={"vllm": fake, "k208/config.json": "{}"})
+        self.assertEqual(rc, 1, log)                                                      # two failed boots: restore
+        self.assertEqual((d / "calls.log").read_text().splitlines(), [f"PP={HERE}/qwen_mtp_patch", "PP="])
 
     def test_failed_boots_skip_the_point_and_two_in_a_row_restore(self):
         rc, log, _ = self.run_script(STUB_FAIL="f2")
