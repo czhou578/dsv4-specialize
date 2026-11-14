@@ -9,7 +9,8 @@
 # Each point: the free GPU memory that torch sees, boot, smoke (a short request and a tool call), one prompt of
 # about 250,000 tokens, the bot decode test (5 sessions, 1 run), stop. The available memory is sampled every 5 s.
 # The report of a point (results/qwen-fit-<point>.json) gives the overhead X of §2.3: the available memory before the
-# boot, minus its lowest value, minus the loaded weights and the KV pin.
+# boot, minus its lowest value after the health check, minus the loaded weights and the KV pin. The load itself has
+# a short, larger peak (--load-format fastsafetensors); the report gives it as load_peak.
 # CAUTION: this stops the bot's model server for about 45 min. Start it only with the user's go, not 05:00-10:00 on
 # weekdays while the cron jobs are active, and not during another test:
 #   tmux new -d -s qwen-fit "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/qwen_fit.sh"
@@ -29,8 +30,7 @@ sample_start() {  # $1 file: the available memory every 5 s
   ( while true; do echo "$(date +%s) $(avail_mb)" >> "$1"; sleep 5; done ) & SAMPLER=$!
 }
 sample_stop() { [ -n "$SAMPLER" ] && kill "$SAMPLER" 2>/dev/null; wait "$SAMPLER" 2>/dev/null; SAMPLER=; }
-qstop() {  # stop Qwen and wait until it is gone
-  sample_stop
+qstop() {  # stop Qwen and wait until it is gone (the sampler goes on: a boot retry must not end it)
   [ -n "$QPID" ] && kill -TERM -- -"$QPID" 2>/dev/null
   local t0=$(now)
   while qrunning && [ $(( $(now) - t0 )) -lt 60 ]; do sleep 2; done
@@ -78,13 +78,14 @@ tests() {  # $1 point: smoke, the long prompt, the bot decode test
   (cd $W && timeout $left $PY -m model_eval.speed --base-url $QURL --model $QNAME --sessions 5 --runs 1 \
     --out $R/qwen-fit-$p-speed.jsonl > $R/qwen-fit-$p-speed.log 2>&1)
   log "qwen-$p bot decode test: exit $?; $(tail -1 $R/qwen-fit-$p-speed.log | cut -c1-200)"
+  log "qwen-$p decode rate from the rows: $($PY $S/qwen_fit.py --rate $R/qwen-fit-$p-speed.jsonl 2>&1 | tail -1)"
 }
 gpu_free() { PATH=$QV:$PATH python -c "import torch; f, t = torch.cuda.mem_get_info(); print(f'{f / 2**30:.1f} of {t / 2**30:.1f} GiB')" 2>&1 | tail -1; }
-finish() { qstop; restore; }
+finish() { sample_stop; qstop; restore; }
 [ -n "${QWEN_STUB:-}" ] && source "$QWEN_STUB"   # the dry run of test_qwen_fit.py: stub boots and clients
 
 fpoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
-  local p=$1 before healthy m=$R/qwen-fit-$1-mem.log
+  local p=$1 before healthy healthy_at m=$R/qwen-fit-$1-mem.log
   [ $(( $(now) + 20 * 60 )) -gt $RESTORE_S ] && { log "qwen-$p: needs 20 min, no time before $RESTORE_AT"; return 2; }
   [ "$(now)" -ge $BOOT_BY_S ] && { log "qwen-$p: after $BOOT_BY, not booted"; return 2; }
   stop_main || return 9
@@ -94,12 +95,12 @@ fpoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
   log "qwen-$p: prefill budget ${BUDGET[$p]}, draft ${DRAFT[$p]}; $before MB available; torch sees $(gpu_free) free"
   rm -f $m; sample_start $m
   qboot $p || { sample_stop; return 1; }
-  healthy=$(avail_mb)
+  healthy=$(avail_mb) healthy_at=$(now)
   log "qwen-$p healthy: $healthy MB available; $(grep -oE 'Model loading took [0-9.]+ GiB|GPU KV cache size: [0-9,]+ tokens' $R/qwen-fit-$p-server.log | sort -u | tr '\n' ';')"
   tests $p
   nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader > $R/qwen-fit-$p-gpu.txt 2>&1
-  qstop
-  $PY $S/qwen_fit.py --report --before $before --healthy $healthy --pin $PIN --mem-log $m \
+  sample_stop; qstop
+  $PY $S/qwen_fit.py --report --before $before --healthy $healthy --healthy-at $healthy_at --pin $PIN --mem-log $m \
     --server-log $R/qwen-fit-$p-server.log --gpu $R/qwen-fit-$p-gpu.txt --out $R/qwen-fit-$p.json 2>&1 | while read -r line; do log "qwen-$p: $line"; done
 }
 

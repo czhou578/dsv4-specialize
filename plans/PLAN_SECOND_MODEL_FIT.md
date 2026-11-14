@@ -1,7 +1,8 @@
 # Plan: the fit of a second model (Qwen 27B) beside DeepSeek
 
-**Status:** 2026-11-13: plan written; the numbers of §2 are measured; the Phase A script is built and its dry run
-passes; the window waits for your go ·
+**Status:** 2026-11-13: Phases A and B done. Qwen at 256k needs 34.0 GiB with no draft and about 37 GiB with its
+draft; about 29 GiB is available. No set of DeepSeek savings closes that gap (§5.1). Qwen also decodes slower than
+DeepSeek: 30.8 tok/s with its draft, 11.1 without. The next step is your decision (§5.2) ·
 **Author:** colin-spark · **Date:** 2026-11-13
 **Related:** `PLAN_MODEL_ROUTER.md` in the bot's repo (§3 the memory budget, §7 the fast model, §9 the run of both
 servers), `PLAN_MD_DEPLOY.md` (the live server), `../serve-tune/PLAN_SERVE_TUNE.md` (§6 the KV pin, §8 the wide
@@ -13,8 +14,8 @@ live server in Phases A and B.
 
 | Step | Status |
 |---|---|
-| §4 Phase A: measure Qwen alone (about 45 min downtime) | 🔨 2026-11-13: `qwen_fit.sh`, `qwen_fit.py` and `test_qwen_fit.py` are built; the window has not run |
-| §5 Phase B: the arithmetic and your decisions (no downtime) | ⬜ |
+| §4 Phase A: measure Qwen alone (about 45 min downtime) | ✅ 2026-11-13, 16:44 to 17:33 (§4.4) |
+| §5 Phase B: the arithmetic and your decisions (no downtime) | ✅ 2026-11-13: the arithmetic (§5.1); your decision is open (§5.2) |
 | §6 Phase C: the savings on the DeepSeek side (one window each) | ⬜ |
 | §7 Phase D: both servers at the same time | ⬜ |
 
@@ -163,9 +164,80 @@ CAUTION: The window stops the bot's model server for about 45 minutes (three poi
 skips a point that cannot end before `RESTORE_AT`). Do not start it between 05:00 and 10:00 on a
 weekday while the cron jobs are active.
 
+### 4.4 Result (2026-11-13, 16:44 to 17:33, on your "start the qwen window")
+
+The live server stopped at 16:44 and was healthy again at 17:33:03 (reply "OK.", gateway active). The downtime was
+49 minutes. A first start at 16:41 ended at once and cost 2 more minutes: the process check of the script matched the
+text of a shell command, not a server (fixed: the check now matches a real vLLM process only). Files:
+`logs/qwen-fit.log`, `results/qwen-fit-f{1,2,3}*` (not in git).
+
+| Point | Weights | KV pin (tokens) | Used after the boot | Used at the peak | Overhead X | GPU process at the end | Bot decode | 250k prompt |
+|---|---|---|---|---|---|---|---|---|
+| F1: budget 2,048, no draft | 18.96 | 8.32 (257,514) | 33.2 | **33.95** | **6.67** | 29.4 GiB | 11.09 tok/s | 327 s |
+| F2: budget 8,192, no draft | 18.96 | 8.32 (257,514) | 33.6 | 35.67 | 8.39 | 31.1 GiB | 11.12 tok/s | 324 s |
+| F3: budget 2,048, MTP draft | 19.75 | 9.60 (266,067) | 36.1 | About 37 (estimate) | About 7.5 (estimate) | 31.9 GiB | 30.75 tok/s | 325 s |
+
+All values are GiB unless a unit is given. Every smoke test passes (a short request and a tool call).
+
+- **The no-images flag works.** The load is 18.96 GiB, 0.87 GiB less than in the benchmark runs: vLLM skips the
+  vision encoder.
+- **The overhead at one sequence is 6.7 GiB**, not the 3 to 4 GiB that the fit needs. The larger prefill budget adds
+  1.7 GiB and gives no prefill speed on one long prompt (324 s against 327 s, about 765 tokens per second).
+- **The draft needs a larger KV cache.** With the first pin, F3 did not boot: vLLM asked for 9.23 GiB for 256,000
+  tokens. The script booted once more with 9.60 GiB, as designed.
+- **The F3 peak is an estimate.** The boot retry stopped the memory sampler (a fault of the script, fixed now), so
+  F3 has no samples from its tests. The estimate is its use after the boot plus the rise of F1 (0.76 GiB).
+- **The load has a short, larger peak.** About 15 seconds into each boot, the available memory fell far below the
+  later level: 41.7 GiB used in F3 and 32.3 GiB in F2, before the KV cache existed. The samples are 5 seconds apart,
+  so the real peak can be higher. The cause is most likely the loader (`--load-format fastsafetensors` holds the
+  file bytes in host memory while it copies them). Beside DeepSeek this peak alone is larger than the available
+  memory, so a pair needs another loader. Not tested.
+- **The speed.** `model_eval.speed` failed in its summary for F1 and F2 (it needs the counters of a draft). Its rows
+  were saved, and the rates come from them: 5 sessions, 1 run each. With the draft, Qwen accepts 2.59 tokens per
+  draft step. The live DeepSeek server decodes the same test at about 35.3 tok/s.
+
 ## 5. Phase B: the arithmetic and your decisions (no downtime)
 
-1. Put X of F1 into the formula of §2.3.
+### 5.1 The arithmetic (2026-11-13)
+
+About 29 GiB is available beside the live server. The saving that DeepSeek must give is the use of Qwen at the peak,
+plus the margin, minus 29 GiB:
+
+| Qwen setup | Use at the peak | DeepSeek must free (margin 4 GiB) | Decode |
+|---|---|---|---|
+| 256k, no draft | 34.0 | 9.0 | 11.1 tok/s |
+| 256k, with the draft | About 37 | About 12 | 30.8 tok/s |
+| 128k, no draft (KV 4.16) | About 29.8 | About 4.8 | 11.1 tok/s |
+| 128k, with the draft (KV 4.80) | About 32.2 | About 7.2 | 30.8 tok/s |
+
+The 128k rows are computed from the measured KV size per token, not booted.
+
+The DeepSeek savings with no output change give at most 6.2 GiB, or 8.3 GiB with no DeepSeek draft (§3.1). So:
+
+1. **Qwen at 256k does not fit beside this DeepSeek checkpoint,** with or without its draft. This is the last row
+   of the table below.
+2. **Qwen at 128k with no draft fits on paper** if D1, D2 and D4 all work. It then decodes at 11 tok/s, a third of
+   the DeepSeek rate.
+3. **Qwen at 128k with its draft** needs 7.2 GiB: every DeepSeek saving, and no DeepSeek draft. Both models are then
+   slow.
+4. Each case also needs a loader with no load peak, and the boot check of §7.2.
+
+### 5.2 Your decision
+
+The router plan asks for a fast model: at least 2x the decode speed of DeepSeek (§7.1 there). Qwen 27B is slower
+than DeepSeek on this machine, with its draft (30.8 against 35.3 tok/s) and much slower without it. So the question
+is what the second model is for.
+
+| Option | What it means |
+|---|---|
+| A. A swap, not a pair | One model in memory at a time. Qwen boots in about 70 s and DeepSeek in about 150 to 180 s. Qwen then gets its full 256k context and its draft. This is fallback 1 of the router plan (§4 there) |
+| B. A smaller second model | A model that needs about 20 GiB in all, for example a MoE with few active parameters. It can be faster than DeepSeek, which Qwen 27B is not |
+| C. Qwen at 128k with no draft, beside DeepSeek | Phase C with D1, D2 and D4 (three windows, one with a known crash risk), then Phase D. The result is a second model at 11 tok/s with a margin of about 4 GiB |
+| D. Stop | DeepSeek alone, as now |
+
+### 5.3 The decision table (written before Phase A)
+
+1. Put X of F1 into the formula of §2.3. Done (§5.1).
 2. Read vLLM 0.33 for the boot check of §7.2. No downtime. Done 2026-11-13 (§7.2).
 3. You decide three values:
    - the margin (the proposal: at least 4 GiB, the small margin of the router plan);
@@ -249,8 +321,8 @@ plan (§9.3 there): no out-of-memory event with the cron jobs and normal use.
 
 | Phase | Work | Downtime |
 |---|---|---|
-| A | The script and its dry run: done 2026-11-13. The window: about 45 minutes | About 45 min |
-| B | About 1 hour, and your three decisions | None |
+| A | Done 2026-11-13: the script, its dry run, and the window (16:44 to 17:33) | 51 min |
+| B | The arithmetic is done (§5.1). Your decision is open (§5.2) | None |
 | C | One to three windows, by the table of §5 | About 1 to 2 h each |
 | D | One evening for the tests, then 24 hours of normal use | None, if the margin holds |
 

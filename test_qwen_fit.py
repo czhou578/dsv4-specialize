@@ -22,7 +22,7 @@ qrunning() { return 1; }
 qstop() { sample_stop; QPID=; log "STUB qstop"; }
 avail_mb() { echo ${STUB_AVAIL:-118000}; }
 gpu_free() { echo "110.0 of 121.7 GiB"; }
-sample_start() { printf '1 118000\n2 84000\n3 80000\n' > "$1"; }
+sample_start() { printf '1 118000\n2 84000\n9999999999 80000\n' > "$1"; }
 sample_stop() { :; }
 N=0
 launch() {
@@ -42,10 +42,15 @@ class ReportTest(unittest.TestCase):
     def test_the_overhead_is_the_peak_use_minus_weights_and_pin(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
-            (d / "mem.log").write_text("1 118000\n2 86000\n3 84952\n4 90000\n")
+            (d / "mem.log").write_text("1 118000\n2 76000\n5 86000\n6 84952\n7 90000\n")   # 2: the load peak
+            (d / "speed.jsonl").write_text("".join(json.dumps(x) + "\n" for x in [
+                {"run": 0, "completion_tokens": 1, "decode_tok_s": None}, {"run": 1, "completion_tokens": 101, "decode_tok_s": 10.0},
+                {"run": 1, "completion_tokens": 301, "decode_tok_s": 30.0}]))
+            self.assertEqual(qwen_fit.rate(d / "speed.jsonl"), (20.0, 2))
             (d / "server.log").write_text("x Model loading took 19.83 GiB memory\ny GPU KV cache size: 266,240 tokens\n")
             (d / "gpu.txt").write_text("4242, 30500 MiB\n")
-            r = qwen_fit.report(118000, 88000, 8933531976, d / "mem.log", d / "server.log", d / "gpu.txt")
+            r = qwen_fit.report(118000, 88000, 8933531976, d / "mem.log", d / "server.log", d / "gpu.txt", healthy_at=5)
+        self.assertAlmostEqual(r["load_peak"], 42000 / 1024, places=2)
         self.assertEqual((r["weights"], r["kv_pin"], r["kv_tokens"], r["gpu_process_mib"]), (19.83, 8.32, 266240, [30500]))
         self.assertAlmostEqual(r["used_at_peak"], (118000 - 84952) / 1024, places=2)
         self.assertAlmostEqual(r["overhead_x"], (118000 - 84952) / 1024 - 19.83 - 8.32, places=2)

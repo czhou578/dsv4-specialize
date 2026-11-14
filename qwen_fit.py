@@ -58,9 +58,21 @@ def long_prompt(base, model, tokens, max_tokens=500):
             "seconds": round(time.monotonic() - began, 1)}
 
 
-def report(before_mb, healthy_mb, pin_bytes, mem_log, server_log, gpu=None):
-    """The memory numbers of one point, in GiB. ``mem_log`` holds ``epoch available_mb`` lines."""
-    low = min(int(line.split()[1]) for line in Path(mem_log).read_text().splitlines() if line.strip())
+def rate(path):
+    """The decode rate of the measured rows of a ``model_eval.speed`` file: all decoded tokens / all decode time. The
+    summary of that tool fails on a server with no draft (it needs the draft counters)."""
+    rows = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+    rows = [r for r in rows if r.get("run", 0) >= 1 and r.get("decode_tok_s")]
+    tokens = sum(r["completion_tokens"] - 1 for r in rows)
+    return tokens / sum((r["completion_tokens"] - 1) / r["decode_tok_s"] for r in rows), len(rows)
+
+
+def report(before_mb, healthy_mb, pin_bytes, mem_log, server_log, gpu=None, healthy_at=0):
+    """The memory numbers of one point, in GiB. ``mem_log`` holds ``epoch available_mb`` lines. The peak of the
+    report counts the samples from ``healthy_at`` on; the lowest sample before it is the peak of the load."""
+    samples = [(int(a), int(b)) for a, b in (line.split() for line in Path(mem_log).read_text().splitlines() if line.strip())]
+    low = min([m for e, m in samples if e >= healthy_at] or [healthy_mb])
+    load_low = min([m for e, m in samples if e < healthy_at] or [healthy_mb])
     log = Path(server_log).read_text(errors="replace")
     loaded = [float(x) for x in re.findall(r"Model loading took ([0-9.]+) ?GiB", log)]
     kv = re.findall(r"GPU KV cache size: ([0-9,]+) tokens", log)
@@ -68,7 +80,7 @@ def report(before_mb, healthy_mb, pin_bytes, mem_log, server_log, gpu=None):
     out = {"available_before": round(gib(before_mb), 2), "available_healthy": round(gib(healthy_mb), 2),
            "available_lowest": round(gib(low), 2), "used_at_peak": round(gib(before_mb - low), 2),
            "weights": max(loaded) if loaded else None, "kv_pin": round(pin_bytes / 2**30, 2),
-           "kv_tokens": int(kv[-1].replace(",", "")) if kv else None}
+           "kv_tokens": int(kv[-1].replace(",", "")) if kv else None, "load_peak": round(gib(before_mb - load_low), 2)}
     if out["weights"] is not None:
         out["overhead_x"] = round(out["used_at_peak"] - out["weights"] - out["kv_pin"], 2)
         out["overhead_idle"] = round(gib(before_mb - healthy_mb) - out["weights"] - out["kv_pin"], 2)
@@ -85,7 +97,8 @@ def main(argv=None):
     cmd.add_argument("--smoke", action="store_true")
     cmd.add_argument("--long", type=int, metavar="TOKENS")
     cmd.add_argument("--report", action="store_true")
-    for name, kind in (("before", int), ("healthy", int), ("pin", int), ("mem-log", Path), ("server-log", Path),
+    cmd.add_argument("--rate", type=Path, metavar="SPEED_JSONL")
+    for name, kind in (("before", int), ("healthy", int), ("healthy-at", int), ("pin", int), ("mem-log", Path), ("server-log", Path),
                        ("gpu", Path), ("out", Path)):
         ap.add_argument(f"--{name}", type=kind)
     a = ap.parse_args(argv)
@@ -98,11 +111,14 @@ def main(argv=None):
     if a.long:
         print(json.dumps(long_prompt(a.base_url, a.model, a.long)))
         return
-    r = report(a.before, a.healthy, a.pin, a.mem_log, a.server_log, a.gpu)
+    if a.rate:
+        print("%.2f tok/s over %d rows" % rate(a.rate))
+        return
+    r = report(a.before, a.healthy, a.pin, a.mem_log, a.server_log, a.gpu, a.healthy_at or 0)
     if a.out:
         a.out.write_text(json.dumps(r, indent=1) + "\n")
     print(f"weights {r['weights']} GiB; KV pin {r['kv_pin']} GiB ({r['kv_tokens']} tokens); used at the peak "
-          f"{r['used_at_peak']} GiB; lowest available {r['available_lowest']} GiB")
+          f"{r['used_at_peak']} GiB; lowest available {r['available_lowest']} GiB; peak of the load {r['load_peak']} GiB")
     print(f"overhead X {r.get('overhead_x')} GiB at the peak, {r.get('overhead_idle')} GiB after the boot")
 
 
