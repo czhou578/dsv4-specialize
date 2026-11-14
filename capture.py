@@ -142,7 +142,10 @@ def capture_one(base, model, s, g, i, tools, effort, seen_prefixes, sums=None, e
     system = [m for m in body["messages"] if m["role"] == "system"]
     # /tokenize ignores reasoning_effort, and the template puts the effort line first: pass it as a
     # template kwarg, or the default ("max") line makes the common prefix 1 token (2026-11-03).
-    shared = post(base, "/tokenize", {"model": model, "messages": system or [{"role": "system", "content": ""}],
+    # A user message closes the prefix: the Qwen 3.5/3.6 template refuses a list with no user message. The common
+    # prefix below stops where the two token lists differ, so the user message does not count.
+    shared = post(base, "/tokenize", {"model": model, "messages": [*(system or [{"role": "system", "content": ""}]),
+                                                                   {"role": "user", "content": "."}],
                                       "tools": tools, "add_generation_prompt": False,
                                       "chat_template_kwargs": {"reasoning_effort": effort}})["tokens"]
     prefix = common_prefix(shared, prompt)

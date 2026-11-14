@@ -114,6 +114,12 @@ class PruneTest(unittest.TestCase):
         with self.assertRaises(ValueError):                                    # no draft layer in the rank
             qp.keep_sets({"layers": {k: v for k, v in RANK["layers"].items() if k != "2"}}, 3, LAYERS)
         self.assertEqual(qp.keep_sets(RANK, 2, LAYERS, draft="first")["mtp"], [0, 1])
+        out = Path(self.tmp.name) / "keep"
+        qp.prune(self.src, out, RANK, 3, draft="keep")                         # the draft stays whole
+        header, _ = qp.read_header(out / "model-00001-of-00002.safetensors")
+        self.assertEqual(header["mtp.layers.0.mlp.experts.down_proj"]["shape"][0], EXPERTS)
+        self.assertEqual(header["model.language_model.layers.0.mlp.gate.weight"]["shape"][0], 3)
+        self.assertGreater(qp.check(self.src, out), 0)
         with self.assertRaises(ValueError):
             qp.prune(self.src, Path(self.tmp.name) / "o2", RANK, EXPERTS)      # nothing to prune
 

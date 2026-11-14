@@ -51,16 +51,19 @@ def write_safetensors(path, tensors, metadata=None):
 
 def keep_sets(rank, k, num_layers, draft="rank"):
     """``{layer: sorted kept ids}`` for the decoder layers, and under ``"mtp"`` for the draft: the first ``k`` experts of
-    each layer of the rank file. ``draft="first"`` keeps the experts 0..k-1 of the draft (a rank file with no draft)."""
+    each layer of the rank file. ``draft="first"`` keeps the experts 0..k-1 of the draft (a rank file with no draft);
+    ``draft="keep"`` keeps the draft whole (its tensors are copied unchanged; serve its draft from the source folder)."""
     layers = rank["layers"]
     keep = {l: sorted(e["id"] for e in layers[str(l)][:k]) for l in range(num_layers)}
-    if draft == "first":
+    if draft == "keep":
+        keep["mtp"] = None
+    elif draft == "first":
         keep["mtp"] = list(range(k))
     elif str(num_layers) not in layers:
         raise ValueError(f"the rank file has no layer {num_layers} for the draft: capture it, or pass --draft first")
     else:
         keep["mtp"] = sorted(e["id"] for e in layers[str(num_layers)][:k])
-    if any(len(set(v)) != k for v in keep.values()):
+    if any(v is not None and len(set(v)) != k for v in keep.values()):
         raise ValueError(f"a layer of the rank file has fewer than {k} distinct experts")
     return keep
 
@@ -75,7 +78,7 @@ def plan(name, keep):
     if m := GATE.match(name):
         return name, keep[int(m.group(1))]
     if DRAFT.match(name):
-        return name, keep["mtp"]
+        return name, keep["mtp"]   # None: the draft is kept whole
     return name, None
 
 
@@ -142,7 +145,7 @@ def check(source, out):
     info = json.loads((out / "PRUNE.json").read_text())
     keep = {(int(l) if l != "mtp" else l): v for l, v in info["kept_ids"].items()}
     _, text, num_layers, _ = config_layers(out)
-    assert text["num_experts"] == info["keep"] and all(len(v) == info["keep"] for v in keep.values())
+    assert text["num_experts"] == info["keep"] and all(v is None or len(v) == info["keep"] for v in keep.values())
     n = 0
     for f in sorted(source.glob("*.safetensors")):
         header, start = read_header(out / f.name)
@@ -167,7 +170,8 @@ def main(argv=None):
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--rank", type=Path, help="the rank file of capture.py --rank")
     ap.add_argument("--keep", type=int, help="the experts to keep in each layer")
-    ap.add_argument("--draft", choices=("rank", "first"), default="rank", help="how to choose the experts of the MTP draft")
+    ap.add_argument("--draft", choices=("rank", "first", "keep"), default="rank",
+                    help="the experts of the MTP draft: by the rank, the first K, or all (serve the draft from the source)")
     ap.add_argument("--check", action="store_true", help="compare an existing pruned folder with its source and exit")
     a = ap.parse_args(argv)
     if not a.check:
