@@ -211,12 +211,13 @@ class Controller:
             layer.layer_heal = torch.as_tensor(m).to(device=device, dtype=dtype)
 
     def boot_line(self):
-        """The one boot line of §6.1: the skip set, the GiB of the skipped weights, the heal file and the probe."""
+        """The one boot line of §6.1: the skip set, the GiB of the parameters and buffers of the skipped blocks, the heal
+        file and the probe. The EXL3 runtime keeps the routed experts outside the modules, so they are not counted."""
         parts = {"A": "attn", "F": "ffn"}
         size = sum(_bytes(self.layers[i]) if kind == "L" else _bytes(getattr(self.layers[i], parts[kind]))
                    for i, kind in self.skips.items() if i in self.layers)
         return (f"layer skip: set {canon(self.skips)} ({'run-time file ' + self.file if self.file else 'fixed'}); "
-                f"skipped weights {size / 2**30:.2f} GiB; heal {self.heal_line()}; "
+                f"registered weights {size / 2**30:.2f} GiB (EXL3 experts not counted); heal {self.heal_line()}; "
                 f"probe {'on' if self.probe_on else 'off'}")
 
     def heal_line(self):

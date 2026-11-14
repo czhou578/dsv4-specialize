@@ -1,8 +1,8 @@
 # Plan: fewer layers (depth pruning)
 
-**Status:** 2026-11-13: Phase B done (§7.7, §7.8): no whole layer and no pair is near the budget; the best single
-block, F24 (an FFN half), rises by +0.54% on a screen that drifted by 0.40%. The heal and `skip_replay.sh` are built.
-Phase C (S0, S1, S1h) waits for your go ·
+**Status:** 2026-11-13: done. The result is zero layers. No whole layer, no half and no pair fits the replay gate
+(§7.7, §8.5). The heal map works (it removes 61% of the cost of F24), but no block fits with it. Phases D and E did
+not run, on your decision (§9.1). The live MD prune did not change ·
 **Author:** colin-spark · **Date:** 2026-11-10, refreshed 2026-11-13
 **Source:** a note on depth pruning: rank the layers by Block Influence, confirm the best ones with the replay gate,
 heal the cut with a linear map, then remove the layers from the files. This plan checks each step against this stack.
@@ -16,9 +16,9 @@ to the live server.
 |---|---|
 | §6 Phase A: the patch, the tools and the tests (no downtime, about 2 days) | ✅ 2026-11-13: A1a to A3a (PRs #40 to #45); all tests pass; A3b (`skip_replay.sh`) waits for Phase B (§6.4) |
 | §7 Phase B: the probe window (about 3 h downtime) | ✅ 2026-11-13: attempt 4, 09:25 to 11:18 (§7.7); three failed boots before it, fixed in PR #46 |
-| §8 Phase C: the replay window (about 4 to 5 h downtime) | ⬜ |
-| §9 Phase D: heal maps for sets (only if §8.4 says so) | ⬜ |
-| §10 Phase E: the physical removal and the deploy chain (only if a set passes) | ⬜ |
+| §8 Phase C: the replay window (about 4 to 5 h downtime) | ✅ 2026-11-13, 12:00 to 16:07: S0, S1h and S1 with F24; no point passes (§8.5) |
+| §9 Phase D: heal maps for sets (only if §8.4 says so) | ➖ Not run, your decision of 2026-11-13 (§9.1). The heal code for one block is built and tested (PR #47) |
+| §10 Phase E: the physical removal and the deploy chain (only if a set passes) | ➖ Not run: no set passes (§9.1) |
 
 ---
 
@@ -575,6 +575,39 @@ on the boot of its replay.
 Also record, for each point, the rise on the replay divided by the rise on the screen. Phase D uses this ratio in
 place of the margins of §7.6.
 
+### 8.5 Result (2026-11-13, 12:00 to 16:07, on your "Start now")
+
+The window ran `POINTS='s0 s1h s1'` with `S1_SET=F24` and `HEAL_FILE=results/heal-F24.npz`. The live server stopped
+at 12:00 and was healthy again at 16:06:50 (reply "OK.", gateway active). The downtime was 4 h 6 min. Files:
+`logs/skip-replay.log`, `results/skip-{s0,s1h,s1}-{a,b}.jsonl`, `results/boot-skip-*.log` (not in git).
+
+| Point | Boot | Replay a, b | Mean NLL | Against K 216 (gate: +3%) | Against S0 | Reasoning, answer against S0 | Tool names (K 216: 0.9277) | Decisions (K 216: 41) | Gate |
+|---|---|---|---|---|---|---|---|---|---|
+| S0: no skip | 181 s, 69.79 GiB | 0.4569, 0.4578 | 0.4573 | +3.00% | — | — | 0.9398, 0.9398 | 40, 39 | Fail (by rounding) |
+| S1h: F24 with its heal map | 165 s, 69.82 GiB | 0.4585, 0.4599 | 0.4592 | +3.43% | **+0.42%** | +0.54%, +0.19% | 0.9639, 0.9639 | 38, 41 | Fail |
+| S1: F24 | 150 s, 69.79 GiB | 0.4623, 0.4620 | 0.4621 | +4.09% | **+1.06%** | +1.04%, +1.09% | 0.9398, 0.9639 | 39, 41 | Fail |
+
+- **The boot checks pass at every point:** the skip line of the set, the heal line of S1h (`heal F24 sha256
+  318a83fa408dfa10`), no graph from the compile cache, and the smoke test (the JSON schema and both tool choices).
+  These were the first compiled boots of the patch, with the draft. A boot with the compile cache off took 150 to
+  181 s.
+- **The S0 check passes:** the mean of S0 is +0.24% against the live replays (0.4562; the limit is 1%). So the patch
+  does not change the model with no skip. The S0 speed is the live speed: the bot decode 35.33 tok/s with 2.19
+  accepted tokens per draft step (the live server: 35.30 tok/s), the code decode 37.57 tok/s.
+- **No point passes the replay gate.** S0 itself sits on the gate in this window (0.4573). The budget of §0
+  (0.0011 NLL) was inside the noise of the replay, and here it is zero. No speed test ran for S1h and S1 (§8.2).
+- **The heal works.** It removes 61% of the rise of S1 (from +1.06% to +0.42% against S0). The two replays of each
+  point agree within 0.31%, and the difference of S1 and S1h (0.63 points) is larger than that. The heal helps the
+  answer tokens most (+1.09% to +0.19%).
+- **The screen understates the replay.** F24 rose by +0.54% on the screen and by +1.06% on the replay: a ratio of
+  2.0 (§8.4). The loss of S1 is the same in the reasoning and in the answer tokens.
+- **The boot line** gave "skipped weights 0.02 GiB" for F24. The EXL3 runtime keeps the routed experts (about
+  1.3 GiB for F24) outside the module, so the line did not count them. The line now says "registered weights ...
+  (EXL3 experts not counted)". The checks of the scripts do not read this field.
+
+By the table of §8.4: no point passes, and the heal removes at least half of the rise of S1. That row sends the plan
+to Phase D. §9.1 gives the decision.
+
 ## 9. Phase D: heal maps for sets (only if §8.4 says so)
 
 **The map.** It follows Ghosted Layers. At the boundary of a skipped block, the state s becomes s + s·M, with
@@ -615,6 +648,27 @@ next block then runs the standalone mHC pre, the path for a merged input that th
 
 **The work.** The heal code in the patch and `--fit` in the client (one pull request). Then a probe window (about 3 h)
 for the Gram sums of the sets, and a replay window (about 4 h) with the healed sets.
+
+### 9.1 The decision (2026-11-13): Phase D does not run, and the plan ends
+
+§8.4 sends the plan to Phase D, because the heal removes 61% of the rise of S1. You decided to close the plan. The
+reasons:
+
+1. **The budget is zero.** S0, the live model with no skip, sits on the gate (+3.00%). Any block must cost nothing.
+2. **The best block with its heal still costs +0.42%.** F24 is the best of the 28 screened blocks. A set holds F24
+   and more, so a healed set costs more than a healed F24.
+3. **The sets compound.** Every pair with F24 rose by +2.43% or more on the screen, more than the sum of its two
+   single rises, and the replay showed twice the rise of the screen. A heal that removes 61% leaves about +1% to +2%.
+4. **Phase D costs about 7 hours of downtime** (a probe window and a replay window) for a result that cannot pass.
+5. **Phase E has no input.** It runs only if a set passes. No `prune_layers.py` was built.
+
+What stays for a later plan:
+
+- The heal map is real: one linear map, 4,096 × 4,096, removes 61% of the cost of one FFN half on held-out data.
+- A looser gate changes the answer. With a budget of 0.5%, F24 with its heal would fit, and it frees about 1.3 GiB
+  after a loader patch for an FFN half (§10.2). That is your decision on the gate, not a result of this plan.
+- A fit weighted by the inverse state norm could heal better (§7.7: large-norm tokens dominate the Gram sums).
+- The patch, the probe and the two window scripts work on this stack, on both mHC paths.
 
 ## 10. Phase E: the physical removal (only if a set passes)
 
@@ -668,11 +722,11 @@ The deploy follows only on your go.
 
 | Phase | Work | Downtime | When |
 |---|---|---|---|
-| A | About 2 days | None | Now: the Step 2 window of `PLAN_SERVE_TUNE.md` ended on 2026-11-10 |
-| B | One evening | About 3 h | After Phase A and the deploy decision on #2 (the KV pin) |
-| C | One night | About 4 to 5 h | After Phase B, if §7.6 does not say "stop" |
-| D | About 1 day and two windows | About 3 h and about 4 h | Only if §8.4 says so |
-| E | About 1 day and one window | About 1.5 h | Only if a set passes |
+| A | About 2 days | None | Done 2026-11-13, in about 1 hour (PRs #39 to #45) |
+| B | One evening | About 3 h | Done 2026-11-13: three failed boots (26 min of downtime in all), then 09:25 to 11:18 (1 h 53 min) |
+| C | One night | About 4 to 5 h | Done 2026-11-13, 12:00 to 16:07 (4 h 6 min) |
+| D | About 1 day and two windows | About 3 h and about 4 h | Not run (§9.1) |
+| E | About 1 day and one window | About 1.5 h | Not run (§9.1) |
 | F | As in `PLAN_FINAL_REVIEW.md` | As there | Your decision |
 
 Phases A and B decide whether the rest is worth the work. If the result of §7.6 is "stop", the plan ends after one
