@@ -387,8 +387,9 @@ The use at the peak holds the score and suite clients; the clean peak of the ful
 **The decision: no prune.** The first 48 experts cost +4.15% and the next 16 cost +3.9%, so G1 holds only above about
 K 224. K 224 saves about 2.1 GiB, and the full model with its draft at 128k leaves about −0.9 GiB (29.9 GiB against
 about 29 GiB available): the margin at K 224 is about 1.2 GiB, or about 2.3 GiB with the DeepSeek context cap (D1).
-G6 asks for 4 GiB. No K passes both G1 and G6, so nothing is accepted and nothing is deployed. The folders
-`qwen-k176`, `qwen-k192` and `qwen-k208` (53 GB, not in git) stay on disk until you decide to delete them.
+G6 asks for 4 GiB. No K passes both G1 and G6, so nothing is accepted and nothing is deployed. On your request,
+the folders `qwen-k176`, `qwen-k192` and `qwen-k208` were deleted on 2026-11-14. The rank file
+(`results/qwen-rank.json`) stays, and `qwen_prune.py --draft keep` rebuilds a folder in about 75 seconds.
 
 **The choices for the fast route, none taken:**
 
