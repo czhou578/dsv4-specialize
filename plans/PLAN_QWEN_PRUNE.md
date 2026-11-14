@@ -600,6 +600,34 @@ tokens accepted per draft step.
 uses at least 0.75 GiB less than k0 at the peak, and decodes within 5% of k0 (at least 92.8 tok/s). Then K 208 uses
 about 25.5 GiB: a margin of about 3.3 to 4.0 GiB beside DeepSeek, or 3.7 to 4.4 GiB with the context cap.
 
+### 7.8 Result of d1, and the next window (2026-11-14, 13:48 to 13:57)
+
+The live server stopped at 13:48 and was healthy again at 13:57:07: 9 minutes of downtime. d1 booted on the first
+try: the target's MoE on FLASHINFER_CUTLASS, the draft with 256 experts (`qwen_mtp_patch`) and its MoE on MARLIN
+(weight-only FP4).
+
+| | k0 (BF16 draft, §7.4) | d1 (NVFP4 draft) |
+|---|---|---|
+| Model loading | 18.09 GiB | **17.01 GiB** (−1.08) |
+| GPU process (`nvidia-smi`) | 22,639 MiB | 22,461 MiB (−0.17 GiB) |
+| Use at the peak | 26.51 GiB | 26.44 GiB (−0.07) |
+| Overhead X at the peak / after the boot | 6.59 / 6.21 GiB | 7.60 / 7.23 GiB |
+| Prompt of 119,745 tokens | 45.5 s | 45.4 s |
+| Decode with the draft | 97.65 tok/s | 97.92 tok/s |
+| Tokens accepted per draft step | 2.24 | 2.19 |
+
+**By the rule of §7.7, d1 fails:** its peak is only 0.07 GiB below k0, and the rule asks 0.75 GiB. The speed and the
+acceptance hold (the acceptance is within the noise of 0.05), so the NVFP4 draft costs nothing in speed.
+
+**The cause.** The weights are 1.08 GiB smaller, but the GPU process holds about 0.9 GiB more than the weights,
+the KV pin and the usual overhead. With a pinned KV cache, vLLM skips the profiling block that frees the allocator
+cache (`gpu_worker.py`). The Marlin repack of the draft frees large blocks during the load, and later small
+allocations pin them, so the cache keeps them (vLLM's own comment there describes this).
+
+**The next window** (d2, d3; about 20 minutes): d2 adds `gc.collect()` and `torch.cuda.empty_cache()` at the end of
+`load_model` (`QWEN_EMPTY_CACHE=1` in `qwen_mtp_patch`), and logs the allocated and reserved memory. d3 uses the
+allocator's expandable segments. The rule of §7.7 applies to each.
+
 ## 8. Phase D: both servers at the same time
 
 As `PLAN_SECOND_MODEL_FIT.md` §7: DeepSeek first, then the pruned Qwen with a very small utilization value or after
