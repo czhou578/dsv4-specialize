@@ -9,7 +9,7 @@ windows. The model runs with the vLLM 0.33 venv, alone on port 8889. No change t
 
 | Step | Status |
 |---|---|
-| §5 Phase A: the data, the tools and the tests (no downtime, about 2 days) | ⬜ |
+| §5 Phase A: the data, the tools and the tests (no downtime, about 2 days) | 🔨 2026-11-13: the data builder is done (§5.1); next the capture change, the prune tool and the window scripts |
 | §6 Phase B: the capture window (about 85 min downtime) | ⬜ |
 | §7 Phase C: the builds and the gate window (about 80 min downtime) | ⬜ |
 | §8 Phase D: both servers at the same time (`PLAN_SECOND_MODEL_FIT.md` §7) | ⬜ |
@@ -134,6 +134,26 @@ The reference is the full model (K 256) in the same window. A pruned model must 
   runs of both window scripts with stub boots.
 - Each pull request changes at most 400 lines: the data builder; the capture change and the prune tool; the two
   window scripts.
+
+### 5.1 The data builder (2026-11-13)
+
+`qwen_data.py` writes `qwen-data/sessions.jsonl` and `tools.json` (not in git) in under 2 seconds. The result on this
+machine, in estimated tokens (characters / 4):
+
+| Source | Calibration | Held-out |
+|---|---|---|
+| Claude Code transcripts | 33 sessions, 37 segments, 1.13M tokens, from 13 projects | 13 sessions, 25 segments, 0.89M tokens |
+| The bot's sessions | 22 sessions, 26 segments, 0.63M tokens | 18 sessions, 24 segments, 1.00M tokens |
+| Repository files | 42 files of 7 repositories, 0.09M tokens | 6 files of `nanoGPT-inference` |
+
+- The calibration holds about 1.86M tokens. A budget per source (`--budget`) takes one segment at a time from each
+  project in turn, so the largest project (2.2M tokens of transcripts) does not fill it alone.
+- The tool calls of the transcript part: 1,901 `terminal`, 248 `patch`, 97 `write_file`, 77 `read_file`, 21
+  `web_extract`, 3 `web_search`. The web searches come mostly from the bot's sessions.
+- No tool result is left without its call, the longest segment has about 91,000 tokens, and the secret pattern
+  replaced 18 strings.
+- The system prompt is the Hermes prompt of the bot's data. Give me the prompt of your coding agent when it exists,
+  and the builder takes that.
 
 Two questions that Phase A cannot answer, with the fallback for each:
 
