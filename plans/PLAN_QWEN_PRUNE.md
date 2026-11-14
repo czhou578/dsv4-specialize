@@ -288,16 +288,20 @@ is the clean number for the model with its draft at 128k.
 The builds (no downtime): K 176 (16.72 GiB), K 192 (17.78 GiB) and K 208 (18.84 GiB), each in about 75 seconds, and
 every kept tensor equals its source.
 
-## 7. Phase C: the builds and the gate window (about 80 min downtime)
+## 7. Phase C: the builds and the gate window (about 3 hours downtime)
 
-Builds (no downtime): K 192, K 176 and K 160, each about 12 to 17 GB on disk, with `--check`.
+Builds (no downtime): K 208, K 192 and K 176 (§6.1), with `--check`.
+
+Each point runs the smoke test, the score of the 60 recorded turns, the tool-call suite (33 min on c1) and the bot
+decode test. The window gives each point 45 minutes. K 176, the point most likely to fail (§6.1), runs last: if the
+time runs out, the window skips only that point.
 
 | Order | Point | Tests | Minutes |
 |---|---|---|---|
-| 1 | K 256 with the draft, 128k | G4, G5, G6: the reference of the window | 15 |
-| 2 | K 176 with the draft | G1 to G6 | 20 |
-| 3 | K 192 with the draft | G1 to G6 | 20 |
-| 4 | K 208 with the draft (in place of K 160, §6.1) | G1 to G6 | 20 |
+| 1 | K 256 with the draft, 128k | G3, G4, G5, G6, and the score: the reference of the window | 45 |
+| 2 | K 208 with the draft (in place of K 160, §6.1) | G1 to G6 | 45 |
+| 3 | K 192 with the draft | G1 to G6 | 45 |
+| 4 | K 176 with the draft | G1 to G6 | 45 |
 | 5 | The restore of the live server | | 3 |
 
 How to read the result:

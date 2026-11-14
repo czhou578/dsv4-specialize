@@ -61,6 +61,7 @@ done
 FLAGS[c1]="$Q35 --enable-return-routed-experts" FLAGS[c2]=${FLAGS[c1]} DRAFT[c3]=$NGRAM
 unset "DRAFT[c1]"; PIN0[c1]=1574535010 PIN0[c3]=1853707884   # no draft weights: the KV need is smaller
 TESTS[c1]="smoke capture record tools speed" NEED[c1]=60 TESTS[c2]="smoke draftcapture speed" TESTS[c3]="smoke speed"
+for p in g256 g208 g192 g176 g160; do NEED[$p]=45; done   # the c1 tool suite took 33 min; the score of 60 turns, a boot, the speed test
 QPID= SAMPLER= PIN=
 QPAT='^[^ ]*python[^ ]* [^ ]*vllm serve '   # a real server process only: a shell that names the command does not match
 qrunning() { pgrep -f "$QPAT" > /dev/null; }
