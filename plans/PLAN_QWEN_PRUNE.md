@@ -561,6 +561,45 @@ why each pair runs in both orders. The score falls by 0.09, but the per-turn tes
 
 The K 208 folder was deleted again after the window.
 
+### 7.7 K 208 with NVFP4 draft experts (your choice of 2026-11-14)
+
+You chose K 208, then the vLLM path to more margin: the 256 experts of the MTP draft in NVFP4 instead of BF16.
+Speculation stays exact, so the outputs of the target do not change; only the acceptance of the draft can fall.
+
+**What vLLM needs** (read in vLLM 0.33):
+
+- vLLM builds the draft with the quant config of the *target* (`VllmConfig.quant_config` comes from the target model
+  config), so the ignore list and the groups of `qwen-k208/config.json` decide how the draft layers are built. The
+  draft folder gives the weights and, with `qwen_mtp_patch`, the expert count.
+- The checkpoint ignores the draft (`re:^mtp.*`). The patch of `qwen_draft_quant.py --patch-config` changes it to
+  `re:^mtp\.(?!layers\.0\.mlp\.experts\.).*` (the rest of the draft stays BF16), keeps the expert group of the
+  target off the draft (`re:^(?!mtp\.).*mlp\.experts...`), and adds a group for the draft experts with NVFP4 weights
+  and no input quantization (NVFP4A16). vLLM takes the first matching target, and the tests use its own functions.
+- Weight-only NVFP4 MoE needs a backend with a weight-only mode. The target's `flashinfer_cutlass` has none, so the
+  draft runs its MoE on Marlin (`"moe_backend": "marlin"` in the speculative config). Weight-only mode needs no
+  activation scales, so no calibration of the draft.
+- The fused gate and up of an expert need one global scale; the checkpoint does the same (12,992 for both in layer 39,
+  expert 0).
+
+**The build** (`qwen_draft_quant.py`, about 20 seconds): the draft folder `qwen-draft-nvfp4` links the four shards with
+no draft tensor and rewrites the fifth (3.6 GB to 2.4 GB). The draft experts take **0.42 GiB instead of 1.50 GiB**:
+1.08 GiB less. The scales and the packing come from compressed-tensors. Checks:
+
+- The format: one expert of the checkpoint, unpacked and packed again with its global scale, gives 100% of its scales
+  and the same values (only the sign of some zero codes differs).
+- The error of the 256 new experts against BF16: 9.5% relative (mean and worst), the usual error of 4 bits with a
+  scale per 16 weights.
+- vLLM 0.33 builds the engine config of the point on the CPU: the draft with 256 experts on Marlin, the target with
+  208, the new group with no input quantization.
+
+**The window** (point d1, about 10 minutes): K 208 with the NVFP4 draft, the smoke test, one prompt of 120,000
+tokens and the bot decode test. The baseline is k0 of §7.4 (the BF16 draft): 26.51 GiB at the peak, 97.65 tok/s, 2.24
+tokens accepted per draft step.
+
+**The decision rule, written before the window:** the NVFP4 draft is the choice if d1 boots, passes the smoke test,
+uses at least 0.75 GiB less than k0 at the peak, and decodes within 5% of k0 (at least 92.8 tok/s). Then K 208 uses
+about 25.5 GiB: a margin of about 3.3 to 4.0 GiB beside DeepSeek, or 3.7 to 4.4 GiB with the context cap.
+
 ## 8. Phase D: both servers at the same time
 
 As `PLAN_SECOND_MODEL_FIT.md` §7: DeepSeek first, then the pruned Qwen with a very small utilization value or after
