@@ -228,6 +228,151 @@ def bi_table(sums):
             for layer in range(cos.shape[0]) for c, kind in enumerate(KINDS) if tok[layer, c] > 0}
 
 
+# --- the greedy rounds of §7.2 to §7.4 --------------------------------------------------------------------------
+
+def candidates(table, kinds, skip=""):
+    """The blocks of the candidate layers in ``kinds`` that can join ``skip``, lowest BI first."""
+    return sorted((b for b in table if b[0] in kinds and FIRST <= int(b[1:]) <= LAST and not clash(b, skip)),
+                  key=lambda b: (table[b][0], b))
+
+
+def round1(table):
+    """The 10 L, 10 F and 8 A blocks with the lowest BI, one kind after another by rank, so that a short window drops
+    the last ranks of each kind."""
+    ranked = {k: candidates(table, k)[:n] for k, n in ROUND1.items()}
+    return [r[j] for j in range(max(ROUND1.values())) for r in ranked.values() if j < len(r)]
+
+
+class Greedy:
+    """The steps of §7.2 with the log, the resume and the deadline (a Unix time). The Gram sums and rounds 2 and 3 run
+    only while the best L or F set rises by at most ``stop`` percent (1%: the stop row of §7.6 after the refresh)."""
+
+    def __init__(self, client, sets, log, deadline, stop=1.0, gram_out=None, clock=time.time):
+        self.c, self.sets, self.log, self.deadline, self.stop = client, sets, Path(log), deadline, stop
+        self.clock = clock
+        self.gram_out = gram_out or self.log.with_name(self.log.stem + "-gram.npz")
+        self.rows = {r["key"]: r for r in map(json.loads, self.log.open())} if self.log.exists() else {}
+        self.cost = {"screen": 240.0, "bi": 600.0, "gram": 720.0}   # seconds; replaced by the first measurement
+
+    def step(self, key, kind, fn, reserve=True, **fields):
+        """Run ``fn`` once for ``key``, unless the log has it or the deadline is too near (R2 keeps its time)."""
+        if key in self.rows:
+            return self.rows[key]
+        need = self.cost[kind] + (self.cost["screen"] if reserve else 0)
+        if self.clock() + need > self.deadline:
+            print(f"skip {key}: needs {need:.0f} s, the deadline is in {self.deadline - self.clock():.0f} s", flush=True)
+            return None
+        began = self.clock()
+        row = {"key": key, "kind": kind, **fields, **fn()}
+        row["seconds"] = self.cost[kind] = round(self.clock() - began, 1)
+        self.rows[key] = row
+        with self.log.open("a") as f:
+            f.write(json.dumps(row) + "\n")
+        print(json.dumps({k: v for k, v in row.items() if k != "sums"})[:300], flush=True)
+        return row
+
+    def screen(self, key, skip, r, reserve=True, **fields):
+        def fn():
+            res = self.c.screen(self.sets["screen"], skip)
+            return {**res, "rise": 100 * (res["nll"] / r["nll"] - 1)} if r else res
+        return self.step(key, "screen", fn, reserve, set=skip, **fields)
+
+    def bi(self, key, skip):
+        row = self.step(key, "bi", lambda: {"sums": self.c.bi(self.sets["probe"], skip)}, set=skip)
+        return bi_table(row["sums"]) if row else None
+
+    def gram(self, names):
+        def fn():
+            self.c.gram(self.sets["probe"], names, self.gram_out)
+            return {"blocks": names, "file": str(self.gram_out)}
+        return self.step("gram", "gram", fn)
+
+    def run(self):
+        r = self.screen("R", "", None)
+        if r is None:
+            return
+        table = self.bi("bi-0", "")
+        singles = [s for s in (self.screen(f"r1-{b}", b, r, round=1, bi=table[b][0]) for b in round1(table or {}))
+                   if s]
+        a_best = sorted((s for s in singles if s["set"][0] == "A"), key=lambda s: s["rise"])[:6]
+        if len(a_best) == 6:
+            self.screen("r1-SA", canon(s["set"] for s in a_best), r, round=1)
+        lf = sorted((s for s in singles if s["set"][0] in "LF"), key=lambda s: s["rise"])
+        if lf and lf[0]["rise"] <= self.stop:
+            self.gram([s["set"] for s in lf[:3]])
+        base = lf[0] if lf else None
+        for n in (2, 3):
+            if base is None or base["rise"] > self.stop:
+                break
+            table = self.bi(f"bi-{n - 1}", base["set"])
+            if table is None:
+                break
+            sets = [self.screen(f"r{n}-{b}", canon([*blocks_of(base["set"]), b]), r, round=n, bi=table[b][0])
+                    for b in candidates(table, "LF", base["set"])[:6]]
+            base = min((s for s in sets if s), key=lambda s: s["rise"], default=None)
+        self.screen("R2", "", r, reserve=False)
+
+
+# --- the report of §7.5 and §7.6 ----------------------------------------------------------------------------------
+
+def spearman(x, y):
+    rx, ry = (np.argsort(np.argsort(v, kind="stable"), kind="stable").astype(float) for v in (x, y))
+    return float(np.corrcoef(rx, ry)[0, 1]) if len(x) > 2 else float("nan")
+
+
+def decide(best, sa):
+    """The row of the §7.6 table (thresholds of the refresh, §0) for the best single L or F rise and the A set."""
+    if best is None:
+        lines = ["No single L or F block was screened: no decision."]
+    elif best > 1:
+        lines = [f"The best single L or F block rises by {best:+.2f}% (more than 1%): stop the memory track."]
+    elif best > 0.25:
+        lines = [f"The best single L or F block rises by {best:+.2f}% (0.25% to 1%): it needs a heal; "
+                 "the heal pull request, then Phase C with S0, S1 and S1h."]
+    else:
+        lines = [f"The best single L or F block rises by {best:+.2f}% (at most 0.25%): Phase C with S0, S1 and S1h, "
+                 "and S2 and S3 if each set rises by at most 0.35%."]
+    if sa is not None:
+        lines.append(f"The set of 6 A blocks rises by {sa:+.2f}%: " + ("add SA to Phase C." if sa <= 0.25 else
+                                                                        "no SA point."))
+    return lines
+
+
+def report(rows):
+    rows = {r["key"]: r for r in rows}
+    out = ["# The probe window: layer screen report", ""]
+    r, r2 = rows.get("R"), rows.get("R2")
+    if r:
+        out.append(f"- R: NLL {r['nll']:.4f} over {r['scored_tokens']} scored tokens ({r['seconds']:.0f} s).")
+    if r and r2:
+        d = 100 * (r2["nll"] / r["nll"] - 1)
+        out.append(f"- R2: NLL {r2['nll']:.4f}, {d:+.3f}% against R: the screen is "
+                   f"{'stable' if abs(d) <= 0.1 else 'NOT stable (more than 0.1%); its numbers do not count'}.")
+    table = bi_table(rows["bi-0"]["sums"]) if "bi-0" in rows else {}
+    singles = sorted((x for x in rows.values() if x.get("round") == 1 and "," not in x["set"]), key=lambda x: x["rise"])
+    if singles:
+        bis = [table[x["set"]][0] for x in singles if x["set"] in table]
+        rho = spearman(bis, [x["rise"] for x in singles if x["set"] in table])
+        out += ["", "## Round 1: single blocks", "", "| Block | BI | Rise |", "|---|---|---|"]
+        out += [f"| {x['set']} | {table.get(x['set'], (float('nan'),))[0]:.4f} | {x['rise']:+.2f}% |" for x in singles]
+        out += ["", f"Rank correlation of BI and the rise: {rho:.2f}" + (" (below 0.5: BI ranks this model badly; "
+                "a second probe window screens the other L and F blocks first)" if rho < 0.5 else "") + "."]
+    for n in (2, 3):
+        sets = sorted((x for x in rows.values() if x.get("round") == n), key=lambda x: x["rise"])
+        if sets:
+            out += ["", f"## Round {n}: sets of {n}", "", "| Set | BI of the new block | Rise |", "|---|---|---|"]
+            out += [f"| {x['set']} | {x['bi']:.4f} | {x['rise']:+.2f}% |" for x in sets]
+    if table:
+        out += ["", "## BI with no skip (layers 3 to 39, lowest first)", "", "| Block | BI | Relative change |",
+                "|---|---|---|"]
+        out += [f"| {b} | {table[b][0]:.4f} | {table[b][1]:.4f} |" for b in candidates(table, "AFL")]
+    lf = [x["rise"] for x in singles if x["set"][0] in "LF"]
+    sa = rows.get("r1-SA")
+    out += ["", "## The decision (§7.6)", ""] + [f"- {x}" for x in decide(min(lf) if lf else None,
+                                                                          sa["rise"] if sa else None)]
+    return "\n".join(out) + "\n"
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     here = Path(__file__).resolve().parent
@@ -235,9 +380,12 @@ def main(argv=None):
     ap.add_argument("--model", help="served model name (default: the server's first model)")
     ap.add_argument("--skip-dir", type=Path, default=here / "skip-out")
     ap.add_argument("--sets", type=Path, default=here / "results/skip-sets.json")
+    ap.add_argument("--log", type=Path, default=here / "results/skip-probe.jsonl")
+    ap.add_argument("--deadline", type=float, default=float("inf"), help="--greedy ends before this Unix time")
+    ap.add_argument("--stop", type=float, default=1.0, help="the limit of the rise (%%) for the Gram sums and rounds 2-3")
     ap.add_argument("--set", default="", help="the skip set of --bi and --screen, for example L17,F21")
     cmd = ap.add_mutually_exclusive_group(required=True)
-    for name in ("pick", "bi", "screen"):
+    for name in ("pick", "bi", "screen", "greedy", "report"):
         cmd.add_argument(f"--{name}", action="store_true")
     a = ap.parse_args(argv)
     if a.pick:
@@ -247,6 +395,9 @@ def main(argv=None):
         for k, v in sets.items():
             print(f"{k}: {len(v)} targets, about {sum(r[3] for r in v)} prompt tokens -> {a.sets}")
         return
+    if a.report:
+        print(report(map(json.loads, a.log.open())), end="")
+        return
     sets = json.loads(a.sets.read_text())
     if a.model is None:
         with urllib.request.urlopen(a.base_url + "/v1/models", timeout=30) as resp:
@@ -254,8 +405,10 @@ def main(argv=None):
     client = Client(a.base_url, a.model, a.skip_dir)
     if a.bi:
         print(json.dumps(bi_table(client.bi(sets["probe"], canon(blocks_of(a.set))))))
-    else:
+    elif a.screen:
         print(json.dumps(client.screen(sets["screen"], canon(blocks_of(a.set)))))
+    else:
+        Greedy(client, sets, a.log, a.deadline, a.stop).run()
 
 
 if __name__ == "__main__":
