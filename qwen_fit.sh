@@ -29,6 +29,9 @@
 #               o1 a prefill budget of 512, o2 --enforce-eager (no CUDA graphs, no torch.compile), o3 the allocator with
 #               expandable segments, o4 = o1 + o3. Tests: smoke, one prompt of 120,000 tokens, the bot decode test
 #   k0 k1       §7.3 K 208 with the draft of the snapshot (qwen_mtp_patch): k0 the settings of c2, k1 those of o4
+#   h256 h208   §7.5 the facts and the side-by-side: the full model and K 208, both with the draft. Tests: smoke, 200
+#               questions of SimpleQA (qwen_facts.py --answer, at most FACTS_S seconds, default 1200), and a new sample of the 60 recorded turns (qwen_gate.py
+#               --record --seed-offset 1). DeepSeek grades and judges them after the window
 # Each point also logs the resident and the peak resident memory of the server processes (procs.txt).
 # All points: a KV pin of 1.04x of the need, FP8 KV, --max-num-seqs 1, no images. The f, q and n points use
 # --max-model-len 256000 and these tests: smoke (a short request and a tool call), one prompt of about 250,000
@@ -78,6 +81,10 @@ done
 BUDGET[o1]=512 FLAGS[o2]="$Q35 --enforce-eager" ENVS[o3]=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True BUDGET[o4]=512 ENVS[o4]=${ENVS[o3]}
 for p in k0 k1; do MODEL[$p]=$S/qwen-k208 DRAFT[$p]=${DRAFT[g208]} PYPATH[$p]=$S/qwen_mtp_patch; done
 BUDGET[k1]=512 ENVS[k1]=${ENVS[o3]}
+for p in h256 h208; do
+  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$QM FLAGS[$p]=$Q35 DRAFT[$p]=$MTP PIN0[$p]=1965377034 TESTS[$p]="smoke facts pairs" NEED[$p]=35
+done
+MODEL[h208]=$S/qwen-k208 DRAFT[h208]=${DRAFT[g208]} PYPATH[h208]=$S/qwen_mtp_patch
 BUDGET[r256]=2048 CTX[r256]=128000 MODEL[r256]=$QM FLAGS[r256]=$Q35 DRAFT[r256]=$MTP PIN0[r256]=1965377034 TESTS[r256]="score speed" NEED[r256]=15
 FLAGS[c1]="$Q35 --enable-return-routed-experts" FLAGS[c2]=${FLAGS[c1]} DRAFT[c3]=$NGRAM
 unset "DRAFT[c1]"; PIN0[c1]=1574535010 PIN0[c3]=1853707884   # no draft weights: the KV need is smaller
@@ -152,6 +159,11 @@ tests() {  # $1 point: the tests of TESTS, in order
           --out $o-speed.jsonl > $o-speed.log 2>&1)
         log "qwen-$p bot decode test: exit $?; $(tail -1 $o-speed.log | cut -c1-200)"
         log "qwen-$p decode rate from the rows: $($PY $S/qwen_fit.py --rate $o-speed.jsonl 2>&1 | tail -1)";;
+      facts) timeout $(( left < ${FACTS_S:-1200} ? left : ${FACTS_S:-1200} )) $PY $S/qwen_facts.py --base-url $QURL --model $QNAME --answer --out $o-facts.jsonl > $o-facts.log 2>&1
+        log "qwen-$p facts: exit $?; $(tail -1 $o-facts.log | cut -c1-200)";;
+      pairs) timeout $left $PY $S/qwen_gate.py --base-url $QURL --model $QNAME --data $S/qwen-data --recorded $o-pairs.jsonl \
+          --record --seed-offset 1 > $o-pairs.log 2>&1
+        log "qwen-$p new sample of the recorded turns: exit $?; $(tail -1 $o-pairs.log | cut -c1-200)";;
       capture) timeout $left $cap --generate 256 --out $R/qwen-capture.jsonl > $o-capture.log 2>&1
         log "qwen-$p capture: exit $?; $(wc -l < $R/qwen-capture.jsonl 2>/dev/null) rows, $(grep -c '"error"' $R/qwen-capture.jsonl 2>/dev/null) errors";;
       draftcapture) timeout $left $cap --limit 24 --out $R/qwen-capture-draft.jsonl > $o-capture.log 2>&1

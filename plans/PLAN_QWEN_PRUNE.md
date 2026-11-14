@@ -486,6 +486,28 @@ seconds; this window's copy was deleted after the test, as you asked on 2026-11-
 `PYTHONPATH` of its server; the DeepSeek context cap D1; and Phase D, both servers at the same time with the memory
 watch, because the margin is at or below the 4 GiB of G6. A looser G1 limit and the smaller margin are your decisions.
 
+### 7.5 The facts and the side-by-side test (your request of 2026-11-14)
+
+Your question: how much visible loss, and how many more hallucinations, does K 208 bring? §7.2 measured the NLL, the
+decisions, the tool names and the tool-call suite, but no test of facts. This window adds two tests, on the full model
+(h256) and on K 208 (h208), both with the draft:
+
+1. **Facts.** 200 questions of SimpleQA (OpenAI's public set of 4,326 short questions with one known answer;
+   `qwen-data/simpleqa/`, not in git): 120 of the topic "Science and technology", the topic nearest to your work, and
+   80 of the others, in a fixed order that mixes both. The model answers with no tools, at the sampling of the fast
+   route, with a fixed seed per question and at most 2,048 tokens, for at most 20 minutes per model. The questions are
+   rare facts: the knowledge that a prune removes first. After the window, the live DeepSeek grades each answer
+   against the known answer: correct, incorrect (a hallucination) or not attempted. The grader runs with no thinking:
+   it graded 6 of 6 known cases right that way. The report counts only the questions that both models answered.
+2. **Side-by-side.** Each model writes a new sample (seed + 1) of the 60 recorded turns of §4. After the window,
+   DeepSeek (with thinking, about 45 seconds a call) judges 30 of them blind: the end of the context, the recorded
+   turn of the full model, and the new turn, in both orders. Two comparisons: the full model's new turn against its
+   recorded turn (the noise of the judge and of the sampling), and K 208's new turn against the same recorded turn.
+
+How to read it: K 208 hallucinates more if its incorrect answers rise above the noise of 200 questions (about ±5);
+its loss is visible if the judge prefers the recorded turn over K 208's turn clearly more often than over the full
+model's own new turn.
+
 ## 8. Phase D: both servers at the same time
 
 As `PLAN_SECOND_MODEL_FIT.md` §7: DeepSeek first, then the pruned Qwen with a very small utilization value or after

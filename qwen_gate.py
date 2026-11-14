@@ -2,7 +2,7 @@
 
 - ``--record``: the full model writes one turn for each of N held-out targets of ``qwen-data`` (the context is the
   segment up to the target), at the sampling settings of the fast route with a fixed seed. The turns are the recorded
-  set.
+  set. ``--seed-offset`` gives a new sample of the same turns (the side-by-side test of ``qwen_facts.py``).
 - ``--score``: a model scores the recorded turns. One request sends the context and the recorded turn as the last
   message with ``prompt_logprobs``; the tokens after the context are the turn. A row holds the NLL of the turn, its
   token count, the tokens that rank first, the decision (the first token after ``</think>`` ranks first; the first
@@ -62,14 +62,14 @@ def pick(sessions, n, max_chars=240_000, per_segment=2):
     return [(sid, g, i) for _, _, sid, g, i in [r for round_ in rounds for r in round_][:n]]
 
 
-def record(base, model, sessions, tools, n, out, max_tokens=800):
+def record(base, model, sessions, tools, n, out, max_tokens=800, seed_offset=0):
     by_id = {s["id"]: s for s in sessions}
     done = {(r["session"], r["segment"], r["index"]) for r in load(out)} if Path(out).exists() else set()
     with Path(out).open("a") as f:
         for sid, g, i in pick(sessions, n):
             if (sid, g, i) in done:
                 continue
-            seed = int(hashlib.sha256(f"{sid}:{g}:{i}".encode()).hexdigest()[:8], 16)
+            seed = int(hashlib.sha256(f"{sid}:{g}:{i}".encode()).hexdigest()[:8], 16) + seed_offset
             resp = post(base, "/v1/chat/completions", {
                 "model": model, "tools": tools, "max_tokens": max_tokens, "seed": seed, **SAMPLING,
                 "messages": messages(by_id[sid], by_id[sid]["segments"][g], i)})
@@ -158,6 +158,7 @@ def main(argv=None):
     ap.add_argument("--recorded", type=Path, default=here / "results/qwen-recorded.jsonl")
     ap.add_argument("--out", type=Path, help="the score file of --score")
     ap.add_argument("--n", type=int, default=60, help="the turns of --record")
+    ap.add_argument("--seed-offset", type=int, default=0, help="--record: add this to the seed of each turn (a new sample)")
     cmd = ap.add_mutually_exclusive_group(required=True)
     cmd.add_argument("--record", action="store_true")
     cmd.add_argument("--score", action="store_true")
@@ -174,7 +175,7 @@ def main(argv=None):
     sessions = load(a.data / "sessions.jsonl")
     tools = json.loads((a.data / "tools.json").read_text())["tools"]
     if a.record:
-        record(a.base_url, a.model, sessions, tools, a.n, a.recorded)
+        record(a.base_url, a.model, sessions, tools, a.n, a.recorded, seed_offset=a.seed_offset)
         print(f"{len(load(a.recorded))} recorded turns -> {a.recorded}")
     else:
         score(a.base_url, a.model, sessions, tools, load(a.recorded), a.out)
