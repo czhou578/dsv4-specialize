@@ -111,7 +111,22 @@ def count(routed, start=0, experts=EXPERTS):
     return counts, int((~filled).sum())
 
 
-def capture_one(base, model, s, g, i, tools, effort, seen_prefixes, sums=None, experts=EXPERTS):
+def generate_counts(base, model, s, seg, i, tools, effort, prompt, tokens, experts):
+    """The routing of a generation after the segment (plans/PLAN_QWEN_PRUNE.md §3): the context is the segment up to
+    its last target, or the whole segment when messages follow that target (a tool result). The model writes up to
+    ``tokens`` tokens. The rows that the first request did not cover count: the tail of the prompt and the new tokens."""
+    context = seg[:i] if i == len(seg) - 1 else seg
+    body = capture_body(model, s, [*context, {"role": "assistant", "content": ""}], len(context), tools, effort)
+    body["messages"] = body["messages"][:-1]
+    body.update(max_tokens=tokens, add_generation_prompt=True, temperature=0.6)
+    resp = post(base, "/v1/chat/completions", body)
+    routed = decode(resp["choices"][0]["routed_experts"])
+    counts, unfilled = count(routed, common_prefix(prompt, resp["prompt_token_ids"]), experts)
+    return {"gen_counts": counts.tolist(), "gen_unfilled": unfilled,
+            "gen_tokens": resp["usage"]["completion_tokens"]}
+
+
+def capture_one(base, model, s, g, i, tools, effort, seen_prefixes, sums=None, experts=EXPERTS, generate=0):
     seg = s["segments"][g]
     body = capture_body(model, s, seg, i, tools, effort)
     before = read_sums(sums) if sums else None
@@ -121,8 +136,9 @@ def capture_one(base, model, s, g, i, tools, effort, seen_prefixes, sums=None, e
         raise RuntimeError("no routed_experts in the reply: boot compose-capture.yml")
     routed = decode(choice["routed_experts"])
     prompt = resp["prompt_token_ids"]
-    if routed.shape[0] != len(prompt):
+    if routed.shape[0] < len(prompt):
         raise ValueError(f"{routed.shape[0]} routing rows for {len(prompt)} prompt tokens")
+    routed = routed[:len(prompt)]   # the stock vLLM also returns the row of the generated token
     system = [m for m in body["messages"] if m["role"] == "system"]
     # /tokenize ignores reasoning_effort, and the template puts the effort line first: pass it as a
     # template kwarg, or the default ("max") line makes the common prefix 1 token (2026-11-03).
@@ -146,10 +162,12 @@ def capture_one(base, model, s, g, i, tools, effort, seen_prefixes, sums=None, e
         if after is None or (before is not None and after["steps"] == before["steps"]):
             raise RuntimeError("the sums file did not change: is the patched container running?")
         row.update(sums_delta(before, after))
+    if generate:
+        row.update(generate_counts(base, model, s, seg, i, tools, effort, prompt, generate, experts))
     return row
 
 
-def run(base, model, out, limit=None, effort="medium", data=DATA, sources=SOURCES, sums=None, experts=EXPERTS):
+def run(base, model, out, limit=None, effort="medium", data=DATA, sources=SOURCES, sums=None, experts=EXPERTS, generate=0):
     sessions = [json.loads(line) for line in (data / "sessions.jsonl").open()]
     tools = json.loads((data / "tools.json").read_text())["tools"]
     todo = list(segments(sessions, sources=sources))[:limit]
@@ -164,7 +182,7 @@ def run(base, model, out, limit=None, effort="medium", data=DATA, sources=SOURCE
             row = {"session": s["id"], "segment": g, "index": i, "skill": s["skill"]}
             began = time.monotonic()
             try:
-                row.update(capture_one(base, model, s, g, i, tools, effort, seen, sums, experts))
+                row.update(capture_one(base, model, s, g, i, tools, effort, seen, sums, experts, generate))
                 if row["prefix_counted"]:
                     seen.add(row["prefix"])
             except Exception as exc:  # a failed segment is recorded, the run goes on
@@ -197,7 +215,7 @@ def rank(rows, order="count", min_skill_tokens=50000):
         raise ValueError("no captured segments")
     if order not in ORDERS:
         raise ValueError(f"order must be one of {ORDERS}")
-    total = sum(np.array(r["counts"]) for r in rows)
+    total = sum(np.array(r["counts"]) + np.array(r.get("gen_counts", 0)) for r in rows)
     weighted = [r for r in rows if "weight" in r]
     nan_slots = 0
     if weighted:
@@ -271,6 +289,8 @@ def main(argv=None):
     parser.add_argument("--sources", default=",".join(SOURCES),
                         help="session sources to capture, comma-separated (e2e and cron for the rank data)")
     parser.add_argument("--sums", type=Path, help="the routing_sums.npz of the patched capture container")
+    parser.add_argument("--generate", type=int, default=0,
+                        help="also let the model write up to N tokens after each segment, and count their routing")
     parser.add_argument("--experts", type=int, default=EXPERTS,
                         help="the routed experts per layer of the model (216 for DeepSeek V4 Flash, 256 for Qwen3.6-35B-A3B)")
     args = parser.parse_args(argv)
@@ -286,7 +306,7 @@ def main(argv=None):
     with urllib.request.urlopen(args.base_url + "/v1/models", timeout=30) as resp:
         model = args.model or json.load(resp)["data"][0]["id"]
     run(args.base_url, model, args.out, args.limit, args.effort, args.data,
-        tuple(args.sources.split(",")), args.sums, args.experts)
+        tuple(args.sources.split(",")), args.sums, args.experts, args.generate)
 
 
 if __name__ == "__main__":

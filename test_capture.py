@@ -100,6 +100,32 @@ class CaptureTest(unittest.TestCase):
             self.assertAlmostEqual(sum(e["share"] for e in result["layers"]["0"]), 1.0, places=4)
             self.assertEqual(sorted(result["per_skill"]), ["quant", "research"])
 
+    def test_generate_counts_the_tail_of_the_prompt_and_the_new_tokens(self):
+        # the segment has a tool result after its last target: the generation context is the whole segment
+        s = session("a", "research")
+        s["segments"][0].append({"role": "tool", "content": "r2", "tool_call_id": "c"})
+        chats = []
+
+        def server(base, path, body, timeout=None):
+            if path == "/tokenize":
+                return {"tokens": [1, 2]}
+            chats.append(body)
+            rows = lambda toks: [[[0, 1], [0, 1]] if t in (1, 2) else [[4, 5], [4, 5]] for t in toks]
+            if not body.get("add_generation_prompt"):
+                return {"prompt_token_ids": [1, 2, 9], "choices": [{"routed_experts": b64(rows([1, 2, 9]) + [[[7, 7], [7, 7]]])}]}
+            prompt = [1, 2, 9, 8, 8]                               # 2 new prompt tokens, then 3 generated tokens
+            return {"prompt_token_ids": prompt, "usage": {"completion_tokens": 3},
+                    "choices": [{"routed_experts": b64(rows(prompt) + [[[6, 3], [6, 3]]] * 3)}]}
+        with mock.patch.object(capture, "post", server):
+            row = capture.capture_one("http://x", "m", s, 0, 3, [], "medium", set(), generate=64)
+        self.assertEqual(np.array(row["counts"]).sum(), 2 * 2 * 3)             # the extra row of the first reply is cut
+        gen = np.array(row["gen_counts"])
+        self.assertEqual((gen[0, 4], gen[0, 6], gen[0, 3], gen[0, 0], row["gen_tokens"]), (2, 3, 3, 0, 3))
+        self.assertEqual((chats[1]["max_tokens"], chats[1]["add_generation_prompt"]), (64, True))
+        self.assertEqual([m["role"] for m in chats[1]["messages"]][-2:], ["user", "tool"])
+        ranked = capture.rank([{"skill": "research", "prompt_tokens": 3, "unfilled_rows": 0, **row}])
+        self.assertEqual(ranked["layers"]["0"][0]["count"], 3)                  # the generated tokens count in the rank
+
     def test_a_failed_segment_is_recorded_and_not_ranked(self):
         rows = [{"skill": "research", "error": "boom"},
                 {"skill": "research", "prompt_tokens": 3, "unfilled_rows": 0,
