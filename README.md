@@ -188,6 +188,18 @@ fits, and nothing changed on the live server. The patch, the heal and the script
 - Run scripts: [skip_probe.sh](skip_probe.sh) and [skip_replay.sh](skip_replay.sh), with their dry run
   [test_skip_scripts.py](test_skip_scripts.py). The summary is [PRUNE.md](PRUNE.md) §7.
 
+### Next: a second model beside DeepSeek (2026-11-13: Qwen 27B at 256k does not fit)
+
+**Question:** does Qwen 27B (NVFP4) with a 256k context fit beside the live checkpoint? No. A window on 2026-11-13
+measured Qwen alone at one sequence: it uses 34.0 GiB with no draft and about 37 GiB with its draft, and about
+29 GiB is available. The DeepSeek savings that do not change the output give at most 8.3 GiB, less than the gap with
+a margin. Qwen is also slower than DeepSeek here: 30.8 tok/s with its draft and 11.1 without, against 35.3. The
+next step is a decision: a swap, a smaller second model, or Qwen at 128k.
+
+- Plan: [PLAN_SECOND_MODEL_FIT.md](plans/PLAN_SECOND_MODEL_FIT.md).
+- Run script: [qwen_fit.sh](qwen_fit.sh), with its client [qwen_fit.py](qwen_fit.py) and the dry run
+  [test_qwen_fit.py](test_qwen_fit.py).
+
 ## Documents
 
 | Document | Read it for |
