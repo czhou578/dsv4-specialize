@@ -29,3 +29,5 @@ image-patch/skip/
 skip-out/
 # the calibration and held-out data of the Qwen prune, built by qwen_data.py; it can hold secrets from local transcripts (plans/PLAN_QWEN_PRUNE.md §3)
 qwen-data/
+# pruned Qwen checkpoints, built by qwen_prune.py (plans/PLAN_QWEN_PRUNE.md §7)
+qwen-k*/
