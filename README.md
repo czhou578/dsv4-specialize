@@ -59,7 +59,7 @@ flowchart LR
     S4["4. Serving settings<br/>11-10<br/>KV pin: live"]
     S5["5. Cold experts<br/>11-10 to 11-13<br/>486 experts not needed; more fail"]
     S6["6. Loader patch<br/>11-11 to 11-12<br/>MD prune: live"]
-    S7["7. Fewer layers<br/>11-10 to 11-13<br/>tools built"]
+    S7["7. Fewer layers<br/>11-10 to 11-13<br/>zero layers"]
     S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
 ```
 
@@ -167,14 +167,15 @@ model of the router plan.
 - The deploy: [PLAN_MD_DEPLOY.md](plans/PLAN_MD_DEPLOY.md). Script: [deploy_md.sh](deploy_md.sh), with the compose file
   [deploy/compose-md149t5.yml](deploy/compose-md149t5.yml) of the live server.
 
-### 7. Remove whole layers (2026-11-10 to 11-13): the probe window is next
+### 7. Remove whole layers (2026-11-10 to 11-13): zero layers
 
-**Question:** can the model skip whole layers, or one half of a layer? The plan ranks the blocks (a whole layer, or
-its attention or FFN half) by Block Influence, measures the best cuts on calibration data, confirms them with the
-replay gate, and heals a cut with a linear map. Since the MD prune went live, the replay gate leaves only 0.0011 NLL
-(+0.24% over the live replay), so a cut passes only if its cost is near zero. The tools are built and tested: a
-runtime patch skips any set of blocks at boot, or at run time in an eager probe boot that also measures each block.
-The probe window (Phase B) is next.
+**Question:** can the model skip whole layers, or one half of a layer? A runtime patch skips any set of blocks (a
+whole layer, or its attention or FFN half), and an eager probe boot measures each block on calibration data. Since the
+MD prune, the replay gate leaves almost no budget, so a cut must cost near zero. The probe window screened 28 blocks.
+Every whole layer costs +2.15% NLL or more, and every pair +2.43% or more. The best block is the FFN half of
+layer 24. In the replay window, the model with no skip sits on the gate (+3.00%). The skip of that FFN half costs
++1.06% more. A linear heal map, fitted in closed form, removes 61% of that cost, but +0.42% is left. So no block
+fits, and nothing changed on the live server. The patch, the heal and the scripts stay as tools.
 
 - Plan: [PLAN_FEWER_LAYERS.md](plans/PLAN_FEWER_LAYERS.md).
 - The patch: [image-patch/layer_skip.py](image-patch/layer_skip.py) (the skip set, the probe sums, the skip file),
@@ -183,8 +184,9 @@ The probe window (Phase B) is next.
   [test_layer_skip.py](test_layer_skip.py) and [test_layer_skip_gpu.py](test_layer_skip_gpu.py), run by
   [test_layer_skip.sh](test_layer_skip.sh) in the server image.
 - The client: [layer_screen.py](layer_screen.py) (the data pick, the BI pass, the screen, the greedy rounds, the
-  report), with [test_layer_screen.py](test_layer_screen.py).
-- Run script: [skip_probe.sh](skip_probe.sh), with its dry run [test_skip_scripts.py](test_skip_scripts.py).
+  report, the heal fit), with [test_layer_screen.py](test_layer_screen.py).
+- Run scripts: [skip_probe.sh](skip_probe.sh) and [skip_replay.sh](skip_replay.sh), with their dry run
+  [test_skip_scripts.py](test_skip_scripts.py). The summary is [PRUNE.md](PRUNE.md) §7.
 
 ## Documents
 

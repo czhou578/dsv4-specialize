@@ -118,3 +118,24 @@ is a little better on the replay (0.71 points of NLL), but the judge does not se
 would need a top-k 6 prune of the mask and the patch on the live server.
 On 2026-11-10 the user decided: no deploy (`plans/PLAN_FEWER_EXPERTS.md` §9.2). The live model did not change, and the
 test folders were deleted.
+
+## 7. Extension: fewer layers (`plans/PLAN_FEWER_LAYERS.md`)
+
+The last lever for memory was depth: skip a whole layer (about 1.4 GiB), or its FFN half (about 1.3 GiB) or its
+attention half. The live model is the MD prune (69.79 GiB), which already uses the replay budget: +2.75% of the +3%.
+
+**The tool.** A patch of the model file (`image-patch/layer_skip.py` and `layer-skip.diff`) skips any set of blocks
+in layers 3–39, on both mHC paths. In an eager probe boot it changes the set at run time and measures each block: the
+Block Influence (1 minus the cosine of the state before and after the block) and the Gram sums for a heal map.
+`layer_screen.py` drives the probe, and `skip_probe.sh` and `skip_replay.sh` run the windows.
+
+**The tests** ran on 2026-11-13, with 6 h 25 min of downtime in all:
+
+| Phase | Result |
+|---|---|
+| B: the probe window (§7.7 of the plan) | 28 single blocks on calibration data. Whole layers: +2.15% to +7.43% NLL. FFN halves: +0.54% (F24) to +2.79%. Attention halves: +0.82% to +4.35%, and the 6 best together +11.41%. Pairs with F24: +2.43% or more, more than the sum of the singles. Block Influence does not rank the blocks inside one kind |
+| C: the replay window (§8.5) | The model with no skip: +3.00% against the baseline, on the gate. F24 skipped: +1.06% more. F24 with a linear heal map (4,096 × 4,096, closed form): +0.42% more. The heal removes 61% of the cost. No point passes |
+| D and E: heal maps for sets, the physical removal | Not run: a healed single block already fails, and sets cost more (§9.1) |
+
+**Result.** Zero layers. This model has no layer and no half that the bot's traffic can lose inside the +3% gate.
+The MD prune is the end of the memory track without training. The heal map is a real effect and stays as a tool.
