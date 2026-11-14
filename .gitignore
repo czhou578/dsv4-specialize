@@ -27,3 +27,5 @@ image-patch/perlayer/
 # the patched model file of the layer skip, built by image-patch/build_skip.sh, and the probe output (plans/PLAN_FEWER_LAYERS.md §6)
 image-patch/skip/
 skip-out/
+# the calibration and held-out data of the Qwen prune, built by qwen_data.py; it can hold secrets from local transcripts (plans/PLAN_QWEN_PRUNE.md §3)
+qwen-data/
