@@ -35,8 +35,6 @@
 #   d1          §7.7 K 208 with the NVFP4 draft (qwen_draft_quant.py: qwen-draft-nvfp4, and the patched quant config of
 #               qwen-k208), the draft's MoE on Marlin (weight-only NVFP4). Tests: smoke, a prompt of 120,000 tokens,
 #               the bot decode test. The baseline is k0 (the BF16 draft)
-#   d2 d3       d1 with a release of the allocator cache after the load (QWEN_EMPTY_CACHE=1, qwen_mtp_patch), and d1
-#               with the allocator's expandable segments: the Marlin repack leaves about 0.9 GiB reserved in d1
 # Each point also logs the resident and the peak resident memory of the server processes (procs.txt).
 # All points: a KV pin of 1.04x of the need, FP8 KV, --max-num-seqs 1, no images. The f, q and n points use
 # --max-model-len 256000 and these tests: smoke (a short request and a tool call), one prompt of about 250,000
@@ -91,13 +89,7 @@ for p in h256 h208; do
 done
 MODEL[h208]=$S/qwen-k208 DRAFT[h208]=${DRAFT[g208]} PYPATH[h208]=$S/qwen_mtp_patch
 BUDGET[d1]=2048 CTX[d1]=128000 MODEL[d1]=$S/qwen-k208 FLAGS[d1]=$Q35 PIN0[d1]=1965377034 TESTS[d1]="smoke long speed" NEED[d1]=12
-for p in d2 d3; do
-  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$S/qwen-k208 FLAGS[$p]=$Q35 PIN0[$p]=1965377034 TESTS[$p]="smoke long speed" NEED[$p]=12
-  LONG[$p]=120000 PYPATH[$p]=$S/qwen_mtp_patch
-done
-ENVS[d2]=QWEN_EMPTY_CACHE=1 ENVS[d3]=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 LONG[d1]=120000 PYPATH[d1]=$S/qwen_mtp_patch DRAFT[d1]="{\"method\":\"mtp\",\"model\":\"$S/qwen-draft-nvfp4\",\"num_speculative_tokens\":3,\"moe_backend\":\"marlin\"}"
-DRAFT[d2]=${DRAFT[d1]} DRAFT[d3]=${DRAFT[d1]}
 BUDGET[r256]=2048 CTX[r256]=128000 MODEL[r256]=$QM FLAGS[r256]=$Q35 DRAFT[r256]=$MTP PIN0[r256]=1965377034 TESTS[r256]="score speed" NEED[r256]=15
 FLAGS[c1]="$Q35 --enable-return-routed-experts" FLAGS[c2]=${FLAGS[c1]} DRAFT[c3]=$NGRAM
 unset "DRAFT[c1]"; PIN0[c1]=1574535010 PIN0[c3]=1853707884   # no draft weights: the KV need is smaller
