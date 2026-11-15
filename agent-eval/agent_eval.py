@@ -233,7 +233,10 @@ def lowest_memory(t0: float, t1: float) -> dict:
     return {"lowest_available_mb": min(avail, default=None), "lowest_swap_free_mb": min(swap, default=None)}
 
 
-def point(name: str, mix: dict[str, int], seeds: int, ctx: int, task_ids: list[str], keep=False, first_seed=0) -> Path:
+def point(name: str, mix: dict[str, int], seeds: int, ctx: int, task_ids: list[str], keep=False, first_seed=0,
+          until: float | None = None) -> Path:
+    """All runs of a point. After the epoch `until`, no new run starts (the cron window of the bot): run it again
+    later, and it continues with the runs that have no row."""
     out = OUT / name
     out.mkdir(parents=True, exist_ok=True)
     rows_file, lock, pages = out / "rows.jsonl", threading.Lock(), tools.Pages(DATA / "web/pages.jsonl")
@@ -243,6 +246,8 @@ def point(name: str, mix: dict[str, int], seeds: int, ctx: int, task_ids: list[s
     t0 = time.time()
 
     def one(model, tid, seed):
+        if until and time.time() > until:
+            return
         row = run_task(load_task(tid), model, seed, ctx, out / f"{model}-{tid}-s{seed}", pages, keep)
         with lock, rows_file.open("a") as f:
             f.write(json.dumps(row) + "\n")
@@ -274,6 +279,7 @@ def main():
     p.add_argument("--mix", required=True, help="model=workers, comma-separated, e.g. qwen=4,deepseek=1")
     p.add_argument("--seeds", type=int, default=1)
     p.add_argument("--first-seed", type=int, default=0)
+    p.add_argument("--until", help="start no run after this local time, e.g. 2026-11-16T04:00")
     p.add_argument("--ctx", type=int, default=0)
     p.add_argument("--tasks", default="", help="task ids, comma-separated (default: all)")
     p.add_argument("--families", default="", help="families, comma-separated (default: all)")
@@ -289,7 +295,8 @@ def main():
     else:
         mix = {m: int(n) for m, n in (x.split("=") for x in a.mix.split(","))}
         ids = a.tasks.split(",") if a.tasks else all_tasks(a.families)
-        print(point(a.name, mix, a.seeds, a.ctx, ids, a.keep, a.first_seed))
+        until = time.mktime(time.strptime(a.until, "%Y-%m-%dT%H:%M")) if a.until else None
+        print(point(a.name, mix, a.seeds, a.ctx, ids, a.keep, a.first_seed, until))
 
 
 if __name__ == "__main__":

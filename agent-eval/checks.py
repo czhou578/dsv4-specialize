@@ -96,13 +96,14 @@ def quote_in(quote: str, text: str) -> bool:
 
 
 def source_text(source: str, roots: list[Path], pages: tools.Pages) -> str | None:
-    """The text of a cited source: a page of the page set, or a file under one of the roots (also under repo/)."""
+    """The text of a cited source: a page of the page set, or a file under one of the roots (also under repo/, or
+    without a leading "work/")."""
     if re.match(r"https?://", source.strip()):
         page = pages.pages.get(source.strip())
         return page["text"] if page and page.get("status", 200) == 200 else None
     path = re.sub(r"[:#]L?\d+(-\d+)?$", "", source.strip())
     for root in roots:
-        for p in (path, "repo/" + path):
+        for p in (path, "repo/" + path, re.sub(r"^work/", "", path)):   # "work/x" for "/work/x" (Qwen, 2026-11-15)
             try:
                 f = tools.resolve(root, p)
             except tools.ToolError:

@@ -179,3 +179,11 @@ def test_rescore(env, monkeypatch):
     assert ae.rescore("P") == 1   # the flipped task changes its result; the other does not
     rows = [json.loads(x) for x in (out / "rows.jsonl").read_text().splitlines()]
     assert rows[0]["result"] != row["result"] and rows[0]["max_calls_turn"] == 1
+
+
+def test_point_until(env, monkeypatch):
+    use(monkeypatch, [reply(REPORT)] * 2)
+    out = ae.point("U", {"stub": 1}, 1, 0, ["L1", "L2"], until=1.0)   # a deadline in the past: no run starts
+    assert not (out / "rows.jsonl").exists()
+    ae.point("U", {"stub": 1}, 1, 0, ["L1", "L2"])
+    assert len((out / "rows.jsonl").read_text().splitlines()) == 2

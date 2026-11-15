@@ -83,6 +83,7 @@ def test_h2_false_evidence(env, item, error):
 @pytest.mark.parametrize("item", [
     {"source": "/work/src/a.py", "quote": "4| def beta():\n5|     return alpha() + 1", "line": 5},
     {"source": "src/a.py:4", "quote": "src/a.py:4: def beta():"},
+    {"source": "work/src/a.py", "quote": "def beta():"},
     {"source": "a.py", "quote": "def alpha(): ... return alpha() + 1"} | {"source": "src/a.py"},
     {"source": "https://x.test/a", "quote": 'the cache holds "four" items.'},
 ])
