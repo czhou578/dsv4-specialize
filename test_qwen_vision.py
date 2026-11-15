@@ -12,6 +12,10 @@ def test_every_image_has_three_questions_with_answers():
     for name, _, w, h, html, qa in qv.IMAGES:
         assert len(qa) == 3 and all(q.endswith("?") and a for q, a in qa), name
         assert w >= 700 and h >= 300 and "<" in html
+    assert len(qv.HARD) == 5 and all(len(qa) == 3 for *_, qa in qv.HARD)
+    hard = {q: a for *_, qa in qv.HARD for q, a in qa}
+    assert hard["Which host has the status degraded?"] == "node-09" and hard["How many arrows end at the state boot?"] == "3"
+    assert len({(lo, hi) for _, _, _, lo, hi in qv.STEPS}) == 18   # each clamp pair names one function
 
 
 def test_answer_sends_the_image_and_resumes(tmp_path):

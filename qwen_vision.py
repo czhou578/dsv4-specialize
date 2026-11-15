@@ -4,7 +4,9 @@ The rank of the prune counted text tokens only, so the experts that image tokens
 
 - ``--build``: renders 12 images with headless Chromium into ``qwen-data/vision/`` (not in git): 4 code screenshots,
   3 charts, 3 UI screens and 2 diagrams, each from an HTML string of this file, and writes ``questions.json``: 3
-  questions per image with a known short answer that is visible in the image.
+  questions per image with a known short answer that is visible in the image. It also renders the hard set
+  (``hard.json``, 5 images): a full-HD screenshot of dense code, a table of 16 rows, a chart of two series with no
+  value labels, a state diagram with labeled arrows, and a dense dark settings panel.
 - ``--answer``: a model answers each question about its image (one image per request, the sampling of the fast
   route, a fixed seed per question). The rows have the format of ``qwen_facts.py``.
 - ``--grade ANSWERS``: the grader model (the live DeepSeek, text only) grades each answer against the known answer,
@@ -140,6 +142,70 @@ IMAGES = [
 ]
 
 
+# The hard set: dense, small or unlabeled content, as in a full-screen screenshot
+STEPS = [(i, round(0.05 + 0.03 * ((i * 7) % 11), 2), (i * 13) % 29 + 2, (i * 5) % 9, 30 + (i * 17) % 23) for i in range(1, 19)]
+DENSE = [line for i, s, off, lo, hi in STEPS for line in (f"def step_{i:02d}(x, scale={s}):", f"    y = x * scale + {off}", f"    return clamp(y, {lo}, {hi})")]
+HOSTS = [(f"node-{i:02d}", ("us-west", "us-east", "eu-central")[i % 3], 11 + (i * 37) % 83, round(3.5 + (i * 2.3) % 27, 1), 40 + (i * 53) % 190,
+          "degraded" if i == 9 else "ok") for i in range(1, 17)]
+SERIES = {"alpha": [20, 35, 50, 80, 60, 45], "beta": [70, 55, 40, 30, 65, 90]}
+
+
+def two_lines():
+    x, y = (lambda i: 110 + i * 150), (lambda v: 420 - v * 3.4)
+    out = ['<svg width="960" height="500" xmlns="http://www.w3.org/2000/svg"><text x="30" y="34" font-size="20" font-weight="700">Throughput by week</text>']
+    for v in range(0, 101, 20):
+        out.append(f'<line x1="80" y1="{y(v):.0f}" x2="900" y2="{y(v):.0f}" stroke="#d8ddea"/><text x="70" y="{y(v) + 5:.0f}" font-size="14" text-anchor="end">{v}</text>')
+    for i in range(6):
+        out.append(f'<text x="{x(i)}" y="446" font-size="14" text-anchor="middle">week {i + 1}</text>')
+    for (name, vals), c, dash in zip(SERIES.items(), ("#5b45d6", "#c2410c"), ("", ' stroke-dasharray="8 5"')):
+        out.append(f'<path d="{" ".join(f"{chr(77 if i == 0 else 76)}{x(i)} {y(v):.0f}" for i, v in enumerate(vals))}" fill="none" stroke="{c}" stroke-width="3"{dash}/>')
+        out += [f'<circle cx="{x(i)}" cy="{y(v):.0f}" r="5" fill="{c}"/>' for i, v in enumerate(vals)]
+    out.append('<line x1="640" y1="30" x2="680" y2="30" stroke="#5b45d6" stroke-width="3"/><text x="688" y="35" font-size="15">alpha</text>'
+               '<line x1="770" y1="30" x2="810" y2="30" stroke="#c2410c" stroke-width="3" stroke-dasharray="8 5"/><text x="818" y="35" font-size="15">beta</text>')
+    return "".join(out) + "</svg>"
+
+
+def states():
+    pos = {"idle": (40, 200), "boot": (250, 200), "serving": (470, 200), "draining": (700, 200), "stopped": (930, 200), "failed": (360, 400)}
+    out = ['<svg width="1120" height="520" xmlns="http://www.w3.org/2000/svg"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">'
+           '<path d="M0 0 L10 4 L0 8 z" fill="#1a1f2e"/></marker></defs>']
+    for name, (x, y) in pos.items():
+        out.append(f'<rect x="{x}" y="{y}" width="140" height="56" rx="28" fill="#eef1f8" stroke="#1a1f2e"/><text x="{x + 70}" y="{y + 34}" font-size="17" text-anchor="middle">{name}</text>')
+    edge = lambda d, lx, ly, label: out.append(f'<path d="{d}" fill="none" stroke="#1a1f2e" stroke-width="2" marker-end="url(#a)"/><text x="{lx}" y="{ly}" font-size="14" fill="#56617b" text-anchor="middle">{label}</text>')
+    edge("M180 228 L248 228", 214, 218, "start")
+    edge("M390 228 L468 228", 429, 218, "healthy")
+    edge("M610 228 L698 228", 654, 218, "low memory")
+    edge("M840 228 L928 228", 884, 218, "done")
+    edge("M300 256 L390 398", 312, 340, "timeout")
+    edge("M440 398 L350 258", 432, 322, "retry")
+    edge("M540 256 L470 398", 548, 340, "crash")
+    edge("M1000 200 Q660 20 322 198", 660, 96, "restart")
+    return "".join(out) + "</svg>"
+
+
+SETTINGS = [("Prefix caching", "on"), ("Chunked prefill", "on"), ("Speculative decoding", "on"), ("Vision input", "off"), ("Auto tool choice", "on"),
+            ("Max tokens", "4096"), ("Temperature", "0.6"), ("Top-p", "0.95"), ("Top-k", "20"), ("Context length", "128000"), ("Draft tokens", "3"), ("Log requests", "off")]
+HARD = [
+    ("hard-code-dense", "code", 1920, 1080, '<pre style="font-size:13px;line-height:1.38;columns:2;column-gap:60px">' + code(DENSE)[5:],
+     [("What is the default value of scale in the function step_11?", str(STEPS[10][1])), ("Which number does step_05 add to x * scale?", str(STEPS[4][2])),
+      (f"Which function returns clamp(y, {STEPS[13][3]}, {STEPS[13][4]})?", "step_14")]),
+    ("hard-table", "ui", 1100, 760, "<table style='font-size:14px;margin:20px'><tr><th>Host</th><th>Region</th><th>CPU %</th><th>Mem GiB</th><th>p95 ms</th><th>Status</th></tr>"
+     + "".join("<tr>" + "".join(f"<td style='padding:6px 18px'>{c}</td>" for c in h) + "</tr>" for h in HOSTS) + "</table>",
+     [("What is the p95 ms value of the host node-12?", str(HOSTS[11][4])), ("Which host has the status degraded?", "node-09"),
+      ("How many GiB of memory does node-07 use?", str(HOSTS[6][3]))]),
+    ("hard-chart-two-lines", "chart", 980, 520, two_lines(),
+     [("Which series is higher in week 5, alpha or beta?", "beta"), ("In which week does the series alpha reach its highest value?", "week 4"),
+      ("About which value does the series beta have in week 3?", "about 40 (any value from 36 to 44 is correct)")]),
+    ("hard-diagram-states", "diagram", 1140, 540, states(),
+     [("Which state follows serving on the event low memory?", "draining"), ("Which event leads from boot to failed?", "timeout"),
+      ("How many arrows end at the state boot?", "3")]),
+    ("hard-ui-dark", "ui", 760, 620, '<div style="background:#12151f;color:#cdd3e4;min-height:100vh;padding:26px 34px;font-size:13px"><b style="font-size:15px">Runtime options</b>'
+     + "".join(f'<div style="display:flex;justify-content:space-between;width:420px;padding:9px 0;border-bottom:1px solid #2a3044"><span>{k}</span>'
+               f'<span style="color:{"#7fd99a" if v == "on" else "#8a93a8" if v == "off" else "#e6c07b"}">{v}</span></div>' for k, v in SETTINGS) + "</div>",
+     [("Is the option Vision input on or off?", "off"), ("What is the value of Max tokens?", "4096"), ("Which option has the value 0.95?", "Top-p")]),
+]
+
+
 def chromium():
     found = sorted(glob.glob(str(Path.home() / ".cache/ms-playwright/chromium-*/chrome-linux/chrome")))
     if not found:
@@ -149,22 +215,23 @@ def chromium():
 
 def build(out, chrome=None):
     out.mkdir(parents=True, exist_ok=True)
-    chrome, questions = chrome or chromium(), []
+    chrome, questions = chrome or chromium(), {"questions.json": [], "hard.json": []}
     with tempfile.TemporaryDirectory() as tmp:
-        for name, kind, w, h, html, qa in IMAGES:
+        for target, (name, kind, w, h, html, qa) in [("questions.json", i) for i in IMAGES] + [("hard.json", i) for i in HARD]:
             page = Path(tmp) / f"{name}.html"
             page.write_text(f"<!doctype html><meta charset=utf-8><style>{CSS}</style>{html}")
             subprocess.run([chrome, "--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars", f"--window-size={w},{h + 90}",
                             f"--screenshot={out / (name + '.png')}", f"file://{page}"], check=True, capture_output=True, timeout=120)
-            questions += [{"image": f"{name}.png", "kind": kind, "question": q, "answer": a} for q, a in qa]
-    (out / "questions.json").write_text(json.dumps(questions, indent=1))
-    return len(IMAGES), len(questions)
+            questions[target] += [{"image": f"{name}.png", "kind": kind, "question": q, "answer": a} for q, a in qa]
+    for target, rows in questions.items():
+        (out / target).write_text(json.dumps(rows, indent=1))
+    return len(IMAGES) + len(HARD), sum(len(v) for v in questions.values())
 
 
-def answer(base, model, folder, out, limit=None, max_tokens=1500):
+def answer(base, model, folder, out, limit=None, max_tokens=1500, questions="questions.json"):
     done = {r["question"] for r in qwen_facts.load(out)}
     with Path(out).open("a") as f:
-        for q in json.loads((folder / "questions.json").read_text())[:limit]:
+        for q in json.loads((folder / questions).read_text())[:limit]:
             key = f"[{q['image']}] {q['question']}"
             if key in done:
                 continue
@@ -205,6 +272,7 @@ def main(argv=None):
     ap.add_argument("--images", type=Path, default=here / "qwen-data/vision")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--limit", type=int, help="--answer: only the first N questions")
+    ap.add_argument("--questions", default="questions.json", help="--answer: the question file (hard.json: the hard set)")
     ap.add_argument("--chromium", help="--build: the Chromium binary (default: Playwright's)")
     cmd = ap.add_mutually_exclusive_group(required=True)
     cmd.add_argument("--build", action="store_true")
@@ -215,7 +283,7 @@ def main(argv=None):
     if a.build:
         print("%d images, %d questions -> %s" % (*build(a.images, a.chromium), a.images))
     elif a.answer:
-        answer(a.base_url, a.model, a.images, a.out, a.limit)
+        answer(a.base_url, a.model, a.images, a.out, a.limit, questions=a.questions)
         rows = qwen_facts.load(a.out)
         print(f"{sum('error' not in r for r in rows)} answers, {sum('error' in r for r in rows)} errors -> {a.out}")
     elif a.grade:
