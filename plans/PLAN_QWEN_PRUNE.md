@@ -694,11 +694,24 @@ boot was 8,505 MB.
 | Bot decode test, DeepSeek alone | 7,517 MB | 36.9 tok/s |
 | Bot decode test, both at once | 7,459 MB | Qwen 46.8 tok/s, DeepSeek 19.3 tok/s |
 
-**The gate holds.** The lowest available memory of the run is 7,459 MB (7.3 GiB), far above the floor of 2 GiB;
-the watch never fired; both servers stayed healthy. Most of that memory is reclaimable file cache (with both idle:
-1.6 GB free, 8.9 GB cached). The use of Qwen beside DeepSeek (about 18.7 GB of available memory) is lower than the
-25.4 GiB that the windows measured with DeepSeek stopped: the windows count the fall of `MemAvailable` from a machine
-with about 118 GB available, and that fall is not the same as the cost beside a full server.
+**The gate holds, with a caveat (corrected on 2026-11-14, 15:30).** The lowest available memory of the run is
+7,459 MB (7.3 GiB), above the floor of 2 GiB; the watch never fired; both servers stayed healthy; Linux killed no
+process (`oom_kill` 0).
+
+**But the 7.3 GiB is not free headroom: swap carries part of it.** My first reading (the windows overstate the cost
+of Qwen) was wrong. One hour after the boot, 7.8 GiB of the 16 GiB swap file was in use, and at least 4.6 GiB of it
+belonged to the two servers: 2.65 GiB of the DeepSeek engine core (which started at 14:15), 0.69 GiB of its API
+server, and 1.24 GiB of the two Qwen processes. `MemFree` was 1.3 GiB; the rest of the "available" memory was file
+cache. So when Qwen booted, the kernel moved idle host pages of both servers to swap, and that is why Qwen seemed
+to cost 18.7 GiB and not 25.4 GiB. Without swap, the lowest available memory would have been about 0 to 2.7 GiB,
+which agrees with the projected margin (3.4 to 4.1 GiB at the peak, less the load of the tests).
+
+- No speed loss shows: DeepSeek alone decodes at 36.9 tok/s (35 to 37 before), Qwen alone at 99.1 tok/s.
+- The kernel log has 15 lines "NVRM: ... Out of memory [NV_ERR_NO_MEMORY]" from the boot of Qwen. They are not a
+  fault: the driver logs 40 to 86 of them at every boot of DeepSeek, also with 115 GiB free, and retries.
+- `MemAvailable` alone does not show the pressure, because the kernel swaps before it falls. Since 15:29, tmux
+  `pair-swap` logs the available, free and swap-free memory every 10 s (`results/pair-swap.log`), and
+  `pair_watch.sh` now writes the swap-free memory as a third column (in effect at its next start).
 
 **Speed.** One model alone keeps its speed. When both decode at the same time, they share the memory bandwidth:
 Qwen falls from 99 to 47 tok/s and DeepSeek from 37 to 19 tok/s. A router that sends one request at a time to one
@@ -718,7 +731,8 @@ You chose to skip it. `cap_switch.sh` stays in the repository, unused; its dry r
 **The 24-hour gate** started at 14:28 on 2026-11-14: Qwen K 208 with the NVFP4 draft stays up on port 8889 (pid in
 `results/pair-qwen.pid`), with the watch in tmux `pair-watch` (`results/pair-mem.log`, `logs/pair-watch.log`). It
 ends at 14:28 on 2026-11-15, before the cron jobs of 2026-11-16. The gate passes if `logs/pair-watch.log` has no
-WATCH line, both servers are healthy, and `journalctl -k` shows no out-of-memory event. Nothing routes requests to
+WATCH line, both servers are healthy, `oom_kill` in `/proc/vmstat` stays 0 (the NVRM lines of §8.2 do not count),
+and the swap-free memory of `results/pair-swap.log` stays above about 4 GiB (8.6 GiB at 15:30). Nothing routes requests to
 Qwen yet; the gate covers the normal traffic of DeepSeek beside an idle Qwen.
 
 If DeepSeek restarts by itself (`restart: on-failure:1`) while Qwen runs, its boot needs the memory that Qwen holds:

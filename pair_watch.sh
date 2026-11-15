@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The memory watch of Phase D (plans/PLAN_QWEN_PRUNE.md §8, PLAN_SECOND_MODEL_FIT.md §7.1): Qwen beside the live
-# DeepSeek. Every second it records the available memory. Below FLOOR_MB (default 2048) it stops the Qwen server, and
+# DeepSeek. Every second it records the available memory and the swap-free memory (the kernel swaps idle host pages
+# of the servers before the available memory falls, so read both). Below FLOOR_MB (default 2048) it stops the Qwen server, and
 # never DeepSeek: it kills only the process group in PIDFILE, and only when the command line of that process is the
 # vLLM 0.33 venv with --port 8889 (DeepSeek also shows on the host as a vLLM process, on port 8888). It keeps watching
 # after a stop. Start it in its own tmux session before Qwen, and leave it on while Qwen runs:
@@ -25,7 +26,7 @@ qwen_pid() {  # the recorded Qwen pid, if that process is the Qwen server on por
 check() {
   local m pid
   m=$(eval "$AVAIL_CMD")
-  echo "$(date +%s) $m" >> "$MEM"
+  echo "$(date +%s) $m $(awk '/^SwapFree:/ {print int($2 / 1024)}' /proc/meminfo)" >> "$MEM"   # available MB, swap-free MB
   if [ "$m" -lt "$FLOOR_MB" ]; then
     if pid=$(qwen_pid); then
       kill -KILL -- -"$pid" 2>/dev/null || kill -KILL "$pid"
