@@ -1,6 +1,8 @@
 # Plan: prune the experts of Qwen3.6-35B-A3B for the fast route
 
-**Status:** 2026-11-14: K 208 with NVFP4 draft experts (§7.7 to §7.9) uses 25.42 GiB at the peak with a 120k
+**Status:** 2026-11-14 17:53: Phase D done (§8). Qwen K 208 with the NVFP4 draft and vision runs beside DeepSeek on
+port 8889 since 17:33; the 24-hour gate ends 2026-11-15 17:33 (§8.9). The summary for a reader is `QWEN.md`.
+2026-11-14: K 208 with NVFP4 draft experts (§7.7 to §7.9) uses 25.42 GiB at the peak with a 120k
 prompt, at 101.8 tok/s: a margin of 3.4 to 4.1 GiB beside DeepSeek, or 3.7 to 4.4 GiB with the context cap. The
 facts and side-by-side test (§7.6): K 208 loses a third of the right answers on 80 rare facts, and a blind judge finds
 no loss on your turns. You chose K 208. Phase D (both servers at the same time) waits for your go.
@@ -16,7 +18,7 @@ windows. The model runs with the vLLM 0.33 venv, alone on port 8889. No change t
 | §5 Phase A: the data, the tools and the tests (no downtime, about 2 days) | ✅ 2026-11-13: PRs #54 to #57 (§5.1 to §5.3) |
 | §6 Phase B: the capture window (about 85 min downtime) | ✅ 2026-11-13, 20:20 to 21:39 (§6.1) |
 | §7 Phase C: the builds and the gate window (about 80 min downtime) | ✅ 2026-11-13, two windows (§7.1, §7.2): no point passes G1 |
-| §8 Phase D: both servers at the same time (`PLAN_SECOND_MODEL_FIT.md` §7) | ⬜ |
+| §8 Phase D: both servers at the same time (`PLAN_SECOND_MODEL_FIT.md` §7) | ✅ 2026-11-14: both servers run, vision stays on (§8.2, §8.9); the 24-hour gate ends 2026-11-15 17:33 |
 
 ---
 

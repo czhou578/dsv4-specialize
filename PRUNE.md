@@ -1,9 +1,15 @@
 # How the tests chose the pruned model
 
-Since 2026-11-06 20:35, the stock-research bot runs on a pruned copy of DeepSeek V4 Flash: 160 of 216 routed experts
+From 2026-11-06 20:35, the stock-research bot ran on a pruned copy of DeepSeek V4 Flash: 160 of 216 routed experts
 per layer, 5 experts per token in place of 6. This page records why, how the tests chose that point, and what is
-open. The work ran from 2026-11-02 to 2026-11-07. The plans in `plans/` hold the details. §6 records an extension
-of 2026-11-09 and 2026-11-10: fewer experts per token on the pruned model.
+open. The work ran from 2026-11-02 to 2026-11-07. The plans in `plans/` hold the details. §6 and §7 record two
+extensions: fewer experts per token, and fewer layers. Neither one changed the live model.
+
+**Since 2026-11-12 18:00, the live model is the MD prune:** the K 160 prune less 486 cold experts, so each layer keeps
+140 to 160 experts. It loads 69.79 GiB. The [README](README.md#timeline-of-the-work)
+gives the summary (stages 5 and 6), and `plans/PLAN_COLD_EXPERTS.md`, `plans/PLAN_LOADER_PATCH.md`,
+`plans/PLAN_MD_REVIEW.md` and `plans/PLAN_MD_DEPLOY.md` give the details. The freed memory holds a pruned Qwen
+beside DeepSeek ([QWEN.md](QWEN.md)).
 
 This page moved here from the bot's `MODEL_PRUNE.md` on 2026-11-08. That page keeps what runs now, how to go back
 to the stock model, and how the harness measures a model.
@@ -75,7 +81,7 @@ noise, 74.09 GiB loaded.
 
 ## 5. Open items
 
-- **The size cap.** 74.09 GiB is 2 GiB over the 72 GiB of the router plan. The user accepted it on 2026-11-06.
+- **The size cap.** Closed by the MD prune on 2026-11-12: 69.79 GiB is under the cap. Before that, 74.09 GiB was 2 GiB over the 72 GiB of the router plan. The user accepted it on 2026-11-06.
   The second model gets about 2 GiB less. For two models, DeepSeek must boot at about `GPU_MEMORY_UTILIZATION` 0.75
   (about 91 GiB in total). A test boot at 0.73 and 128k failed the KV check on 2026-11-06: the KV need is a fixed
   6.5 to 7 GiB, so a smaller context saves nothing. Since 21:10 the live server pins the KV at 8 GiB with
@@ -89,7 +95,7 @@ noise, 74.09 GiB loaded.
 - **The daily report job** has not run since the rename of the served model. On 2026-11-09 at 05:30, Hermes skipped
   `daily-report` (job `89988a054346`): "global inference config drifted since this job was created (model
   'deepseek-v4-flash-0731' -> 'deepseek-v4-flash-0731-k160t5'), and this job is unpinned". Pin the job to the new
-  model name. `daily-followups` is not affected.
+  model name. `daily-followups` is not affected. Closed on 2026-11-12: both jobs are pinned to the served name.
 
 ## 6. Extension: fewer experts per token (`plans/PLAN_FEWER_EXPERTS.md`)
 
