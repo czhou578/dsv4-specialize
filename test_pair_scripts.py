@@ -58,18 +58,19 @@ rate() { echo "99.0 tok/s"; }
 '''
 
 
-def pair(tmp, watch_on, keep="0"):
+def pair(tmp, watch_on, keep="0", env=None):
     (tmp / "stub.sh").write_text(PAIR_STUB)
     (tmp / "watch_on").unlink(missing_ok=True)
     if watch_on:
         (tmp / "watch_on").write_text("")
     (tmp / "mem.log").write_text(f"{int(time.time())} 29000\n")
+    (tmp / "swap.log").write_text(f"{int(time.time())} 29000 1200 8100\n")
     for d in ("qwen-k208", "qwen-draft-nvfp4", "results"):
         (tmp / "s" / d).mkdir(parents=True, exist_ok=True)
     for d in ("qwen-k208", "qwen-draft-nvfp4"):
         (tmp / "s" / d / "config.json").write_text("{}")
     env = {**os.environ, "PAIR_STUB": str(tmp / "stub.sh"), "STUB_DIR": str(tmp), "TAG": "test", "KEEP": keep, "PAIR_S": str(tmp / "s"),
-           "LOG": str(tmp / "pair.log"), "MEM": str(tmp / "mem.log"), "PIDFILE": str(tmp / "q.pid")}
+           "LOG": str(tmp / "pair.log"), "MEM": str(tmp / "mem.log"), "PIDFILE": str(tmp / "q.pid"), "SWAPLOG": str(tmp / "swap.log"), **(env or {})}
     proc = subprocess.run(["bash", str(HERE / "pair_run.sh")], env=env, capture_output=True, text=True, timeout=120)
     return proc.returncode, (tmp / "pair.log").read_text()
 
@@ -86,3 +87,11 @@ def test_phase_d_runs_the_tests_in_order(tmp_path):
     assert (tmp_path / "ran").read_text().split() == ["idle", "qlong", "dlong", "qspeed", "dspeed"]
     assert sorted(Path(x).name for x in (tmp_path / "speed").read_text().split()) == ["pair-test-bothd", "pair-test-bothq"]
     assert "pair-test idle: exit 0; lowest available" in log and "Qwen stopped" in log
+    assert "lowest swap-free 8100 MB" in log and "(--language-model-only)" in log
+
+
+def test_phase_d_with_vision_uses_the_two_cuts(tmp_path):
+    rc, log = pair(tmp_path, watch_on=True, env={"VISION": "1", "TESTS": "idle"})
+    assert rc == 0, log
+    assert '--limit-mm-per-prompt {"image":1,"video":0} --mm-processor-cache-gb 0 --mm-processor-kwargs {"max_pixels":3686400}' in log
+    assert not (tmp_path / "speed").exists()

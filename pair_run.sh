@@ -12,7 +12,10 @@
 #      dlong   DeepSeek: one prompt of 128,000 tokens, while Qwen runs the bot decode test
 #      qspeed  the bot decode test on Qwen alone;  dspeed  on DeepSeek alone;  both  on both at the same time
 #   4. KEEP=1 (default) leaves Qwen up for the 24-hour gate; KEEP=0 stops it.
-# VISION=1 loads the vision tower (one image per prompt; §8.4). TESTS names the tests to run (default: all six).
+# VISION=1 loads the vision tower with the two cuts of §8.6 (one image per prompt, no cache of processed images, at
+# most 2560x1440 pixels). TESTS names the tests to run (default: the six above). One more test for VISION=1:
+#      qimg    Qwen: the hard image set (qwen_vision.py, hard.json), while DeepSeek decodes
+# Each result line also gives the lowest swap-free memory, from the log of tmux pair-swap (results/pair-swap.log).
 # CAUTION: out of memory, the Spark can do a hard reset. The watch stops Qwen below 2 GiB. Start this only with the
 # user's go:   tmux new -d -s pair "TAG=nocap ~/Projects/dsv4-specialize/pair_run.sh"
 set -u
@@ -36,6 +39,9 @@ lowest() {  # $1 $2: epochs; the lowest available MB of the watch between them
   awk -v a="$1" -v b="$2" '$1 >= a && $1 <= b && (m == "" || $2 < m) {m = $2} END {print m}' "$MEM"
 }
 rate() { $PY $S/qwen_fit.py --rate "$1" 2>&1 | tail -1; }
+swaplow() {  # $1 $2: epochs; the lowest swap-free MB of the swap log between them (a sample every 10 s), or "?"
+  awk -v a="$1" -v b="$2" '$1 >= a - 10 && $1 <= b && (m == "" || $4 < m) {m = $4} END {print (m == "" ? "?" : m)}' "${SWAPLOG:-$R/pair-swap.log}" 2>/dev/null || echo "?"
+}
 stop_qwen() {  # the process group of the server (setsid), or the pid alone
   local pid
   qwen_up || { rm -f "$PIDFILE"; return 0; }
@@ -57,7 +63,8 @@ checks() {
   [ -f $S/qwen-k208/config.json ] && [ -f $S/qwen-draft-nvfp4/config.json ] || { log "ERROR: the K 208 or draft folder is missing"; return 1; }
 }
 
-MM="--language-model-only"; [ "${VISION:-0}" = 1 ] && MM='--limit-mm-per-prompt {"image":1,"video":0}'
+MM="--language-model-only"
+[ "${VISION:-0}" = 1 ] && MM='--limit-mm-per-prompt {"image":1,"video":0} --mm-processor-cache-gb 0 --mm-processor-kwargs {"max_pixels":3686400}'
 boot() {
   local t0
   env PYTHONPATH=$S/qwen_mtp_patch HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 CUTE_DSL_ARCH=sm_121a PATH=$QV:$PATH \
@@ -82,10 +89,16 @@ run_test() {  # $1 name, then the command; logs the exit and the lowest availabl
   shift
   t0=$(now)
   "$@"; rc=$?
-  log "pair-$TAG $name: exit $rc; lowest available $(lowest $t0 $(now)) MB; Qwen $(qwen_up && echo up || echo DOWN)"
+  log "pair-$TAG $name: exit $rc; lowest available $(lowest $t0 $(now)) MB; lowest swap-free $(swaplow $t0 $(now)) MB; Qwen $(qwen_up && echo up || echo DOWN)"
   qwen_up || { log "ERROR: Qwen is down (the watch, or a crash): no more tests"; return 1; }
 }
 t_idle() { sleep 60; }
+t_qimg() {
+  $PY $S/qwen_vision.py --base-url $QURL --model $QNAME --answer --questions hard.json --out $R/pair-$TAG-qimg.jsonl > $R/pair-$TAG-qimg.log 2>&1 &
+  local q=$!
+  $PY $S/qwen_fit.py --base-url $DS --model $DSNAME --long 2000 > $R/pair-$TAG-ddecode-img.json 2>&1
+  wait $q
+}
 t_qlong() {
   $PY $S/qwen_fit.py --base-url $QURL --model $QNAME --long 120000 > $R/pair-$TAG-qlong.json 2>&1 &
   local q=$!
