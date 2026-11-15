@@ -1,0 +1,26 @@
+{
+ "id": "R4",
+ "family": "R",
+ "trap": false,
+ "data": [
+  "papers/moe_prune_merge.txt"
+ ],
+ "prompt": "The paper is in /work/papers/moe_prune_merge.txt. For the email templates task, what is the median answer length in tokens of the base Qwen3-30B, and how many languages are in its 2,000 validation rows? Give the answer and, as evidence, an exact quote from the paper.",
+ "key": [
+  "2[,\\s]?724",
+  "\\b35\\b"
+ ],
+ "reference": {
+  "answer": "The median answer length is 2,724 tokens, and the validation rows have 35 languages.",
+  "evidence": [
+   {
+    "source": "papers/moe_prune_merge.txt",
+    "quote": "Tokens = median answer length of the base Qwen3-30B"
+   },
+   {
+    "source": "papers/moe_prune_merge.txt",
+    "quote": "Email templates\n\nlong structured generation\n\nJSON with HTML\n\nsampled\n35\n\nrubric score (0–100)\n\n2,724"
+   }
+  ]
+ }
+}

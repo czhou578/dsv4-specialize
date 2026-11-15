@@ -1,0 +1,30 @@
+{
+ "id": "R6",
+ "family": "R",
+ "trap": false,
+ "data": [
+  "papers/mli_indexer.txt"
+ ],
+ "prompt": "The paper is in /work/papers/mli_indexer.txt. For GLM-5 at the 195K context, at single concurrency, what is the decode throughput of the unmodified model in tokens/s, and by how many percent does MLI alone (every indexer retained) change it? Give the answer and, as evidence, an exact quote from the paper.",
+ "key": [
+  "\\b65\\.0\\b",
+  "16\\.8"
+ ],
+ "reference": {
+  "answer": "The unmodified GLM-5 decodes at 65.0 tok/s at 195K, and MLI alone raises it by +16.8%.",
+  "evidence": [
+   {
+    "source": "papers/mli_indexer.txt",
+    "quote": "GLM-5\n10K\n60K\n120K\n195K"
+   },
+   {
+    "source": "papers/mli_indexer.txt",
+    "quote": "none (base, tok/s)\n68.5\n67.8\n66.5\n65.0"
+   },
+   {
+    "source": "papers/mli_indexer.txt",
+    "quote": "all (MLI alone)\n+14.6\n+14.4\n+15.6\n+16.8"
+   }
+  ]
+ }
+}

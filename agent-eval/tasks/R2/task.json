@@ -1,0 +1,26 @@
+{
+ "id": "R2",
+ "family": "R",
+ "trap": false,
+ "data": [
+  "papers/moe_eviction.txt"
+ ],
+ "prompt": "The paper is in /work/papers/moe_eviction.txt. In the experiment where the router is fine-tuned with GRPO for cache hits (Appendix E), how many steady expert transfers do the untuned base model and the model trained with the cache-hit reward make under lossless serving with decayed-frequency (LFU) eviction, at the main operating point (8 restricted layers, C=32)? Give the answer and, as evidence, an exact quote from the paper.",
+ "key": [
+  "27[,\\s{}]*275",
+  "27[,\\s{}]*355"
+ ],
+ "reference": {
+  "answer": "With LRU + LFU eviction, the untuned base makes 27,275 steady transfers and the cache-hit-reward model 27,355.",
+  "evidence": [
+   {
+    "source": "papers/moe_eviction.txt",
+    "quote": "Base (untuned)\n1.382\n31{,}915\n27{,}275"
+   },
+   {
+    "source": "papers/moe_eviction.txt",
+    "quote": "Cache-hit reward\n1.397\n32{,}050\n27{,}355"
+   }
+  ]
+ }
+}
