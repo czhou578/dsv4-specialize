@@ -95,3 +95,16 @@ def test_phase_d_with_vision_uses_the_two_cuts(tmp_path):
     assert rc == 0, log
     assert '--limit-mm-per-prompt {"image":1,"video":0} --mm-processor-cache-gb 0 --mm-processor-kwargs {"max_pixels":3686400}' in log
     assert not (tmp_path / "speed").exists()
+
+
+def test_phase_d_two_streams(tmp_path):
+    (tmp_path / "s" / "results").mkdir(parents=True)
+    names = ["qn-1", "qn-2", "qn-3", "qnd-1", "qnd-2", "qnd-3", "qnd-ds"]
+    for name in names:   # the stub speed_of writes no file: give the rate lines their inputs
+        (tmp_path / "s" / "results" / f"pair-test-{name}.jsonl").write_text("{}\n")
+    rc, log = pair(tmp_path, watch_on=True, env={"SEQS": "3", "TESTS": "idle qn qnd"})
+    assert rc == 0, log
+    assert "max-num-seqs 3 (" in log and "pair-test qn: exit 0" in log and "pair-test qnd: exit 0" in log
+    assert sorted(Path(x).name for x in (tmp_path / "speed").read_text().split()) == sorted(f"pair-test-{n}" for n in names)
+    assert "qn, 3 streams on Qwen: streams 99.0 99.0 99.0 tok/s, sum 297 tok/s" in log
+    assert "DeepSeek beside them 99.0 tok/s" in log

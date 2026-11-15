@@ -15,6 +15,9 @@
 # VISION=1 loads the vision tower with the two cuts of §8.6 (one image per prompt, no cache of processed images, at
 # most 2560x1440 pixels). TESTS names the tests to run (default: the six above). One more test for VISION=1:
 #      qimg    Qwen: the hard image set (qwen_vision.py, hard.json), while DeepSeek decodes
+# SEQS sets --max-num-seqs of Qwen (default 1). Two more tests for SEQS of 2 or more:
+#      qn      Qwen: SEQS bot decode tests at the same time; compare each stream with qspeed
+#      qnd     as qn, while the bot decode test runs on DeepSeek; compare DeepSeek with dspeed and both
 # Each result line also gives the lowest swap-free memory, from the log of tmux pair-swap (results/pair-swap.log).
 # CAUTION: out of memory, the Spark can do a hard reset. The watch stops Qwen below 2 GiB. Start this only with the
 # user's go:   tmux new -d -s pair "TAG=nocap ~/Projects/dsv4-specialize/pair_run.sh"
@@ -25,7 +28,7 @@ PY=/home/colin-spark/.hermes/stock-research/.venv/bin/python QV=${QV:-$HOME/venv
 TAG=${TAG:?set TAG, e.g. nocap or cap}
 LOG=${LOG:-$S/logs/pair-$TAG.log} MEM=${MEM:-$R/pair-mem.log} PIDFILE=${PIDFILE:-$R/pair-qwen.pid}
 NEED_MB=${NEED_MB:-28600}   # the peak of d2 (25.42 GiB) + the floor of the watch (2 GiB) + 0.5 GiB
-KEEP=${KEEP:-1}
+KEEP=${KEEP:-1} SEQS=${SEQS:-1}
 DS=http://127.0.0.1:8888 DSNAME=deepseek-v4-flash-0731-k160t5 QURL=http://127.0.0.1:8889 QNAME=second-model-fit
 QSNAP=$(ls -d $HOME/.cache/huggingface/hub/models--unsloth--Qwen3.6-35B-A3B-NVFP4-Fast/snapshots/*/ 2>/dev/null | head -1)
 DRAFT="{\"method\":\"mtp\",\"model\":\"$S/qwen-draft-nvfp4\",\"num_speculative_tokens\":3,\"moe_backend\":\"marlin\"}"
@@ -70,7 +73,7 @@ boot() {
   env PYTHONPATH=$S/qwen_mtp_patch HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 CUTE_DSL_ARCH=sm_121a PATH=$QV:$PATH \
     setsid "$QV/vllm" serve $S/qwen-k208 --host 127.0.0.1 --port 8889 --served-model-name $QNAME \
     --tensor-parallel-size 1 --gpu-memory-utilization 0.005 --kv-cache-memory-bytes 1965377034 --max-model-len 128000 \
-    --max-num-seqs 1 --max-num-batched-tokens 2048 --kv-cache-dtype fp8_e4m3 --enable-chunked-prefill --async-scheduling \
+    --max-num-seqs $SEQS --max-num-batched-tokens 2048 --kv-cache-dtype fp8_e4m3 --enable-chunked-prefill --async-scheduling \
     --enable-auto-tool-choice --generation-config vllm --attention-backend flashinfer --moe-backend flashinfer_cutlass \
     --reasoning-parser qwen3 --tool-call-parser qwen3_xml $MM --speculative-config "$DRAFT" \
     > $R/pair-$TAG-server.log 2>&1 &
@@ -122,11 +125,26 @@ t_both() {   # wait for the Qwen client by its pid: a bare wait also waits for t
   speed_of $DS $DSNAME $R/pair-$TAG-bothd
   wait $q
 }
+qn_start() {  # $1 the test name: SEQS clients on Qwen in the background, their pids in QN_PIDS
+  local i
+  QN_PIDS=""
+  for i in $(seq 1 "$SEQS"); do speed_of $QURL $QNAME $R/pair-$TAG-$1-$i & QN_PIDS="$QN_PIDS $!"; done
+}
+t_qn() { qn_start qn; wait $QN_PIDS; }   # wait by pid: a bare wait also waits for the Qwen server
+t_qnd() { qn_start qnd; speed_of $DS $DSNAME $R/pair-$TAG-qnd-ds; wait $QN_PIDS; }
+qn_rates() {  # $1 the test name: the rate of each Qwen stream and their sum
+  local i r all="" sum=0
+  for i in $(seq 1 "$SEQS"); do
+    r=$(rate $R/pair-$TAG-$1-$i.jsonl | awk '{print $1}')
+    all="$all $r"; sum=$(awk -v s="$sum" -v r="$r" 'BEGIN {print s + r}')
+  done
+  echo "streams$all tok/s, sum $sum tok/s"
+}
 
 [ -n "${PAIR_STUB:-}" ] && source "$PAIR_STUB"   # the dry run of test_pair_scripts.py
 log "phase D ($TAG) start: $(avail_mb) MB available beside DeepSeek"
 checks || exit 1
-log "boot Qwen K 208 with the NVFP4 draft on port 8889 ($MM)"
+log "boot Qwen K 208 with the NVFP4 draft on port 8889, max-num-seqs $SEQS ($MM)"
 if ! boot; then
   log "ERROR: Qwen did not boot: $(grep -iE 'error|exception' $R/pair-$TAG-server.log | tail -2 | cut -c1-300)"
   stop_qwen; exit 1
@@ -134,6 +152,8 @@ fi
 log "Qwen healthy: $(avail_mb) MB available; $(grep -oE 'Model loading took [0-9.]+ GiB|GPU KV cache size: [0-9,]+ tokens|torch.compile took [0-9.]+ s' $R/pair-$TAG-server.log | sort -u | tr '\n' ';')"
 for t in ${TESTS:-idle qlong dlong qspeed dspeed both}; do run_test $t t_$t || break; done
 [ -s $R/pair-$TAG-bothd.jsonl ] && log "rates: Qwen alone $(rate $R/pair-$TAG-qspeed.jsonl); DeepSeek alone $(rate $R/pair-$TAG-dspeed.jsonl); together Qwen $(rate $R/pair-$TAG-bothq.jsonl), DeepSeek $(rate $R/pair-$TAG-bothd.jsonl)"
+[ -s $R/pair-$TAG-qn-$SEQS.jsonl ] && log "qn, $SEQS streams on Qwen: $(qn_rates qn); one stream $(rate $R/pair-$TAG-qspeed.jsonl 2>/dev/null)"
+[ -s $R/pair-$TAG-qnd-ds.jsonl ] && log "qnd, $SEQS streams on Qwen: $(qn_rates qnd); DeepSeek beside them $(rate $R/pair-$TAG-qnd-ds.jsonl)"
 [ -s $R/pair-$TAG-dlong.json ] && log "long prompts: Qwen $(tail -1 $R/pair-$TAG-qlong.json 2>/dev/null | cut -c1-120); DeepSeek $(tail -1 $R/pair-$TAG-dlong.json 2>/dev/null | cut -c1-120)"
 if [ "$KEEP" = 1 ] && qwen_up; then
   log "phase D ($TAG) done: Qwen stays up on port 8889 for the 24-hour gate, with the watch in tmux pair-watch"

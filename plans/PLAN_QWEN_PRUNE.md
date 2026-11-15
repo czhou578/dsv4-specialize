@@ -1,7 +1,9 @@
 # Plan: prune the experts of Qwen3.6-35B-A3B for the fast route
 
-**Status:** 2026-11-14 17:53: Phase D done (§8). Qwen K 208 with the NVFP4 draft and vision runs beside DeepSeek on
-port 8889 since 17:33; the 24-hour gate ends 2026-11-15 17:33 (§8.9). The summary for a reader is `QWEN.md`.
+**Status:** 2026-11-14 22:13: Qwen K 208 with the NVFP4 draft, vision and `--max-num-seqs 4` runs beside DeepSeek on
+port 8889 since 21:59; the 24-hour gate ends 2026-11-15 22:00 (§8.11). The watch stopped the gate of 17:33 at 19:48
+(§8.10). The summary for a reader is `QWEN.md`.
+2026-11-14 17:53: Phase D done (§8.9).
 2026-11-14: K 208 with NVFP4 draft experts (§7.7 to §7.9) uses 25.42 GiB at the peak with a 120k
 prompt, at 101.8 tok/s: a margin of 3.4 to 4.1 GiB beside DeepSeek, or 3.7 to 4.4 GiB with the context cap. The
 facts and side-by-side test (§7.6): K 208 loses a third of the right answers on 80 rare facts, and a blind judge finds
@@ -18,7 +20,7 @@ windows. The model runs with the vLLM 0.33 venv, alone on port 8889. No change t
 | §5 Phase A: the data, the tools and the tests (no downtime, about 2 days) | ✅ 2026-11-13: PRs #54 to #57 (§5.1 to §5.3) |
 | §6 Phase B: the capture window (about 85 min downtime) | ✅ 2026-11-13, 20:20 to 21:39 (§6.1) |
 | §7 Phase C: the builds and the gate window (about 80 min downtime) | ✅ 2026-11-13, two windows (§7.1, §7.2): no point passes G1 |
-| §8 Phase D: both servers at the same time (`PLAN_SECOND_MODEL_FIT.md` §7) | ✅ 2026-11-14: both servers run, vision stays on (§8.2, §8.9); the 24-hour gate ends 2026-11-15 17:33 |
+| §8 Phase D: both servers at the same time (`PLAN_SECOND_MODEL_FIT.md` §7) | ✅ 2026-11-14: both servers run, vision stays on (§8.2, §8.9), four sequences (§8.11); the 24-hour gate ends 2026-11-15 22:00 |
 
 ---
 
@@ -920,6 +922,65 @@ available memory would be near zero under load. The watch stays the guard agains
 **The decision: vision stays on.** Qwen K 208 runs on port 8889 with `VISION=1` since 17:33, and the 24-hour gate of
 §8.3 starts again from that time, now for this setup: it ends at 17:33 on 2026-11-15. The durable fix for the
 margin is on the DeepSeek side (§8.7: a larger cold cut, or a narrower draft); none of it is started.
+
+### 8.10 The watch stops Qwen during the gate (2026-11-14, 19:48)
+
+At 19:48:54 the watch stopped Qwen: `WATCH: 1958 MB available, below 2048 MB`. The drop came while new Claude Code
+processes started (an extension host restart and two CLI tests through the gateway); each one holds about 0.3 to
+0.5 GB. `oom_kill` stayed 0, and DeepSeek stayed healthy. The watch did its job, but the gate of §8.9 ended there.
+
+You started Qwen again with the same setup (`TAG=gate4 VISION=1 TESTS=idle`). It was healthy at 20:04:44, with
+8,078 MB available. Files (not in git): `logs/pair-gate4.log`, `logs/pair-watch.log`.
+
+**How to read it.** The short tests of §8.9 left 5.8 GB at the lowest. Two hours of normal use took the margin under
+2 GiB. The 24-hour gate catches what the short tests do not: processes beside the servers, and slow changes of the
+page cache and the swap.
+
+### 8.11 More than one sequence on Qwen (2026-11-14, 21:36 to 22:13)
+
+Claude Code now sends requests to Qwen through two subagents (`~/.claude/agents/qwen-fast.md` with
+`model: second-model-fit`, and `deepseek-reasoner.md` for DeepSeek). With `--max-num-seqs 1`, the server runs the
+requests of parallel subagents one after the other. `pair_run.sh` now reads `SEQS` for `--max-num-seqs`, and it has
+two new tests:
+
+- `qn`: `SEQS` bot decode tests on Qwen at the same time; the log gives each rate and the sum.
+- `qnd`: as `qn`, while the bot decode test runs on DeepSeek; the log gives the DeepSeek rate beside them.
+
+The KV cache stays pinned at 132,987 tokens, and the sequences share it. `--max-num-batched-tokens` stays 2048, so the
+buffers of a prefill do not grow. Two runs, each beside the live DeepSeek with vision on. Files (not in git):
+`results/pair-seqs2-*`, `results/pair-seqs4-*`, `logs/pair-seqs2.log`, `logs/pair-seqs4.log`.
+
+| `SEQS` | Available after the boot | Qwen, one stream | Qwen, `SEQS` streams | Lowest available |
+|---|---|---|---|---|
+| 1 (§8.9, §8.10) | 8,078 MB | 103.0 tok/s | — | 6,578 MB |
+| 2 | 7,541 MB | 98.4 tok/s | 84.2 + 76.5 = 160.6 tok/s (1.63×) | 6,661 MB |
+| 4 | 7,236 MB | 100.9 tok/s | 77.1 + 67.6 + 72.0 + 69.0 = 285.6 tok/s (2.83×) | 6,214 MB |
+
+| Test with `SEQS=4` | Lowest available | Lowest swap-free | Result |
+|---|---|---|---|
+| Both idle, 60 s | 7,283 MB | 7,498 MB | |
+| Qwen: one stream (`qspeed`) | 6,493 MB | 7,820 MB | 100.9 tok/s |
+| Qwen: four streams (`qn`) | 6,214 MB | 7,934 MB | 285.6 tok/s in all |
+| Qwen: four streams, while DeepSeek decodes (`qnd`) | 5,718 MB | 8,134 MB | Qwen 170.4 tok/s in all; DeepSeek 15.2 tok/s |
+
+**How to read it.**
+
+- One stream does not get slower: 98.4 and 100.9 tok/s are within the noise of one run from 103.0.
+- The sum of the streams is a little high: the clients do not end at the same time, and a stream that runs alone at
+  the end gets a higher rate.
+- Beside four Qwen streams, DeepSeek decodes at 15.2 tok/s, against 18.2 beside one stream (§8.9) and 35.7 alone:
+  16% slower than with one stream. This happens only while four subagents run and the bot is busy at the same time.
+  With DeepSeek busy, four Qwen streams do 170 tok/s in all, against 47.7 with one: the same Qwen work ends about 3.6
+  times sooner, so the bot is slowed for less time.
+- Each step of `SEQS` costs about 0.3 to 0.5 GB of available memory at idle. The lowest available memory (5,718 MB)
+  is close to that of §8.9 (5,827 MB). The watch never fired, and `oom_kill` is 0.
+- Four sequences share 133k tokens of KV cache: enough for four subagents of about 30k tokens each. With more, vLLM
+  stops a request and computes it again later; the request gets slower, but it does not fail.
+
+**The decision: `SEQS=4`.** Qwen runs with `--max-num-seqs 4` since 21:59:27, and the 24-hour gate of §8.3 starts again
+for this setup: it ends at 22:00 on 2026-11-15. Unlike §8.3, the gate now covers Qwen with real requests from the
+subagents. It does not cover the cron window (05:00 to 10:00 on weekdays): the next one is on 2026-11-16. To start
+this setup again: `TAG=<name> VISION=1 SEQS=4 TESTS=idle ./pair_run.sh` in tmux.
 
 ## 9. Risks
 
