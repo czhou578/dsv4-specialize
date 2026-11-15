@@ -801,6 +801,26 @@ rows, a chart of two series with no value labels, a state diagram, a dense dark 
 **The state after the window:** at 16:18, Qwen K 208 started again beside DeepSeek in its text-only setup
 (`TAG=gate2 TESTS=idle pair_run.sh`), and the 24-hour gate of §8.3 starts again.
 
+### 8.6 Vision with two cuts, and the hard set (your go of 2026-11-14)
+
+Two cuts for the memory of §8.5:
+
+1. `--mm-processor-cache-gb 0`: no cache of processed images. It stops the growth of up to 8 GiB; the memory at the
+   boot may not change, because the cache starts empty.
+2. `--mm-processor-kwargs {"max_pixels":3686400}`: at most 2560 x 1440 pixels per image (about 3,600 tokens). The
+   checkpoint allows 16.7 megapixels (16,384 tokens), and vLLM sizes its encoder cache and its warm-up run for that.
+   A larger screenshot is scaled down.
+
+| Point | Model | Tests |
+|---|---|---|
+| t208 | K 208 with the NVFP4 draft, vision with the two cuts | Smoke, the hard set (15 questions) |
+| t256 | The full model, vision with the two cuts | Smoke, the hard set: the reference |
+| u208 | t208 again, warm compile cache | Smoke, the hard set, a prompt of 120,000 tokens, the bot decode test: the memory |
+
+**The rule, written before the window:** the cuts help if the peak of u208 is at least 0.5 GiB below m208 (28.08 GiB).
+K 208 passes the hard set if it answers at most 2 questions fewer than the full model. The gate of §8.3 stops for the
+window and starts again after it.
+
 ## 9. Risks
 
 | Risk | Effect | Guard |
