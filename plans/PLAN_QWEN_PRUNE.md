@@ -876,6 +876,35 @@ memory and the lowest swap-free memory.
 If a condition fails, Qwen goes back to its text-only setup, and the options of §8.7 are open (a shorter Qwen
 context, the DeepSeek context cap, a narrower DeepSeek draft, a larger cold cut of DeepSeek).
 
+### 8.9 Result of the live test: vision stays on (2026-11-14, 17:30 to 17:53)
+
+DeepSeek did not stop. Qwen K 208 with vision and the two cuts booted beside it in 3.5 minutes, from the warm compile
+cache. Files (not in git): `results/pair-vision-*`, `logs/pair-vision.log`.
+
+| Test | Lowest available | Lowest swap-free | Result |
+|---|---|---|---|
+| The boot | 7,846 MB | 6,600 MB | |
+| Both idle, 60 s | 8,173 MB | 7,949 MB | |
+| Qwen: the hard image set, while DeepSeek decodes | 6,988 MB | 8,231 MB | 15 of 15 correct (graded by DeepSeek) |
+| Qwen: 119,745 tokens, while DeepSeek decodes | 6,921 MB | 8,290 MB | 50.3 s |
+| DeepSeek: 127,837 tokens, while Qwen decodes | 6,178 MB | 8,346 MB | 244.1 s |
+| Bot decode test, Qwen alone | 6,578 MB | 8,472 MB | 103.0 tok/s (text only: 99.1) |
+| Bot decode test, DeepSeek alone | 6,551 MB | 8,483 MB | 35.7 tok/s (36.9: −3.1%) |
+| Bot decode test, both at once | 5,827 MB | 8,498 MB | Qwen 47.7 tok/s, DeepSeek 18.2 tok/s |
+
+**Every condition of §8.8 holds:** the watch never fired, `oom_kill` is 0, the swap-free memory stayed above 4 GiB
+(6.6 GiB at its lowest, during the boot), both servers are healthy, the hard set is 15 of 15, and each model alone
+decodes within 5% of §8.2.
+
+**How to read it.** Against the text-only run of §8.2, the lowest available memory fell from 7,459 MB to 5,827 MB.
+As there, the swap carries the difference to the arithmetic of §8.7: after the run, 7.8 GiB of the 16 GiB of swap is
+in use, 1.7 GiB of it by the two Qwen processes. The setup works, and it works because of the swap: with no swap, the
+available memory would be near zero under load. The watch stays the guard against a hard reset.
+
+**The decision: vision stays on.** Qwen K 208 runs on port 8889 with `VISION=1` since 17:33, and the 24-hour gate of
+§8.3 starts again from that time, now for this setup: it ends at 17:33 on 2026-11-15. The durable fix for the
+margin is on the DeepSeek side (§8.7: a larger cold cut, or a narrower draft); none of it is started.
+
 ## 9. Risks
 
 | Risk | Effect | Guard |
