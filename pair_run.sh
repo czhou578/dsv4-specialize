@@ -120,8 +120,8 @@ if ! boot; then
 fi
 log "Qwen healthy: $(avail_mb) MB available; $(grep -oE 'Model loading took [0-9.]+ GiB|GPU KV cache size: [0-9,]+ tokens|torch.compile took [0-9.]+ s' $R/pair-$TAG-server.log | sort -u | tr '\n' ';')"
 for t in ${TESTS:-idle qlong dlong qspeed dspeed both}; do run_test $t t_$t || break; done
-log "rates: Qwen alone $(rate $R/pair-$TAG-qspeed.jsonl); DeepSeek alone $(rate $R/pair-$TAG-dspeed.jsonl); together Qwen $(rate $R/pair-$TAG-bothq.jsonl), DeepSeek $(rate $R/pair-$TAG-bothd.jsonl)"
-log "long prompts: Qwen $(tail -1 $R/pair-$TAG-qlong.json 2>/dev/null | cut -c1-120); DeepSeek $(tail -1 $R/pair-$TAG-dlong.json 2>/dev/null | cut -c1-120)"
+[ -s $R/pair-$TAG-bothd.jsonl ] && log "rates: Qwen alone $(rate $R/pair-$TAG-qspeed.jsonl); DeepSeek alone $(rate $R/pair-$TAG-dspeed.jsonl); together Qwen $(rate $R/pair-$TAG-bothq.jsonl), DeepSeek $(rate $R/pair-$TAG-bothd.jsonl)"
+[ -s $R/pair-$TAG-dlong.json ] && log "long prompts: Qwen $(tail -1 $R/pair-$TAG-qlong.json 2>/dev/null | cut -c1-120); DeepSeek $(tail -1 $R/pair-$TAG-dlong.json 2>/dev/null | cut -c1-120)"
 if [ "$KEEP" = 1 ] && qwen_up; then
   log "phase D ($TAG) done: Qwen stays up on port 8889 for the 24-hour gate, with the watch in tmux pair-watch"
 else
