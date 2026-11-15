@@ -69,8 +69,9 @@ def test_h1(env):
 @pytest.mark.parametrize("item, error", [
     ({"source": "src/b.py", "quote": "def beta():"}, "no such source: src/b.py"),
     ({"source": "src/a.py", "quote": "def gamma():"}, "quote not in src/a.py: 'def gamma():'"),
-    ({"source": "src/a.py", "quote": "return alpha() + 1", "line": 1}, "quote not near line 1 of src/a.py"),
-    ({"source": "src/a.py", "quote": "def"}, "quote too short: 'def'"),
+    ({"source": "src/a.py", "quote": "return alpha() + 1", "line": 40}, "quote not near line 40 of src/a.py"),
+    ({"source": "src/a.py", "quote": "| |"}, "empty quote: '| |'"),
+    ({"source": "src/a.py", "quote": "return alpha() + 2"}, "quote not in src/a.py: 'return alpha() + 2'"),
     ({"source": "https://x.test/b", "quote": "The cache"}, "no such source: https://x.test/b"),
     ({"source": "https://x.test/a", "quote": "holds five items"}, "quote not in https://x.test/a: 'holds five items'"),
 ])
@@ -131,3 +132,62 @@ def test_check_cmd_decides_code_tasks(env):
     task = TASK | {"check_cmd": "pytest .hidden"}
     assert run_checks(tr(rep(evidence=[]), check={"exit": 0}), env, task)[1] == "pass"
     assert run_checks(tr(rep(evidence=[]), check={"exit": 1}), env, task)[1] == "wrong"
+
+
+def test_h2_quote_of_a_tool_result(env):
+    """A quote that the run observed in a tool result is not invented, even when its source is wrong."""
+    seen = call("grep", {"pattern": "MAX_RETRIES", "path": "src/a.py"}) | {"result": "No matches."}
+    item = {"source": "src/a.py", "quote": "No matches."}
+    assert run_checks(tr(rep(evidence=[item]), seen), env)[0]["H2"] == []
+    assert run_checks(tr(rep(evidence=[item | {"source": "grep"}]), seen), env)[0]["H2"] == []
+    assert run_checks(tr(rep(evidence=[item])), env)[0]["H2"] == ["quote not in src/a.py: 'No matches.'"]
+
+
+def test_h2_table_rows_and_spacing(tmp_path):
+    """From the manual read of the pilot (2026-11-15): one table cell per line, and a space from a math element."""
+    lines = ["intro"] * 20 + ["Policy", "\\Delta NLL", "tok/s", "LRU (lossless)", "+0.000", "38.3"] + ["x"] * 20
+    (tmp_path / "p.txt").write_text("\n".join(lines) + "\nstatic LK surpasses it at T=0.5 .\n")
+    ok = [{"source": "p.txt", "quote": "| Policy | \\Delta NLL | tok/s |\n| LRU (lossless) | +0.000 | 38.3 |", "line": 21},
+          {"source": "p.txt", "quote": "static LK surpasses it at T=0.5."},
+          {"source": "p.txt", "quote": "Policy ... LRU (lossless) ... 38.3", "line": 23}]
+    for item in ok:
+        assert checks.evidence_error(item, [tmp_path], tools.Pages(None)) is None, item
+    bad = {"source": "p.txt", "quote": "| LRU (lossless) | +0.000 | 39.3 |"}
+    assert checks.evidence_error(bad, [tmp_path], tools.Pages(None)).startswith("quote not in")
+
+
+def test_h2_only_for_done(env):
+    """A not_found report has no answer to support: its evidence does not count."""
+    item = {"source": "src/a.py", "quote": "grep found nothing in the file"}
+    assert run_checks(tr(rep(status="not_found", evidence=[item])), env, TASK | {"trap": True}) == (
+        {"H1": [], "H2": [], "H3": [], "H4": []}, "pass")
+    assert run_checks(tr(rep(evidence=[item])), env)[0]["H2"] != []
+
+
+def test_h2_table_quotes_across_cells(tmp_path):
+    """A group label joined with a later row, a left-out row, TeX bold: the words and numbers are near each other."""
+    cells = ["Brand names", "Nemotron", "49.8", "REAP 25%", "45.8", "-4.0", "REAP 50%", "28.6", "-21.1 [-23.1, -19.1]",
+             "Base (untuned)", "1.382", "\\mathbf{10954}", "SFT control", "1.350", "Cache-hit reward", "1.397"]
+    (tmp_path / "t.txt").write_text("\n".join(["prose"] * 300 + cells + ["more prose"] * 300))
+    pages = tools.Pages(None)
+    for quote in ["Brand names, Nemotron / 49.8 / REAP 50% / 28.6 / -21.1 [-23.1, -19.1]",
+                  "Base (untuned) 1.382 10954\nCache-hit reward 1.397"]:
+        line = 301 if quote.startswith("Brand") else 310
+        assert checks.evidence_error({"source": "t.txt", "quote": quote, "line": line}, [tmp_path], pages) is None, quote
+    for quote in ["Brand names, Nemotron / 49.8 / REAP 50% / 27.6",       # an invented number
+                  "Brand names Nemotron prose prose 49.8 REAP",         # one number: prose rules apply
+                  "Brand names, Nemotron / 49.8 / REAP 50% / Mixtral"]:  # an invented word
+        assert checks.evidence_error({"source": "t.txt", "quote": quote}, [tmp_path], pages), quote
+    far = {"source": "t.txt", "quote": "Brand names, Nemotron / 49.8 / REAP 50% / 28.6", "line": 100}
+    assert checks.evidence_error(far, [tmp_path], pages) == "quote not near line 100 of t.txt"
+
+
+def test_null_for_an_optional_field(env):
+    """null means absent (2026-11-15: Qwen sends "line": null for a URL); a wrong type is still H1."""
+    assert checks.validate_call("report", '{"status": "done", "answer": "a", "tests_passed": null, '
+                                '"evidence": [{"source": "https://x.test/a", "quote": "The cache", "line": null}]}')[1] is None
+    assert checks.validate_call("read_file", '{"path": "a", "start": null, "end": null}')[1] is None
+    assert checks.validate_call("report", '{"status": "done", "answer": "a", '
+                                '"evidence": [{"source": "s", "quote": "q", "line": "2-6"}]}')[1].startswith("schema:")
+    item = {"source": "https://x.test/a", "quote": "The cache holds", "line": None}
+    assert run_checks(tr(rep(evidence=[item])), env)[0]["H2"] == []

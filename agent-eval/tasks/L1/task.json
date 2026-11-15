@@ -9,7 +9,7 @@
  "key": [
   "pair_watch\\.sh",
   "\\b2048\\b",
-  "(:|line )15\\b"
+  "(:|\\bline)\\W{0,3}15\\b"
  ],
  "reference": {
   "answer": "repo/pair_watch.sh:15 sets FLOOR_MB=${FLOOR_MB:-2048}: the default floor is 2048 MB.",

@@ -29,6 +29,9 @@ def out(tmp_path, monkeypatch):
 def test_summary():
     s = rep.summary([row("L1", 0, "pass"), row("L1", 1, "hallucination", secs=30), row("L2", 0, "wrong")])
     assert s["runs"] == 3 and round(s["pass"], 1) == 33.3 and s["events"]["H2"] == 1 and s["median_s"] == 10
+    assert s["bursts"] == 0 and s["loops"] == 0   # rows before 2026-11-15 have no call stats
+    s = rep.summary([row("L1", 0, "pass") | {"max_calls_turn": 57, "repeat_calls": 9}])
+    assert s["bursts"] == 1 and s["loops"] == 1
 
 
 def test_diff_uses_common_tasks():

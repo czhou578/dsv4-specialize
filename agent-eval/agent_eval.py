@@ -175,7 +175,7 @@ def run_task(task: dict, model: str, seed: int, ctx: int, run_dir: Path, pages: 
         shutil.rmtree(ws / ".hidden", ignore_errors=True)
         shutil.copytree(TASKS / task["id"] / "hidden", ws / ".hidden")
         tr["check"] = sandbox.run(str(ws), task["check_cmd"], timeout=300)
-    ev = checks.events(tr, task, [ws, TASKS / task["id"] / "files"], pages)
+    ev = checks.events(tr, task, [ws, TASKS / task["id"] / "files", DATA], pages)
     tr["events"], tr["result"] = ev, checks.result(tr, task, ev)
     (run_dir / "transcript.json").write_text(json.dumps(tr, indent=1))
     if not keep:
@@ -187,7 +187,38 @@ def run_task(task: dict, model: str, seed: int, ctx: int, run_dir: Path, pages: 
             "check_exit": (tr.get("check") or {}).get("exit"), "seconds": tr["seconds"],
             "prompt_tokens_first": usage[0].get("prompt_tokens") if usage else None,
             "prompt_tokens_last": usage[-1].get("prompt_tokens") if usage else None,
-            "completion_tokens": sum(u.get("completion_tokens", 0) for u in usage), "error": tr["error"]}
+            "completion_tokens": sum(u.get("completion_tokens", 0) for u in usage), "error": tr["error"],
+            **call_stats(tr["turns"])}
+
+
+def call_stats(turns: list[dict]) -> dict:
+    """Signs of a decode loop, not events: the most calls in one turn, and the calls that repeat an earlier call."""
+    seen, repeats = set(), 0
+    for t in turns:
+        for c in t["calls"]:
+            key = (c["name"], c["arguments"])
+            repeats += key in seen
+            seen.add(key)
+    return {"max_calls_turn": max((len(t["calls"]) for t in turns), default=0), "repeat_calls": repeats}
+
+
+def rescore(name: str) -> int:
+    """Recompute the events, the result and the call stats of each run of a point from its transcript (after a fix
+    of a check). The workspace counts when the run kept it; else the task files and the data. Returns the changes."""
+    out, pages, changed = OUT / name, tools.Pages(DATA / "web/pages.jsonl"), 0
+    rows = [json.loads(x) for x in (out / "rows.jsonl").read_text().splitlines()]
+    for row in rows:
+        d, task = out / f"{row['model']}-{row['task']}-s{row['seed']}", load_task(row["task"])
+        tr = json.loads((d / "transcript.json").read_text())
+        ev = checks.events(tr, task, [d / "ws", TASKS / task["id"] / "files", DATA], pages)
+        tr["events"], tr["result"] = ev, checks.result(tr, task, ev)
+        (d / "transcript.json").write_text(json.dumps(tr, indent=1))
+        if tr["result"] != row["result"]:
+            changed += 1
+            print(f"{row['model']} {row['task']} s{row['seed']}: {row['result']} -> {tr['result']}")
+        row.update(result=tr["result"], events={k: len(v) for k, v in ev.items()}, **call_stats(tr["turns"]))
+    (out / "rows.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    return changed
 
 
 def lowest_memory(t0: float, t1: float) -> dict:
@@ -202,7 +233,7 @@ def lowest_memory(t0: float, t1: float) -> dict:
     return {"lowest_available_mb": min(avail, default=None), "lowest_swap_free_mb": min(swap, default=None)}
 
 
-def point(name: str, mix: dict[str, int], seeds: int, ctx: int, task_ids: list[str], keep=False) -> Path:
+def point(name: str, mix: dict[str, int], seeds: int, ctx: int, task_ids: list[str], keep=False, first_seed=0) -> Path:
     out = OUT / name
     out.mkdir(parents=True, exist_ok=True)
     rows_file, lock, pages = out / "rows.jsonl", threading.Lock(), tools.Pages(DATA / "web/pages.jsonl")
@@ -219,11 +250,11 @@ def point(name: str, mix: dict[str, int], seeds: int, ctx: int, task_ids: list[s
               f"{row['turns']} turns, {row['seconds']} s)", flush=True)
 
     pools = {m: ThreadPoolExecutor(n) for m, n in mix.items()}
-    futs = [pools[m].submit(one, m, t, s) for s in range(seeds) for t in task_ids for m in mix
+    futs = [pools[m].submit(one, m, t, s) for s in range(first_seed, first_seed + seeds) for t in task_ids for m in mix
             if (m, t, s) not in done]
     for f in futs:
         f.result()
-    meta = {"name": name, "mix": mix, "seeds": seeds, "ctx": ctx, "tasks": task_ids, "start": t0, "end": time.time()}
+    meta = {"name": name, "mix": mix, "seeds": seeds, "first_seed": first_seed, "ctx": ctx, "tasks": task_ids, "start": t0, "end": time.time()}
     meta.update(lowest_memory(int(t0), int(meta["end"])))
     (out / "point.json").write_text(json.dumps(meta, indent=1))
     return out
@@ -242,19 +273,23 @@ def main():
     p.add_argument("--name", required=True)
     p.add_argument("--mix", required=True, help="model=workers, comma-separated, e.g. qwen=4,deepseek=1")
     p.add_argument("--seeds", type=int, default=1)
+    p.add_argument("--first-seed", type=int, default=0)
     p.add_argument("--ctx", type=int, default=0)
     p.add_argument("--tasks", default="", help="task ids, comma-separated (default: all)")
     p.add_argument("--families", default="", help="families, comma-separated (default: all)")
     p.add_argument("--keep", action="store_true")
+    sub.add_parser("rescore", help="recompute the events of a point from its transcripts").add_argument("--name", required=True)
     a = ap.parse_args()
-    if a.cmd == "run":
+    if a.cmd == "rescore":
+        print(f"{rescore(a.name)} results changed")
+    elif a.cmd == "run":
         row = run_task(load_task(a.task), a.model, a.seed, a.ctx, OUT / "manual" / f"{a.model}-{a.task}-s{a.seed}",
                        tools.Pages(DATA / "web/pages.jsonl"), a.keep)
         print(json.dumps(row, indent=1))
     else:
         mix = {m: int(n) for m, n in (x.split("=") for x in a.mix.split(","))}
         ids = a.tasks.split(",") if a.tasks else all_tasks(a.families)
-        print(point(a.name, mix, a.seeds, a.ctx, ids, a.keep))
+        print(point(a.name, mix, a.seeds, a.ctx, ids, a.keep, a.first_seed))
 
 
 if __name__ == "__main__":

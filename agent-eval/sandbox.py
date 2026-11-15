@@ -7,19 +7,44 @@ Each command runs in a new Docker container of the image ``agent-eval-sandbox:1`
 - 1 GiB of memory with no swap, 256 processes and 4 CPUs;
 - ``timeout`` in the container, and ``docker kill`` from the host when the container does not stop.
 
-At most ``SLOTS`` commands run at the same time in this process, so that the builds use at most 2 GiB beside the
-model servers. The time in the queue does not count against the limit of a command.
+At most ``SLOTS`` commands run at the same time on this machine, in all processes together (a file lock for each
+slot), so that the builds use at most 2 GiB beside the model servers. The time in the queue does not count against
+the limit of a command.
 """
 
+import contextlib
+import fcntl
 import os
 import subprocess
-import threading
+import tempfile
 import time
 import uuid
 
 IMAGE = os.environ.get("AGENT_EVAL_IMAGE", "agent-eval-sandbox:1")
-SLOTS = threading.BoundedSemaphore(int(os.environ.get("AGENT_EVAL_SLOTS", "2")))
+SLOTS = int(os.environ.get("AGENT_EVAL_SLOTS", "2"))
+LOCKS = os.environ.get("AGENT_EVAL_LOCKS", os.path.join(tempfile.gettempdir(), "agent-eval-slots"))
 MAX_OUT = 10_000   # characters of output that a tool result keeps: the head and the tail
+
+
+@contextlib.contextmanager
+def slot():
+    """One of the SLOTS file locks, shared by all processes and threads; it waits until one is free."""
+    os.makedirs(LOCKS, exist_ok=True)
+    while True:
+        for i in range(SLOTS):
+            f = open(os.path.join(LOCKS, f"slot{i}.lock"), "w")
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                f.close()
+                continue
+            try:
+                yield i
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+                f.close()
+            return
+        time.sleep(0.2)
 
 
 def clip(text: str, limit: int = MAX_OUT) -> str:
@@ -43,7 +68,7 @@ def run(workdir: str, command: str, timeout: int = 120) -> dict:
 
     Exit code 124 or 137 means the time limit or the memory limit stopped the command."""
     t0 = time.monotonic()
-    with SLOTS:
+    with slot():
         t1 = time.monotonic()
         name = f"agent-eval-{uuid.uuid4().hex[:12]}"
         try:

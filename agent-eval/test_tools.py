@@ -92,3 +92,27 @@ def test_toolchains(ws):
     assert r["exit"] == 0 and "rustc 1.90.0" in r["output"] and "pytest" in r["output"], r["output"]
     text, rec = tools.call(ws, tools.Pages(None), "run", {"command": "echo hi"})
     assert text == "exit code: 0\nhi\n" and rec["exit"] == 0
+
+
+def test_slots_are_shared_by_processes(tmp_path, monkeypatch):
+    """Two slots: a third holder waits, also when the first two are in another process."""
+    import subprocess
+    import sys
+    import threading
+    import time
+    monkeypatch.setattr(sandbox, "LOCKS", str(tmp_path))
+    monkeypatch.setattr(sandbox, "SLOTS", 2)
+    code = ("import sys, sandbox; sandbox.LOCKS, sandbox.SLOTS = sys.argv[1], 2\n"
+            "with sandbox.slot(), sandbox.slot():\n    print('held', flush=True); sys.stdin.read()")
+    p = subprocess.Popen([sys.executable, "-c", code, str(tmp_path)], cwd=sandbox.__file__.rsplit("/", 1)[0],
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    assert p.stdout.readline() == "held\n"
+    got = []
+    t = threading.Thread(target=lambda: got.append(sandbox.slot().__enter__()))
+    t.start()
+    time.sleep(0.6)
+    assert got == []   # no slot is free
+    p.stdin.close()
+    p.wait(10)
+    t.join(5)
+    assert got in ([0], [1])
