@@ -859,6 +859,23 @@ diagram and the dark panel. With the 36 questions of §8.5, K 208 answers 51 of 
 **The state after the window:** at 17:18, Qwen K 208 started again beside DeepSeek in its text-only setup
 (`TAG=gate3`), and the 24-hour gate starts again.
 
+### 8.8 Vision always on: the live test (your decision of 2026-11-14)
+
+You want vision always on. The live test is Phase D again with `VISION=1` (the two cuts of §8.6), beside the running
+DeepSeek, with no downtime: `TAG=vision VISION=1 TESTS='idle qimg qlong dlong qspeed dspeed both' pair_run.sh`. The new
+test `qimg` sends the hard image set to Qwen while DeepSeek decodes. Each result line gives the lowest available
+memory and the lowest swap-free memory.
+
+**The rule, written before the test.** Vision stays on if all of these hold:
+
+- the watch never fires (the available memory stays above 2 GiB), and `oom_kill` stays 0;
+- the swap-free memory stays above 4 GiB (16 GiB of swap in all; 8.3 GiB was free with the text-only setup);
+- both servers stay healthy, and Qwen answers the hard set as before (15 of 15);
+- each model alone decodes within 5% of §8.2 (Qwen 99.1 tok/s, DeepSeek 36.9 tok/s).
+
+If a condition fails, Qwen goes back to its text-only setup, and the options of §8.7 are open (a shorter Qwen
+context, the DeepSeek context cap, a narrower DeepSeek draft, a larger cold cut of DeepSeek).
+
 ## 9. Risks
 
 | Risk | Effect | Guard |
