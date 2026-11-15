@@ -821,6 +821,44 @@ Two cuts for the memory of §8.5:
 K 208 passes the hard set if it answers at most 2 questions fewer than the full model. The gate of §8.3 stops for the
 window and starts again after it.
 
+### 8.7 Result of the cuts and of the hard set (2026-11-14, 17:01 to 17:18)
+
+The live server stopped at 17:01 and was healthy again at 17:18:01: 17 minutes of downtime. All three points booted
+on the first try, with the compiled graph from the cache (the two cuts do not change the compile key).
+
+**The hard set: no loss shows.** The full model and K 208 both answer 15 of 15 (graded by DeepSeek): the dense
+full-HD code (about 2,250 tokens for the image), the table of 16 rows, the chart with no value labels, the state
+diagram and the dark panel. With the 36 questions of §8.5, K 208 answers 51 of 51, as the full model does.
+
+**The cuts free 0.30 GiB, less than the 0.5 GiB of the rule.**
+
+| | m208: vision (§8.5) | u208: vision with the two cuts | d2: no vision |
+|---|---|---|---|
+| Use at the peak | 28.08 GiB | **27.78 GiB** | 25.42 GiB |
+| Overhead X after the boot | 7.72 GiB | 7.37 GiB | 6.23 GiB |
+| GPU process | 22,667 MiB | 22,825 MiB (larger images in the test) | 21,655 MiB |
+| API server, resident | 3.01 GB | 2.88 GB | 1.97 GB |
+| Decode with the draft | 101.57 tok/s | 101.34 tok/s | 101.78 tok/s |
+
+- The cost of vision is fixed: the weights of the tower on the GPU (0.86 GiB) and the image stack of the API server
+  (about 0.9 GB of host memory). The size limit and the cache setting hardly move it.
+- The cuts stay: `--mm-processor-cache-gb 0` removes the growth of up to 8 GiB over time, and the pixel limit bounds
+  the tokens of one image at about 3,600.
+- With vision, the margin beside DeepSeek is **1.0 to 1.7 GiB** before any swap (3.4 to 4.1 GiB with no vision).
+
+**The choices (your decision):**
+
+1. Text only, as now: the margin of §7.9, no screenshots for Qwen.
+2. Vision always on, with the cuts: 2.36 GiB more. It leans on the swap more than the text-only setup does (§8.2).
+   A Phase D run with `VISION=1` (no downtime of DeepSeek) would show the real lows and the swap use.
+3. Vision on demand: Qwen runs text only, and a restart of about 3 minutes (no downtime of DeepSeek) switches it to
+   the vision setup when you want to paste images.
+4. More cuts, each with its own work and test: the vision tower in FP8 (about 0.4 GiB), a lighter image stack in the
+   API server, the DeepSeek context cap (0.35 GiB).
+
+**The state after the window:** at 17:18, Qwen K 208 started again beside DeepSeek in its text-only setup
+(`TAG=gate3`), and the 24-hour gate starts again.
+
 ## 9. Risks
 
 | Risk | Effect | Guard |
