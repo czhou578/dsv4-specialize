@@ -47,12 +47,12 @@ services:
       DSPARK_DRAFT_EXPERTS: "64"
       DSPARK_STRUCTURED_EXPERTS_PER_CATEGORY: "32"
       VLLM_USE_B12X_WO_PROJECTION: "1"
-      GPU_MEMORY_UTILIZATION: "0.93"   # as the main compose.yml since 2026-11-03 (256k KV check)
+      GPU_MEMORY_UTILIZATION: "0.90"   # as the live compose: only the boot check, since the KV is pinned (EXTRA_VLLM_ARGS); 0.93 failed it on 2026-11-07
       VERIFY_MODEL_CHECKSUMS: "1"
       MAX_CUDAGRAPH_CAPTURE_SIZE: "24"
       CUDAGRAPH_CAPTURE_SIZES: "6,12,24"
       VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
-      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold 1024 ${MASK_EXTRA_ARGS:-}"
+      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold 1024 --kv-cache-memory-bytes 7784628224 ${MASK_EXTRA_ARGS:-}"   # the 7.25 GiB KV pin of the live compose
       DEFAULT_CHAT_TEMPLATE_KWARGS_THINKING: "true"
       DEFAULT_CHAT_TEMPLATE_KWARGS_EFFORT: "max"
       KV_OFFLOAD_GB: "0"

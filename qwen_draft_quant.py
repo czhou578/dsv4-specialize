@@ -35,7 +35,7 @@ from compressed_tensors.compressors.nvfp4.helpers import unpack_fp4_from_uint8
 from compressed_tensors.quantization import QuantizationArgs, QuantizationScheme
 from compressed_tensors.quantization.utils.helpers import calculate_qparams, generate_gparam
 
-from qwen_prune import read_header
+from qwen_prune import read_header, write_streaming
 
 GATE_UP, DOWN = "mtp.layers.0.mlp.experts.gate_up_proj", "mtp.layers.0.mlp.experts.down_proj"
 PREFIX = "mtp.layers.0.mlp.experts"
@@ -95,38 +95,20 @@ def patch_quant_config(config):
     return config
 
 
-def write_streaming(path, items, metadata=None):
-    """Write a safetensors file from ``(name, dtype, shape, size, source)`` items, in order. ``source`` is bytes, or
-    ``(file, offset)`` to copy ``size`` bytes from another file, so a large shard never sits in memory."""
-    header, offset = ({"__metadata__": metadata} if metadata else {}), 0
-    for name, dtype, shape, size, _ in items:
-        header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [offset, offset + size]}
-        offset += size
-    raw = json.dumps(header, separators=(",", ":")).encode()
-    raw += b" " * (-len(raw) % 8)
-    with open(path, "wb") as f:
-        f.write(struct.pack("<Q", len(raw)) + raw)
-        for *_, size, source in items:
-            if isinstance(source, bytes):
-                f.write(source)
-                continue
-            with open(source[0], "rb") as src:
-                src.seek(source[1])
-                left = size
-                while left:
-                    chunk = src.read(min(left, 64 << 20))
-                    f.write(chunk)
-                    left -= len(chunk)
-
-
-def read_tensor(path, name):
+def read_tensor(path, name, row=None):
+    """A tensor of a safetensors file, or only its ``row`` of the first dimension (one expert of a stacked tensor)."""
     header, start = read_header(path)
     h = header[name]
+    size, shape = h["data_offsets"][1] - h["data_offsets"][0], h["shape"]
+    offset = start + h["data_offsets"][0]
+    if row is not None:
+        size //= shape[0]
+        offset, shape = offset + row * size, shape[1:]
     with open(path, "rb") as f:
-        f.seek(start + h["data_offsets"][0])
-        data = bytearray(f.read(h["data_offsets"][1] - h["data_offsets"][0]))
+        f.seek(offset)
+        data = bytearray(f.read(size))
     dtype = {v: k for k, v in DTYPES.items()}[h["dtype"]]
-    return torch.frombuffer(data, dtype=dtype).reshape(h["shape"])
+    return torch.frombuffer(data, dtype=dtype).reshape(shape)
 
 
 def to_bytes(t):
@@ -148,11 +130,26 @@ def build(source, out):
     header, start = read_header(source / shard)
     names = sorted((k for k in header if k != "__metadata__"), key=lambda k: header[k]["data_offsets"][0])
     items = [(k, header[k]["dtype"], header[k]["shape"], header[k]["data_offsets"][1] - header[k]["data_offsets"][0],
-              (source / shard, start + header[k]["data_offsets"][0])) for k in names if k not in (GATE_UP, DOWN)]
-    gate_up, down = read_tensor(source / shard, GATE_UP), read_tensor(source / shard, DOWN)
-    for e in range(gate_up.shape[0]):
-        for k, v in expert_tensors(gate_up[e].float(), down[e].float(), args).items():
-            items.append((f"{PREFIX}.{e}.{k}", DTYPES[v.dtype], v.shape, v.numel() * v.element_size(), to_bytes(v)))
+              [(source / shard, start + header[k]["data_offsets"][0], header[k]["data_offsets"][1] - header[k]["data_offsets"][0])])
+             for k in names if k not in (GATE_UP, DOWN)]
+
+    def expert(e):
+        return expert_tensors(read_tensor(source / shard, GATE_UP, e).float(), read_tensor(source / shard, DOWN, e).float(), args)
+
+    current = {}   # the tensors of the expert that the writer is at; one expert sits in memory at a time
+
+    def part(e, k):
+        def get():
+            if current.get("e") != e:
+                current.clear()
+                current.update(e=e, t=expert(e))
+            return to_bytes(current["t"][k])
+        return get
+
+    shapes = expert(0)   # all experts have the same shapes, so the header is known before the writer quantizes
+    for e in range(header[GATE_UP]["shape"][0]):
+        for k, v in shapes.items():
+            items.append((f"{PREFIX}.{e}.{k}", DTYPES[v.dtype], v.shape, v.numel() * v.element_size(), part(e, k)))
     write_streaming(out / shard, items, header.get("__metadata__"))
     wm = {k: v for k, v in index["weight_map"].items() if k not in (GATE_UP, DOWN)}
     wm.update({name: shard for name, *_ in items if name.startswith(PREFIX + ".")})
@@ -174,11 +171,11 @@ def check(source, out, sample_layer=39):
     same_values = torch.equal(dequantize(again), dequantize(t))   # the bytes differ only in the sign of zeros
     same_scale = (again["weight_scale"].view(torch.uint8) == t["weight_scale"].view(torch.uint8)).float().mean().item()
     shard = index[GATE_UP]
-    gate_up, down = read_tensor(source / shard, GATE_UP), read_tensor(source / shard, DOWN)
     errs = []
-    for e in range(gate_up.shape[0]):
-        for proj, ref in (("gate_proj", gate_up[e][:gate_up.shape[1] // 2]), ("up_proj", gate_up[e][gate_up.shape[1] // 2:]),
-                          ("down_proj", down[e])):
+    for e in range(read_header(source / shard)[0][GATE_UP]["shape"][0]):
+        gate_up, down = read_tensor(source / shard, GATE_UP, e), read_tensor(source / shard, DOWN, e)
+        for proj, ref in (("gate_proj", gate_up[:gate_up.shape[0] // 2]), ("up_proj", gate_up[gate_up.shape[0] // 2:]),
+                          ("down_proj", down)):
             q = {k: read_tensor(out / shard, f"{PREFIX}.{e}.{proj}.{k}") for k in ("weight_packed", "weight_scale", "weight_global_scale")}
             ref = ref.float()
             errs.append(((dequantize(q) - ref).norm() / ref.norm()).item())

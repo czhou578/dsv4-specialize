@@ -1,5 +1,5 @@
 # The test points of PLAN_SERVE_TUNE.md §6, as an override of compose-mask.yml. The defaults are the live
-# settings: draft depth 5, graph sizes 6,12,24, no FP8 draft head, an 8 GiB KV pin, prefill chunks of 1024 tokens.
+# settings: draft depth 5, graph sizes 6,12,24, no FP8 draft head, a 7.25 GiB KV pin, prefill chunks of 1024 tokens.
 # - SERVED_MODEL_NAME ends with TUNE_LABEL, so each point has its own name (run_lib.sh speed() uses it).
 # - The graph sizes must be multiples of depth + 1, so the verify step gets a full graph (tune_night.sh sets them).
 # - The KV cache is pinned, as on the live server. GPU_MEMORY_UTILIZATION then only sets vLLM's boot check.
@@ -16,4 +16,4 @@ services:
       MAX_CUDAGRAPH_CAPTURE_SIZE: "${TUNE_GRAPH_MAX:-24}"
       DSPARK_FP8_DRAFT_HEAD: "${TUNE_FP8_DRAFT_HEAD:-0}"
       GPU_MEMORY_UTILIZATION: "0.90"
-      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold ${TUNE_PREFILL:-1024} --kv-cache-memory-bytes ${TUNE_KV_BYTES:-8589934592} ${MASK_EXTRA_ARGS:-}"
+      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold ${TUNE_PREFILL:-1024} --kv-cache-memory-bytes ${TUNE_KV_BYTES:-7784628224} ${MASK_EXTRA_ARGS:-}"

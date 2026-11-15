@@ -110,6 +110,22 @@ class PruneTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             qp.check(self.src, self.out)
 
+    def test_the_writer_streams_ranges_in_small_pieces(self):
+        keep = qp.keep_sets(RANK, 3, LAYERS)
+        files = sorted(self.src.glob("*.safetensors"))
+        self.assertTrue(all(isinstance(t[4], list) for f in files for t in qp.tensors_of(f, keep)))   # no bytes read
+        ranges = {t[0]: t[4] for t in qp.tensors_of(files[0], keep)}
+        self.assertEqual(len(ranges["mtp.layers.0.mlp.experts.down_proj"]), 2)   # the kept rows 1 and 4, 5
+        out, chunk = Path(self.tmp.name) / "small", qp.CHUNK
+        qp.CHUNK = 3
+        try:
+            qp.prune(self.src, out, RANK, 3)
+            self.assertEqual(qp.check(self.src, out), self.counts[0])
+        finally:
+            qp.CHUNK = chunk
+        for f in self.out.glob("*.safetensors"):
+            self.assertEqual((out / f.name).read_bytes(), f.read_bytes())
+
     def test_rank_rules(self):
         with self.assertRaises(ValueError):                                    # no draft layer in the rank
             qp.keep_sets({"layers": {k: v for k, v in RANK["layers"].items() if k != "2"}}, 3, LAYERS)

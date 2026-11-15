@@ -21,11 +21,10 @@ import shutil
 import struct
 from pathlib import Path
 
-import numpy as np
-
 EXPERT = re.compile(r"^(?!mtp\.)(.*layers\.(\d+)\.mlp\.experts\.)(\d+)(\..+)$")
 GATE = re.compile(r"^(?!mtp\.).*layers\.(\d+)\.mlp\.gate\.weight$")
 DRAFT = re.compile(r"^mtp\.layers\.0\.mlp\.(experts\.(gate_up_proj|down_proj)|gate\.weight)$")
+CHUNK = 64 << 20   # the largest piece of a tensor in memory while a file is written or checked
 
 
 def read_header(path):
@@ -35,18 +34,48 @@ def read_header(path):
         return json.loads(f.read(n)), 8 + n
 
 
-def write_safetensors(path, tensors, metadata=None):
-    """Write ``(name, dtype, shape, bytes)`` items in this order, with no gap between them."""
+def chunks(source):
+    """The bytes of a tensor source, in pieces of at most ``CHUNK`` bytes from a file. ``source`` is bytes, a function
+    that returns bytes, or a list of ``(file, offset, size)`` ranges to read in order."""
+    if callable(source):
+        source = source()
+    if isinstance(source, (bytes, bytearray)):
+        yield source
+        return
+    for path, offset, size in source:
+        with open(path, "rb") as f:
+            f.seek(offset)
+            while size:
+                piece = f.read(min(size, CHUNK))
+                if not piece:
+                    raise EOFError(f"{path}: the file ends before offset {offset} + {size}")
+                yield piece
+                size -= len(piece)
+
+
+def write_streaming(path, items, metadata=None):
+    """Write ``(name, dtype, shape, size, source)`` items in this order, with no gap between them. See ``chunks``
+    for ``source``: with file ranges, no tensor sits in memory as a whole."""
     header, offset = ({"__metadata__": metadata} if metadata else {}), 0
-    for name, dtype, shape, data in tensors:
-        header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [offset, offset + len(data)]}
-        offset += len(data)
+    for name, dtype, shape, size, _ in items:
+        header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [offset, offset + size]}
+        offset += size
     raw = json.dumps(header, separators=(",", ":")).encode()
     raw += b" " * (-len(raw) % 8)
     with open(path, "wb") as f:
         f.write(struct.pack("<Q", len(raw)) + raw)
-        for *_, data in tensors:
-            f.write(data)
+        for name, _, _, size, source in items:
+            written = 0
+            for piece in chunks(source):
+                f.write(piece)
+                written += len(piece)
+            if written != size:
+                raise ValueError(f"{name}: {written} bytes, the header says {size}")
+
+
+def write_safetensors(path, tensors, metadata=None):
+    """Write ``(name, dtype, shape, bytes)`` items in this order, with no gap between them."""
+    write_streaming(path, [(name, dtype, shape, len(data), data) for name, dtype, shape, data in tensors], metadata)
 
 
 def keep_sets(rank, k, num_layers, draft="rank"):
@@ -82,27 +111,32 @@ def plan(name, keep):
     return name, None
 
 
-def take(data, shape, rows):
-    """The bytes of the kept rows of the first dimension."""
-    return np.frombuffer(data, dtype=np.uint8).reshape(shape[0], -1)[rows].tobytes()
+def row_ranges(path, offset, shape, size, rows):
+    """The ``(file, offset, size)`` ranges of the kept rows of the first dimension; adjacent rows join one range."""
+    row, out = size // shape[0], []
+    for r in rows:
+        if out and out[-1][1] + out[-1][2] == offset + r * row:
+            out[-1] = (path, out[-1][1], out[-1][2] + row)
+        else:
+            out.append((path, offset + r * row, row))
+    return out
 
 
 def tensors_of(path, keep):
-    """Yield ``(new name, dtype, new shape, bytes, source name)`` for the kept tensors of a file, in file order."""
+    """Yield ``(new name, dtype, new shape, size, ranges, source name)`` for the kept tensors of a file, in file order.
+    ``ranges`` are ``(file, offset, size)`` ranges of the source file (see ``chunks``); no tensor bytes are read."""
     header, start = read_header(path)
     names = sorted((k for k in header if k != "__metadata__"), key=lambda k: header[k]["data_offsets"][0])
-    with open(path, "rb") as f:
-        for name in names:
-            new, rows = plan(name, keep)
-            if new is None:
-                continue
-            h = header[name]
-            f.seek(start + h["data_offsets"][0])
-            data = f.read(h["data_offsets"][1] - h["data_offsets"][0])
-            shape = h["shape"]
-            if rows is not None:
-                data, shape = take(data, shape, rows), [len(rows), *shape[1:]]
-            yield new, h["dtype"], shape, data, name
+    for name in names:
+        new, rows = plan(name, keep)
+        if new is None:
+            continue
+        h = header[name]
+        offset, size, shape = start + h["data_offsets"][0], h["data_offsets"][1] - h["data_offsets"][0], h["shape"]
+        ranges = [(path, offset, size)]
+        if rows is not None:
+            ranges, shape = row_ranges(path, offset, shape, size, rows), [len(rows), *shape[1:]]
+        yield new, h["dtype"], shape, sum(r[2] for r in ranges), ranges, name
 
 
 def config_layers(source):
@@ -121,10 +155,10 @@ def prune(source, out, rank, k, draft="rank"):
     out.mkdir(parents=True, exist_ok=False)
     weight_map, kept, dropped, size = {}, 0, 0, 0
     for f in sorted(source.glob("*.safetensors")):
-        items = [t[:4] for t in tensors_of(f, keep)]
-        write_safetensors(out / f.name, items, read_header(f)[0].get("__metadata__"))
+        items = [t[:5] for t in tensors_of(f, keep)]
+        write_streaming(out / f.name, items, read_header(f)[0].get("__metadata__"))
         weight_map.update({t[0]: f.name for t in items})
-        kept, size = kept + len(items), size + sum(len(t[3]) for t in items)
+        kept, size = kept + len(items), size + sum(t[3] for t in items)
         dropped += len(read_header(f)[0]) - 1 - len(items)
     for f in source.iterdir():
         if f.suffix != ".safetensors" and f.is_file() and f.name not in ("config.json", "model.safetensors.index.json"):
@@ -151,12 +185,12 @@ def check(source, out):
         header, start = read_header(out / f.name)
         before = n
         with open(out / f.name, "rb") as g:
-            for new, dtype, shape, data, _ in tensors_of(f, keep):
+            for new, dtype, shape, size, ranges, _ in tensors_of(f, keep):
                 h = header.get(new)
-                if h is None or (h["dtype"], h["shape"]) != (dtype, shape):
+                if h is None or (h["dtype"], h["shape"], h["data_offsets"][1] - h["data_offsets"][0]) != (dtype, shape, size):
                     raise AssertionError(f"{f.name}: {new} is missing or has another shape")
                 g.seek(start + h["data_offsets"][0])
-                if g.read(len(data)) != data:
+                if any(g.read(len(piece)) != piece for piece in chunks(ranges)):
                     raise AssertionError(f"{f.name}: {new} differs from its source")
                 n += 1
         if len(header) - ("__metadata__" in header) != n - before:
