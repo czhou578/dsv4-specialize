@@ -1,0 +1,24 @@
+{
+ "id": "W6",
+ "family": "W",
+ "trap": false,
+ "prompt": "The Wikipedia article on mixture of experts names the company that released Mixtral 8x7B in December 2023. According to that company's own Wikipedia article, what is its largest public model as of November 2026, and how many total and active parameters does that model have? Use only the search and fetch tools: the answer must come from the pages that you fetch, not from memory. In the report, give the answer, and as evidence the URL of each page that you use with an exact quote from it.",
+ "key": [
+  "Large\\s?4",
+  "\\b1\\s?trillion|\\b1T\\b|1,000 billion",
+  "\\b52\\s?(billion|B\\b)"
+ ],
+ "reference": {
+  "answer": "The company is Mistral AI. Its largest public model as of November 2026 is Mistral Large 4, a mixture of experts model with 1 trillion parameters, of which 52 billion are active.",
+  "evidence": [
+   {
+    "source": "https://en.wikipedia.org/wiki/Mixture_of_experts",
+    "quote": "In December 2023, Mistral AI released Mixtral 8x7B under Apache 2.0 license."
+   },
+   {
+    "source": "https://en.wikipedia.org/wiki/Mistral_AI",
+    "quote": "As of November 2026, its largest public model is Mistral Large 4, released on October 29th 2026, a mixture of experts model with 1 trillion parameters, of which 52 billion are active."
+   }
+  ]
+ }
+}

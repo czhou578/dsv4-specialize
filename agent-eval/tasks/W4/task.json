@@ -1,0 +1,24 @@
+{
+ "id": "W4",
+ "family": "W",
+ "trap": false,
+ "prompt": "In 2026 a company announced an agreement to acquire Hugging Face. Name the acquiring company and the announced value of the deal. Then give the name of the road where the diner stands in which the founders of the acquiring company first sketched out their ideas for it. Use only the search and fetch tools: the answer must come from the pages that you fetch, not from memory. In the report, give the answer, and as evidence the URL of each page that you use with an exact quote from it.",
+ "key": [
+  "nvidia",
+  "12\\.93",
+  "Berryessa"
+ ],
+ "reference": {
+  "answer": "Nvidia agreed to acquire Hugging Face for $12.93 billion (announced on September 3, 2026). Nvidia's founders met at a Denny's diner on Berryessa Road in East San Jose.",
+  "evidence": [
+   {
+    "source": "https://en.wikipedia.org/wiki/Hugging_Face",
+    "quote": "On September 3, 2026, Nvidia announced an agreement to acquire Hugging Face for $12.93 billion."
+   },
+   {
+    "source": "https://en.wikipedia.org/wiki/Nvidia",
+    "quote": "the three men agreed to start the company by sketching out their initial ideas in a meeting at a Denny's roadside diner on Berryessa Road in East San Jose."
+   }
+  ]
+ }
+}

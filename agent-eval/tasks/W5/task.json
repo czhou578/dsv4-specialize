@@ -1,0 +1,24 @@
+{
+ "id": "W5",
+ "family": "W",
+ "trap": false,
+ "prompt": "In February 2025, Mistral AI began using the products of a chip company to power its Le Chat service. Name that company. When that company later became a public company through an initial public offering, how many shares did it sell and at what price per share? Use only the search and fetch tools: the answer must come from the pages that you fetch, not from memory. In the report, give the answer, and as evidence the URL of each page that you use with an exact quote from it.",
+ "key": [
+  "Cerebras",
+  "\\b30\\s?(million|M\\b)|30,000,000",
+  "\\$?\\s?185\\b"
+ ],
+ "reference": {
+  "answer": "Cerebras Systems. In its IPO (May 14, 2026) it sold 30 million shares at $185 each, raising $5.55 billion.",
+  "evidence": [
+   {
+    "source": "https://en.wikipedia.org/wiki/Cerebras",
+    "quote": "In February 2025, Mistral AI began using Cerebras products to power its Le Chat service and reached a speed record."
+   },
+   {
+    "source": "https://en.wikipedia.org/wiki/Cerebras",
+    "quote": "On May 14, 2026, the company became a public company via the largest U.S. technology initial public offering since 2019, raising $5.55 billion by selling 30 million shares at $185 each"
+   }
+  ]
+ }
+}

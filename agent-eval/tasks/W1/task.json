@@ -1,0 +1,23 @@
+{
+ "id": "W1",
+ "family": "W",
+ "trap": false,
+ "prompt": "Before the United States restricted chip sales to China, the founder of the AI company DeepSeek reportedly obtained 10,000 GPUs of one Nvidia model. Nvidia also sold a DGX server built with eight GPUs of that model. What was the initial price of that DGX server? Name the GPU model and give the price. Use only the search and fetch tools: the answer must come from the pages that you fetch, not from memory. In the report, give the answer, and as evidence the URL of each page that you use with an exact quote from it.",
+ "key": [
+  "A100",
+  "\\$?\\s?199[,.\\s]?000|\\$?\\s?199\\s?(k|thousand)"
+ ],
+ "reference": {
+  "answer": "The GPU model is the Nvidia A100. The initial price of the DGX A100 was $199,000.",
+  "evidence": [
+   {
+    "source": "https://en.wikipedia.org/wiki/DeepSeek",
+    "quote": "reportedly obtaining 10,000 Nvidia A100 GPUs before the United States restricted chip sales to China"
+   },
+   {
+    "source": "https://en.wikipedia.org/wiki/Ampere_(microarchitecture)",
+    "quote": "The initial price for the DGX A100 was $199,000."
+   }
+  ]
+ }
+}
