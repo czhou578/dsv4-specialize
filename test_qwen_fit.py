@@ -172,24 +172,36 @@ class WindowTest(unittest.TestCase):
 
     def test_the_warm_and_expandable_points_reach_the_server(self):
         fake = "#!/usr/bin/env bash\necho \"AC=${PYTORCH_CUDA_ALLOC_CONF:-} $*\" >> $STUB_DIR/calls.log\nexit 1\n"
-        stub = STUB[:STUB.index("N=0\n")] + STUB[STUB.index("tests() {"):] + "QV=$STUB_DIR; MODEL[d2]=$STUB_DIR/k208; MODEL[d3]=$STUB_DIR/k208\n"
+        stub = STUB[:STUB.index("N=0\n")] + STUB[STUB.index("tests() {"):] + "QURL=http://127.0.0.1:9; QV=$STUB_DIR; MODEL[d2]=$STUB_DIR/k208; MODEL[d3]=$STUB_DIR/k208\n"
         rc, log, d = self.run_script(POINTS="d2 d3", stub=stub, files={"vllm": fake, "k208/config.json": "{}"})
         calls = (d / "calls.log").read_text().splitlines()
         self.assertTrue(calls[0].startswith("AC= serve") and "qwen-draft-nvfp4" in calls[0] and '"moe_backend":"marlin"' in calls[0])
         self.assertTrue(calls[1].startswith("AC=expandable_segments:True serve") and "qwen-draft-nvfp4" in calls[1])
 
+    def test_the_vision_points(self):
+        stub = STUB + "MODEL[i208]=$STUB_DIR/k208; MODEL[m208]=$STUB_DIR/k208\n"
+        rc, log, _ = self.run_script(POINTS="i208 i256 m208", stub=stub, files={"k208/config.json": "{}"})
+        self.assertEqual(rc, 0, log)
+        for p in ("i208", "i256", "m208"):
+            line = log.split(f"STUB launch {p} ")[1].splitlines()[0]
+            self.assertNotIn("--language-model-only", line)
+            self.assertIn('--limit-mm-per-prompt {"image":1,"video":0}', line)
+        self.assertIn("qwen-draft-nvfp4", log.split("STUB launch m208 ")[1].splitlines()[0])
+        self.assertTrue(log.split("STUB launch i256 ")[1].splitlines()[0].endswith("pypath=none"))
+        self.assertIn('draft={"method":"mtp","num_speculative_tokens":3}', log.split("STUB launch i256 ")[1].splitlines()[0])
+
     def test_the_server_of_a_patch_point_gets_the_patch_on_its_python_path(self):
         fake = "#!/usr/bin/env bash\necho \"PP=${PYTHONPATH:-}\" >> $STUB_DIR/calls.log\nexit 1\n"
         # the real launch(): the stub without its launch()
         stub = STUB[:STUB.index("N=0\n")] + STUB[STUB.index("tests() {"):] + \
-            "QV=$STUB_DIR; MODEL[g208]=$STUB_DIR/k208; MODEL[p208]=$STUB_DIR/k208\n"
+            "QURL=http://127.0.0.1:9; QV=$STUB_DIR; MODEL[g208]=$STUB_DIR/k208; MODEL[p208]=$STUB_DIR/k208\n"
         rc, log, d = self.run_script(POINTS="g208 p208", stub=stub, files={"vllm": fake, "k208/config.json": "{}"})
         self.assertEqual(rc, 1, log)                                                      # two failed boots: restore
         self.assertEqual((d / "calls.log").read_text().splitlines(), [f"PP={HERE}/qwen_mtp_patch", "PP="])
 
     def test_the_extra_environment_reaches_the_server(self):
         fake = "#!/usr/bin/env bash\necho \"AC=${PYTORCH_CUDA_ALLOC_CONF:-}\" >> $STUB_DIR/calls.log\nexit 1\n"
-        stub = STUB[:STUB.index("N=0\n")] + STUB[STUB.index("tests() {"):] + "QV=$STUB_DIR\n"
+        stub = STUB[:STUB.index("N=0\n")] + STUB[STUB.index("tests() {"):] + "QURL=http://127.0.0.1:9; QV=$STUB_DIR\n"
         rc, log, d = self.run_script(POINTS="o0 o3", stub=stub, files={"vllm": fake})
         self.assertEqual(rc, 1, log)
         self.assertEqual((d / "calls.log").read_text().splitlines(), ["AC=", "AC=expandable_segments:True"])

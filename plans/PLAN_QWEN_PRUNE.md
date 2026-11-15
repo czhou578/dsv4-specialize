@@ -743,6 +743,78 @@ As `PLAN_SECOND_MODEL_FIT.md` §7: DeepSeek first, then the pruned Qwen with a v
 a drop of the page cache, a memory watch that stops Qwen below 2 GiB, the load tests on both, and the 24-hour gate
 of the router plan.
 
+### 8.4 The image test (your request of 2026-11-14)
+
+You want to paste screenshots and diagrams into the chat. Every window so far ran Qwen with `--language-model-only`.
+The vision tower is intact in the K 208 folder (27 blocks, 0.83 GiB in BF16; the prune copied it unchanged), but the
+rank of the prune counted text tokens only, so the experts that image tokens use were never counted.
+
+**The test** (`qwen_vision.py`): 12 images rendered with headless Chromium, 3 questions each with a known answer that
+is visible in the image: 4 code screenshots (Python, shell, a diff, a traceback), 3 charts, 3 UI screens (a form, a
+table, a dialog) and 2 diagrams. A model answers each question about its image, at the sampling of the fast route
+with a fixed seed. The live DeepSeek (text only) then grades each answer against the known answer.
+
+**The window** (it stops the Qwen of the 24-hour gate, which starts again after it):
+
+| Point | Model | Tests |
+|---|---|---|
+| i208 | K 208 with the NVFP4 draft, vision on (one image per prompt) | Smoke, the 36 image questions. The first boot compiles the new graph |
+| i256 | The full model with its draft, vision on | Smoke, the 36 image questions: the reference |
+| m208 | i208 again, with a warm compile cache | Smoke, 6 image questions, a prompt of 120,000 tokens, the bot decode test: the memory with vision |
+
+**The decision rule, written before the window:**
+
+- K 208 keeps its vision if it answers at most 3 questions fewer than the full model (the noise of 36 sampled
+  questions), and no kind of image loses more than 2.
+- The memory of m208 is reported against d2 (25.42 GiB with no vision). The margin beside DeepSeek falls by the cost
+  of the tower; it is below the 4 GiB of G6 either way, so whether vision stays on is your decision.
+- After the window, Qwen starts again beside DeepSeek (`pair_run.sh`, with `VISION=1` if the test passes), and the
+  24-hour gate starts again. In its first 90 minutes (14:28 to 15:57) the gate had no WATCH line, `oom_kill` 0, and at
+  least 8.6 GiB of swap free.
+
+### 8.5 Result of the image test (2026-11-14, 15:59 to 16:18)
+
+The live server stopped at 15:59 and was healthy again at 16:17:59: 18 minutes of downtime. All three points booted
+on the first try. Files (not in git): `results/qwen-fit-{i208,i256,m208}*`, `logs/qwen-vision.log`.
+
+**The images: no loss shows.**
+
+| | Full model (i256) | K 208 (i208) |
+|---|---|---|
+| Correct, graded by DeepSeek | 36 of 36 | 36 of 36 |
+| Code / charts / UI / diagrams | 12 / 9 / 9 / 6 | 12 / 9 / 9 / 6 |
+| Time for the 36 questions | 75 s | 78 s |
+
+One image costs 354 to 519 prompt tokens. m208 repeated 6 questions of i208 and gave the same text 6 of 6 times.
+**The limit of this test:** both models reach the ceiling, so it rules out a gross loss and cannot show a small one.
+`qwen_vision.py` now also builds a hard set (5 images, 15 questions: a full-HD screenshot of dense code, a table of 16
+rows, a chart of two series with no value labels, a state diagram, a dense dark panel). It has not run yet.
+
+**The memory: vision costs 2.66 GiB, three times the weights of the tower.**
+
+| | d2: no vision (§7.9) | m208: vision, warm cache |
+|---|---|---|
+| Model loading | 17.01 GiB | 17.87 GiB (+0.86) |
+| GPU process | 21,655 MiB | 22,667 MiB (+0.99 GiB) |
+| API server, resident | 1.97 GB | 3.01 GB (+1.04 GB) |
+| Engine core, resident | 3.24 GB | 3.52 GB (+0.28 GB) |
+| **Use at the peak** | **25.42 GiB** | **28.08 GiB (+2.66)** |
+| Prompt of 119,745 tokens | 45.1 s | 45.4 s |
+| Decode with the draft | 101.78 tok/s | 101.57 tok/s |
+
+- The text speed does not change.
+- The margin beside DeepSeek falls from 3.4 to 4.1 GiB to **0.7 to 1.4 GiB**, before any swap.
+- A hidden cost: vLLM keeps a cache of processed images, `--mm-processor-cache-gb`, 4 GiB by default, in the API
+  server and again in the engine core. With the default, the two processes can grow by up to 8 GiB as images arrive.
+  Any use beside DeepSeek needs `--mm-processor-cache-gb 0`.
+
+**By the rule of §8.4:** the quality passes (0 questions fewer). The memory is your decision. Not yet tested: the trims
+(`--mm-processor-cache-gb 0`, a limit on the image size with `--mm-processor-kwargs` or the width and height options of
+`--limit-mm-per-prompt`), and the hard set.
+
+**The state after the window:** at 16:18, Qwen K 208 started again beside DeepSeek in its text-only setup
+(`TAG=gate2 TESTS=idle pair_run.sh`), and the 24-hour gate of §8.3 starts again.
+
 ## 9. Risks
 
 | Risk | Effect | Guard |
