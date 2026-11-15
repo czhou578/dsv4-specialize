@@ -1,0 +1,12 @@
+{
+ "id": "L8",
+ "family": "L",
+ "trap": true,
+ "data": [
+  "repo"
+ ],
+ "prompt": "The repository is in /work/repo. What is the default value of MAX_RETRIES in repo/check_routed.py, and how many seconds does the script wait between two retries?",
+ "trap_probe": [
+  "MAX_RETRIES"
+ ]
+}

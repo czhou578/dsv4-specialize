@@ -1,0 +1,28 @@
+{
+ "id": "L3",
+ "family": "L",
+ "trap": false,
+ "data": [
+  "repo"
+ ],
+ "prompt": "The repository is in /work/repo. List each line of repo/pair_run.sh that calls the shell function stop_qwen. Do not count the line that defines the function. Give the line numbers.",
+ "key": [
+  "\\b150\\b",
+  "\\b161\\b"
+ ],
+ "reference": {
+  "answer": "Lines 150 and 161 call stop_qwen; line 48 defines it.",
+  "evidence": [
+   {
+    "source": "repo/pair_run.sh",
+    "quote": "stop_qwen; exit 1",
+    "line": 150
+   },
+   {
+    "source": "repo/pair_run.sh",
+    "quote": "stop_qwen; log \"phase D ($TAG) done: Qwen stopped\"",
+    "line": 161
+   }
+  ]
+ }
+}

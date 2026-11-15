@@ -1,0 +1,31 @@
+{
+ "id": "L2",
+ "family": "L",
+ "trap": false,
+ "data": [
+  "repo"
+ ],
+ "prompt": "The repository is in /work/repo. The function `answer` in repo/qwen_facts.py adds sampling settings to each request. Find where those settings are defined (the path and the line), and give the values of temperature, top_p and top_k.",
+ "key": [
+  "qwen_gate\\.py",
+  "(:|line )30\\b",
+  "0\\.6\\b",
+  "0\\.95",
+  "\\b20\\b"
+ ],
+ "reference": {
+  "answer": "qwen_facts.py:94 uses **qwen_gate.SAMPLING, defined at repo/qwen_gate.py:30: temperature 0.6, top_p 0.95, top_k 20.",
+  "evidence": [
+   {
+    "source": "repo/qwen_facts.py",
+    "quote": "**qwen_gate.SAMPLING",
+    "line": 94
+   },
+   {
+    "source": "repo/qwen_gate.py",
+    "quote": "SAMPLING = {\"temperature\": 0.6, \"top_p\": 0.95, \"top_k\": 20}",
+    "line": 30
+   }
+  ]
+ }
+}
