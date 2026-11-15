@@ -42,6 +42,11 @@
 #               (qwen_vision.py --answer; build the images first with --build)
 #   m208        i208 again, with the compile cache that i208 filled: the memory with vision. Tests: smoke, 6 image
 #               questions, a prompt of 120,000 tokens, the bot decode test
+#   t208 t256   §8.6 vision with two cuts: no cache of processed images (--mm-processor-cache-gb 0; the default is
+#               4 GiB in each server process) and at most 2560x1440 pixels per image (the default is 16.7 megapixels).
+#               K 208 with the NVFP4 draft, and the full model. Tests: smoke, the hard image set (hard.json)
+#   u208        t208 again with a warm compile cache: the memory. Tests: smoke, the hard set, a prompt of 120,000
+#               tokens, the bot decode test
 # Each point also logs the resident and the peak resident memory of the server processes (procs.txt).
 # All points: a KV pin of 1.04x of the need, FP8 KV, --max-num-seqs 1, no images. The f, q and n points use
 # --max-model-len 256000 and these tests: smoke (a short request and a tool call), one prompt of about 250,000
@@ -110,6 +115,13 @@ for p in i208 i256 m208; do
 done
 MODEL[i256]=$QM DRAFT[i256]=$MTP; unset "PYPATH[i256]"
 TESTS[m208]="smoke images long speed" IMGLIMIT[m208]=6 LONG[m208]=120000 NEED[m208]=12
+Q35T="$Q35V --mm-processor-cache-gb 0 --mm-processor-kwargs {\"max_pixels\":3686400}"
+for p in t208 t256 u208; do
+  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$S/qwen-k208 FLAGS[$p]=$Q35T PIN0[$p]=1965377034 TESTS[$p]="smoke hard" NEED[$p]=8
+  DRAFT[$p]=${DRAFT[d1]} PYPATH[$p]=$S/qwen_mtp_patch
+done
+MODEL[t256]=$QM DRAFT[t256]=$MTP; unset "PYPATH[t256]"
+TESTS[u208]="smoke hard long speed" LONG[u208]=120000 NEED[u208]=10
 BUDGET[r256]=2048 CTX[r256]=128000 MODEL[r256]=$QM FLAGS[r256]=$Q35 DRAFT[r256]=$MTP PIN0[r256]=1965377034 TESTS[r256]="score speed" NEED[r256]=15
 FLAGS[c1]="$Q35 --enable-return-routed-experts" FLAGS[c2]=${FLAGS[c1]} DRAFT[c3]=$NGRAM
 unset "DRAFT[c1]"; PIN0[c1]=1574535010 PIN0[c3]=1853707884   # no draft weights: the KV need is smaller
@@ -192,6 +204,9 @@ tests() {  # $1 point: the tests of TESTS, in order
       images) timeout $(( left < 720 ? left : 720 )) $PY $S/qwen_vision.py --base-url $QURL --model $QNAME --answer \
           ${IMGLIMIT[$p]:+--limit ${IMGLIMIT[$p]}} --out $o-images.jsonl > $o-images.log 2>&1
         log "qwen-$p image questions: exit $?; $(tail -1 $o-images.log | cut -c1-200)";;
+      hard) timeout $(( left < 420 ? left : 420 )) $PY $S/qwen_vision.py --base-url $QURL --model $QNAME --answer --questions hard.json \
+          --out $o-hard.jsonl > $o-hard.log 2>&1
+        log "qwen-$p hard image questions: exit $?; $(tail -1 $o-hard.log | cut -c1-200)";;
       capture) timeout $left $cap --generate 256 --out $R/qwen-capture.jsonl > $o-capture.log 2>&1
         log "qwen-$p capture: exit $?; $(wc -l < $R/qwen-capture.jsonl 2>/dev/null) rows, $(grep -c '"error"' $R/qwen-capture.jsonl 2>/dev/null) errors";;
       draftcapture) timeout $left $cap --limit 24 --out $R/qwen-capture-draft.jsonl > $o-capture.log 2>&1

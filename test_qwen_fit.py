@@ -190,6 +190,16 @@ class WindowTest(unittest.TestCase):
         self.assertTrue(log.split("STUB launch i256 ")[1].splitlines()[0].endswith("pypath=none"))
         self.assertIn('draft={"method":"mtp","num_speculative_tokens":3}', log.split("STUB launch i256 ")[1].splitlines()[0])
 
+    def test_the_vision_points_with_the_two_cuts(self):
+        stub = STUB + "MODEL[t208]=$STUB_DIR/k208; MODEL[u208]=$STUB_DIR/k208\n"
+        rc, log, _ = self.run_script(POINTS="t208 t256 u208", stub=stub, files={"k208/config.json": "{}"})
+        self.assertEqual(rc, 0, log)
+        for p in ("t208", "t256", "u208"):
+            line = log.split(f"STUB launch {p} ")[1].splitlines()[0]
+            self.assertIn('--limit-mm-per-prompt {"image":1,"video":0} --mm-processor-cache-gb 0 --mm-processor-kwargs {"max_pixels":3686400}', line)
+            self.assertNotIn("--language-model-only", line)
+        self.assertIn("Qwen3.6-35B-A3B-NVFP4-Fast", log.split("STUB launch t256 ")[1].splitlines()[0])
+
     def test_the_server_of_a_patch_point_gets_the_patch_on_its_python_path(self):
         fake = "#!/usr/bin/env bash\necho \"PP=${PYTHONPATH:-}\" >> $STUB_DIR/calls.log\nexit 1\n"
         # the real launch(): the stub without its launch()
