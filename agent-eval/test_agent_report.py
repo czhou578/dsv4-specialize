@@ -60,3 +60,9 @@ def test_show(tmp_path):
     (tmp_path / "transcript.json").write_text(json.dumps(tr))
     text = rep.show(tmp_path)
     assert "[reasoning] hmm" in text and "[call] grep {}  INVALID: bad" in text
+
+
+def test_other_model_names(out):
+    out("D1", [row(f"L{i}", 0, "pass", model="deepseek") for i in range(1, 5)])
+    out("D1h", [row(f"L{i}", 0, "wrong" if i == 1 else "pass", model="deepseek-high") for i in range(1, 5)])
+    assert "| deepseek-high vs deepseek | +0.0 (" in rep.table("D1h", "D1") and "| -25.0 (" in rep.table("D1h", "D1")

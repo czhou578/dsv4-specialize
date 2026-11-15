@@ -277,7 +277,20 @@ count of DeepSeek rises to 3 for a point that ends near a gate.
 | D1, D1r | DeepSeek | 1 | base | The reference and the noise |
 | D1-60k, D1-150k | DeepSeek | 1 | 60k, 150k | The effect of the context |
 | D2w | DeepSeek | 2 on 1 stream | base | The cost of a queue |
+| D1h | DeepSeek at `reasoning_effort` high (`deepseek-high`) | 1 | base | Does a shorter thinking cost accuracy, and how much time does it save (added 2026-11-15) |
 | M5 | Both | 4 Qwen and 1 DeepSeek | base | The real mix: both servers busy |
+
+**Why D1h** (2026-11-15). In the pilot, DeepSeek took 15 to 31 minutes for a code task, and 82% to 88% of its output
+was thinking (C1: 29,881 output tokens, against 2,038 for Qwen). The server default is `reasoning_effort` max. At
+max, the template puts a prefix before the prompt that asks the model to "explicitly write out your entire
+deliberation process, documenting every intermediate step, considered alternative, and rejected hypothesis"
+(`REASONING_EFFORT_MAX` in `vllm/tokenizers/deepseek_v4_encoding.py`). At high, the template leaves the prefix out.
+Each request can set the level (`chat_template_kwargs`), so the point needs no restart. D1h runs the 40 tasks with
+one seed, after the DeepSeek pilot (the D1 of max) and with DeepSeek free of other points, so that the times compare.
+`agent_report.py D1h --ref pilot` compares `deepseek-high` with `deepseek`.
+
+If D1h keeps the pass rate and the hallucination rate of max (gates G1 and G2) and is much faster, the next
+decisions are yours: the level of the other DeepSeek points, and the level of the `deepseek-reasoner` subagent.
 
 The gates of a point, each against the reference of its model (Q1 or D1):
 

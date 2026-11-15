@@ -187,3 +187,12 @@ def test_point_until(env, monkeypatch):
     assert not (out / "rows.jsonl").exists()
     ae.point("U", {"stub": 1}, 1, 0, ["L1", "L2"])
     assert len((out / "rows.jsonl").read_text().splitlines()) == 2
+
+
+def test_extra_body(env, monkeypatch):
+    """A model variant adds fields to each request (deepseek-high: the reasoning effort of the template)."""
+    stub = use(monkeypatch, [reply(REPORT)])
+    monkeypatch.setitem(ae.MODELS, "stub-high", ae.MODELS["stub"] + ({"chat_template_kwargs": {"reasoning_effort": "high"}},))
+    row = ae.run_task(ae.load_task("L1"), "stub-high", 0, 0, env / "run", ae.tools.Pages(None))
+    assert row["model"] == "stub-high" and stub.bodies[0]["chat_template_kwargs"] == {"reasoning_effort": "high"}
+    assert "chat_template_kwargs" not in ae.MODELS["deepseek"][4:]
