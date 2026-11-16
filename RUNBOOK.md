@@ -24,6 +24,17 @@ Start a script in its own tmux session, with its deadlines:
 tmux new -d -s prune-boot "START_AFTER='2026-11-06 19:05' BOOT_BY='2026-11-06 20:05' SPEED_BY='2026-11-06 20:20' RESTORE_AT='2026-11-06 21:35' ./prune_boot.sh"
 ```
 
+In a tmux session, the script shows on the machine-dash page (`http://127.0.0.1:8470`, the `job` command of
+`~/Projects/machine-dash`). [job_lib.sh](job_lib.sh) runs the script under `job run`, so the page shows these items:
+
+- The state: waiting until `START_AFTER`, running, stalled, done, failed or died.
+- The work that runs now: `boot`, `replay`, `speed` or `restore`, with the label of the point.
+- The time left until `RESTORE_AT`, and the last line of `LOG` when the script fails or stops.
+
+Add `JOB_STEPS=<count of points>` to get a step count and an ETA, and `JOB_NAME=...` to change the name (default:
+the script name). `JOB_WRAP=0` turns the page off. Outside tmux there is no wrap, so the tests do not show on the
+page. `overnight_guard.sh` also shows on the page, with its waits until `GUARD_AT` and `RECHECK_AT`.
+
 ## Rebuild the live checkpoint
 
 The live folder `data/tp1-k160t5` came from these steps. The rank file is `results/expert_rank_bot.json` (in git).

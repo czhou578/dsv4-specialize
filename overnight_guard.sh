@@ -21,6 +21,9 @@ LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/overnight_guard.log}
 STOP_PROJECTS=${STOP_PROJECTS:-dsv4-mask}   # deploy_md.sh adds the project of the new server
 
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
+# The machine-dash page (job_lib.sh): in a tmux pane the guard runs under `job run` and shows its waits.
+source "$(cd "$(dirname "$0")" && pwd)/job_lib.sh"
+job_wrap --log "$LOG" -- "$@"
 run() {
   if [ "${DRY_RUN:-0}" = 1 ]; then log "dry run: $*"; return 0; fi
   log "run: $*"
@@ -39,7 +42,9 @@ wait_until() {  # sleep until the next HH:MM; $2=today: if HH:MM is past today, 
     target=$((target + 86400))
   fi
   log "waiting until $(date -d "@$target" '+%F %T')"
+  job_say wait --until "$target" "until the $1 check"
   sleep $((target - now))
+  job_say step 0 "check at $1"
 }
 
 wait_healthy() {  # $1: seconds

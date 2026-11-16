@@ -63,6 +63,7 @@ down() {  # stop the test server; true when no test container is left
 stop_main() {  # stop the main server when the bot is idle (up to 30 min); 9 on a safety failure
   if main_running; then
     local end=$(( $(now) + 1800 ))
+    job_phase "stop the main server"
     while [ "$(busy)" != 0 ] && [ "$(now)" -lt "$end" ]; do sleep 15; done
     [ "$(busy)" = 0 ] || { log "the bot stayed busy for 30 min"; return 9; }
     log "stop the main server"
@@ -78,6 +79,7 @@ boot() {  # $1: label; 0 healthy, 1 boot failed (down done), 9 safety failure
   if servers > /dev/null; then log "ERROR: a server container runs: $(servers | tr '\n' ' ')"; return 9; fi
   # BOOT_MIN_GIB: a test boot at util 0.90 needs 109.5 GiB free (vLLM's boot check); the restore keeps 100
   wait_mem 300 "${BOOT_MIN_GIB:-100}" || { log "ERROR: less than ${BOOT_MIN_GIB:-100} GiB available ($(avail_gib))"; return 9; }
+  job_phase "boot $label"
   log "boot $label ($(avail_gib) GiB available)"
   (cd $S && docker compose $TEST_COMPOSE up -d) >> "$LOG" 2>&1
   t0=$(now)
@@ -103,6 +105,7 @@ boot() {  # $1: label; 0 healthy, 1 boot failed (down done), 9 safety failure
 replay() {  # $1: label
   local label=$1 left=$(( RESTORE_S - $(now) ))
   [ $left -le 60 ] && { log "$label: no time for the replay"; return; }
+  job_phase "replay $label"
   memwatch_start "$label"
   log "$label replay ($left s left)"
   (cd $W && timeout $left $PY -m model_eval.replay --base-url $URL --out $R/$label.jsonl > $R/$label.log 2>&1)
@@ -120,6 +123,7 @@ gates_pass() {  # $1: label; both gates PASS on all 60 targets
 speed() {  # $1: label; BOT_RUNS sets the runs of the bot decode test (default 3)
   local label=$1 model=deepseek-v4-flash-0731-$1 left n
   [ "$(now)" -ge $SPEED_BY_S ] && { log "$label: after $SPEED_BY, no speed test"; return; }
+  job_phase "speed $label"
   memwatch_start "$label-speed"
   left=$(( RESTORE_S - $(now) ))
   log "$label bot decode test ($left s left)"
@@ -143,6 +147,7 @@ speed() {  # $1: label; BOT_RUNS sets the runs of the bot decode test (default 3
 }
 
 restore() {  # §6 = PLAN_OVERNIGHT_MASK_GRID.md §5
+  job_phase "restore"
   log "restore: stop every test"
   (cd $S && MASK_K=${MASK_K:-160} docker compose $TEST_COMPOSE down) >> "$LOG" 2>&1
   if docker ps -a --format '{{.Names}}' | grep -q "$TEST_PROJECT"; then log "RESTORE FAIL: a test container is left; the guard restores at 04:15"; exit 3; fi
@@ -191,10 +196,27 @@ point() {  # $1 MASK_NAME, $2 MASK_K, $3 full|replay
 FAILS=0
 run_point() {  # point, with the rule of two failed boots in a row
   point "$@"; local rc=$?
+  JOB_DONE=$((JOB_DONE + 1)); JOB_WAITING=0; job_say step "$JOB_DONE"
   case $rc in
     0) FAILS=0;;
     1) FAILS=$((FAILS + 1)); [ $FAILS -ge 2 ] && { log "two failed boots in a row: restore"; restore; exit 1; };;
     9) log "safety failure: the safe action, restore"; restore; exit 1;;
   esac
   return $rc
+}
+
+# The machine-dash page (job_lib.sh): in a tmux pane the script runs under `job run`, with its LOG and with RESTORE_AT
+# as its fixed end. JOB_STEPS (the count of run_point calls, when the script knows it) adds a step count and an ETA.
+# job_phase names the work that runs now; boot, replay, speed and restore call it. Until START_AFTER the job waits,
+# and the first phase or point ends the wait.
+source "$(dirname "${BASH_SOURCE[0]}")/job_lib.sh"
+JOB_ARGS=(--log "$LOG")
+[ -n "$RESTORE_S" ] && JOB_ARGS+=(--until "$RESTORE_S")
+[[ ${JOB_STEPS:-} =~ ^[1-9][0-9]*$ ]] && JOB_ARGS+=(--steps "$JOB_STEPS")
+job_wrap "${JOB_ARGS[@]}" -- "$@"
+JOB_DONE=0 JOB_WAITING=0
+START_S=$(date -d "$START_AFTER" +%s 2> /dev/null || echo 0)
+if [ "$(now)" -lt "$START_S" ]; then job_say wait --until "$START_S" "until $START_AFTER"; JOB_WAITING=1; fi
+job_phase() {  # $*: the work that runs now
+  if [ "$JOB_WAITING" = 1 ]; then job_say step "$JOB_DONE" "$*"; JOB_WAITING=0; else job_say set --phase "$*"; fi
 }
