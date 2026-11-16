@@ -406,6 +406,7 @@ safety rules in [RUNBOOK.md](RUNBOOK.md) before you start one.
 | File | Use |
 |---|---|
 | [run_lib.sh](run_lib.sh) | The shared functions and safety rules of the scripts below. A script sets `LOG`, `RESTORE_TAG` and, if it needs them, `TEST_COMPOSE`, `TEST_PROJECT` and `MASK`, then sources this file. `MAIN_COMPOSE` and `MAIN_CONTAINER` name the live server (default: `compose-md149t5.yml`) |
+| [job_lib.sh](job_lib.sh) | Shows a script on the machine-dash page (`http://127.0.0.1:8470`). In a tmux session, `run_lib.sh` and `overnight_guard.sh` run under `job run`, and report their waits and phases. See [RUNBOOK.md](RUNBOOK.md) |
 | [topk_run.sh](topk_run.sh) | The top-k test night (`PLAN_OVERNIGHT_TOPK.md` §5 and §6) |
 | [prune_boot.sh](prune_boot.sh) | The test boot of the pruned folder: replay, speed tests (`PLAN_PHYSICAL_PRUNE.md` §6) |
 | [mem_boot.sh](mem_boot.sh) | The memory test boot at 0.73 and 128k: boot lines, free memory at idle and under load (`PLAN_MODEL_ROUTER.md` §3) |
@@ -472,6 +473,8 @@ python -m unittest
   server image.
 - `test_review_report.py` tests the rules of `review_report.py` (the sign-test line, the controls, the weak
   prompts, the skills and the run times) on synthetic rows.
+- `test_job_lib.py` runs small scripts with `job_lib.sh` and `run_lib.sh` under a fake tmux, with the `job` command of
+  `~/Projects/machine-dash` and a temporary jobs folder. Without that command it is skipped.
 - The `test_qwen_*.py` files, `test_pair_scripts.py` and `test_cap_switch.py` test the Qwen tools on small
   synthetic data, and the window scripts as dry runs. Some of them are pytest tests, so run them with
   `python -m pytest`. `test_qwen_prune.py` and `test_qwen_draft_quant.py` need torch (the vLLM 0.33 venv).
