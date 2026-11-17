@@ -1,0 +1,13 @@
+# The override of compose-capture.yml for window 1 of plans/PLAN_JUNK_CAPTURE.md (§5), the route capture of the junk
+# prompts on the stock model (data/tp1; junk_capture.sh unsets CAPTURE_DIR):
+# - a KV pin of 6.5 GiB and --max-model-len 131072. At mtp0 the KV check needs 6.26 GiB for 131072 tokens; the longest
+#   pilot prompt holds 81,242 tokens. The 0.93 boot of 2026-11-06 left only 2.7 GB available.
+# - util 0.90: with the pin it changes only vLLM's boot check, which then needs 109.5 GiB free, not 113.2 GiB
+#   (the test boots of 2026-11-15 and 11-16 had 114 to 116 GiB).
+#   docker compose -f compose-capture.yml -f compose-capture-junk.yml up -d
+services:
+  deepseek-v4-flash-capture:
+    environment:
+      MAX_MODEL_LEN: "131072"
+      GPU_MEMORY_UTILIZATION: "0.90"
+      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold 1024 --enable-return-routed-experts --kv-cache-memory-bytes 6979321856"

@@ -413,6 +413,7 @@ safety rules in [RUNBOOK.md](RUNBOOK.md) before you start one.
 | [mem_boot.sh](mem_boot.sh) | The memory test boot at 0.73 and 128k: boot lines, free memory at idle and under load (`PLAN_MODEL_ROUTER.md` §3) |
 | [draft_test.sh](draft_test.sh) | The pruned model with another DSpark draft (`DRAFT_DIR`): the two decode tests (`PLAN_PHYSICAL_PRUNE.md` §7) |
 | [capture_run.sh](capture_run.sh) | The capture boot (`PLAN_BETTER_RANK.md` §4): a smoke test of the sums file, the capture of `model_eval/data/rank`, the rank files |
+| [junk_capture.sh](junk_capture.sh) | Window 1 of `plans/PLAN_JUNK_CAPTURE.md` (§5): stops Qwen and DeepSeek, boots the stock model from `compose-capture.yml` and `compose-capture-junk.yml` (KV pin 6.5 GiB, 131072 tokens) under a memory guard, checks the server and the KV size, runs `junk_routes.py smoke` and `capture`, then restores DeepSeek and Qwen |
 | [rank_masks.sh](rank_masks.sh) | Builds the mask folders of `PLAN_BETTER_RANK.md` §6 from the stock model (`RANK_NEW` picks the rank file). No downtime |
 | [rank_night.sh](rank_night.sh) | Masks on the replay screen (`PLAN_BETTER_RANK.md` §6). `POINTS` lists them as `NAME:K`; the default is the three masks of §6.1 |
 | [fewer_night.sh](fewer_night.sh) | The test night of `plans/PLAN_FEWER_EXPERTS.md`: the routing profile (Phase A), then the replay points C1–C5 and C0 on `tp1-botmask-k160` with `compose-drop.yml` (Phase C), then 5 bot decode runs on the chosen point and 5 on the live server (Phase D). `BOOT_MIN_GIB` makes each boot wait for that much available memory |

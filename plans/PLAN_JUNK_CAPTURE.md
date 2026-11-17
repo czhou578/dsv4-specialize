@@ -1,7 +1,7 @@
 # Plan: the route capture of the junk prompts
 
-Status (2026-11-16 22:40): plan written. PR 1 of §4 (`junk_routes.py capture`) is open; PR 2 is in progress. No
-window is booked.
+Status (2026-11-16 23:00): plan written. PR 1 (#93, `junk_routes.py`) and PR 2 (`junk_capture.sh`,
+`compose-capture-junk.yml`) of §4 are open. No window is booked.
 
 ## 1. The question
 
