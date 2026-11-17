@@ -1,7 +1,8 @@
 # Plan: the route capture of the junk prompts
 
-Status (2026-11-16 23:00): plan written. PR 1 (#93, `junk_routes.py`) and PR 2 (`junk_capture.sh`,
-`compose-capture-junk.yml`) of §4 are open. No window is booked.
+Status (2026-11-17 00:05): done. The night chain (`junk_night.sh` in the bisect worktree, at your ask) ran window 1,
+the report, the builds and window 2 from 22:35 to 23:57. c3 comes from the MD step: 88 experts put back drop c3 from
+18/20 to 3/10, but miss the pass rule. c2 comes from the cut to K 160, not from top-k 5. Results in §10.
 
 ## 1. The question
 
@@ -185,3 +186,42 @@ stock5 mdsmall2` at 10 runs per probe.
   Qwen (X × 9.04 MiB less margin), the speed test and a review, as for MD.
 - **If `stock5` points to top-k:** weigh top-k 6 (a slower decode) against the c2 junk.
 - **c1:** it is in the stock model too, so this plan does not cover it.
+
+## 10. Results (2026-11-16, the night chain)
+
+- **Window 1** (22:35 to 22:49): 55 rows, no errors, 523,734 tokens in 8 min. The first try at 22:07 skipped the
+  capture: the smoke prompt was too short to run eagerly (#95).
+- **The report** (`results/junk-capture/report.md`): coding traffic uses the removed experts about twice as much as
+  the bot traffic.
+
+  | Group | K 160 removed picks | MD-extra picks |
+  |---|---|---|
+  | Bot baseline | 5.37% | 1.43% |
+  | Pilot, 40 tasks | 10.62% | 3.30% |
+  | c2 | 11.18% (10.96% in layers 3-42) | 4.13% |
+  | c3 | 10.48% | 5.27% |
+
+  - G1 passes (c3: 3.7 times the bot share). G2 passes (c2: 2.3 times the bot share in layers 3-42).
+  - X has 88 experts (0.78 GiB). They hold 50.05% of the pool's held-out share.
+  - G3 passes by a small margin: X holds 50.77% of c3's MD-extra weight.
+  - c1 has the largest removed share (13.65%), but its junk does not change with the prune. A high share alone does
+    not prove a cause.
+- **The builds:** `tp1-stock5-k216` and `tp1-prunemdx5-k151` (MD + X). Both self-checks pass. The prune took 9 min.
+  MD + X loads 67.31 GiB, 0.77 GiB more than MD.
+- **Window 2** (23:00 to 23:37, `results/junk-mdx/table.md`), junk with the mean sane mass:
+
+  | Point | c1 | c2 | c3 | All |
+  |---|---|---|---|---|
+  | MD control | 1/10 (0.83) | 8/10 (0.30) | 9/10 (0.17) | 18/30 |
+  | MD + X | 1/10 (0.81) | 10/10 (0.00) | 3/10 (0.67) | 14/30 |
+  | Stock, top-k 5 | 5/10 (0.52) | 0/10 (0.99) | 0/10 (0.99) | 5/30 |
+  | MD control again | 4/10 (0.57) | 6/10 (0.35) | 9/10 (0.19) | 19/30 |
+
+- **The answers:**
+  1. c3 comes from the MD-extra experts. X drops c3 from 18/20 (both controls) to 3/10 (p = 0.0017). It misses the
+     pass rule (2/10 or fewer, sane mass 0.9 or more). X holds only half of c3's MD-extra weight, so a partial fix fits.
+  2. c2 comes from the cut to K 160, not from top-k 5: stock at top-k 5 gives 0/10 with 0.99. MD + X does not touch the
+     K 160 removed set, so c2 stays junk (10/10).
+  3. c1 is not the prune.
+- **Qwen** did not start after the window: 28,523 MB available, below `NEED_MB` 28,600. A retry at 23:57 gave 28,467 MB.
+- The Hermes cron jobs and the watchdog timer stay paused until you resume them.
