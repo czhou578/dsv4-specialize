@@ -7,6 +7,8 @@
 # process and the KV size of the boot lines; junk_routes.py smoke; junk_routes.py capture of the probe prompts
 # (ROUNDS rounds) and the pilot transcripts, stopped at RESTORE_AT; down; restore DeepSeek; after 5 min, start Qwen
 # again with pair_run.sh if it ran before (QWEN_AFTER=1: also when it did not). A failed check skips the capture.
+# CLIENT=rank runs capture.py on the calibration split of DATA (default qwen-data, SOURCES claude,repo) in place of
+# junk_routes.py: the coding capture of plans/PLAN_CODE_RANK.md §4, into OUT/capture-code.jsonl.
 # CAUTION: this stops both model servers for about 45 min. Start it only with the user's go, in tmux, with the
 # deadlines (SPEED_BY is not used; it defaults to BOOT_BY):
 #   tmux new -d -s junkcap "START_AFTER=... BOOT_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/junk_capture.sh"
@@ -21,6 +23,7 @@ source "$D/run_lib.sh"
 
 OUT=${OUT:-$R/junk-capture} ROUNDS=${ROUNDS:-3}
 PROMPTS=${PROMPTS:-$R/junk-bisect/prompts.json} PILOT=${PILOT:-$R/agent-eval/pilot}
+CLIENT=${CLIENT:-junk} DATA=${DATA:-$S/qwen-data} SOURCES=${SOURCES:-claude,repo}
 SUMS=${SUMS:-$S/capture-out/routing_sums.npz}
 PIDFILE=${PIDFILE:-$R/pair-qwen.pid}
 QWEN_SEQS=${QWEN_SEQS:-4} QWEN_KV_BYTES=${QWEN_KV_BYTES:-3575989770}   # the live Qwen (TAG=textkv) of 2026-11-15
@@ -64,10 +67,18 @@ client() {  # the capture, stopped at RESTORE_AT
   [ $left -le 120 ] && { log "no time for the capture"; return 1; }
   job_phase "capture"
   memwatch_start junk-capture
-  log "capture of the probe prompts ($ROUNDS rounds) and the pilot transcripts ($left s left)"
-  (cd $S && timeout $left $PY $S/junk_routes.py capture --base-url $URL --out $OUT/capture.jsonl --sums "$SUMS" \
-    --prompts $PROMPTS --rounds $ROUNDS --pilot $PILOT > $OUT/capture.log 2>&1); rc=$?
-  log "capture exit $rc: $(tail -1 $OUT/capture.log)"
+  if [ "$CLIENT" = rank ]; then
+    log "capture.py of $DATA ($SOURCES, calibration split; $left s left)"
+    (cd $S && timeout $left $PY $S/capture.py --base-url $URL --out $OUT/capture-code.jsonl --data $DATA \
+      --sources $SOURCES --sums "$SUMS" > $OUT/capture-code.log 2>&1); rc=$?
+    log "capture exit $rc: $(cat $OUT/capture-code.jsonl 2>/dev/null | grep -c .) rows, $(cat $OUT/capture-code.jsonl \
+      2>/dev/null | grep -c '"error"') errors; $(tail -1 $OUT/capture-code.log)"
+  else
+    log "capture of the probe prompts ($ROUNDS rounds) and the pilot transcripts ($left s left)"
+    (cd $S && timeout $left $PY $S/junk_routes.py capture --base-url $URL --out $OUT/capture.jsonl --sums "$SUMS" \
+      --prompts $PROMPTS --rounds $ROUNDS --pilot $PILOT > $OUT/capture.log 2>&1); rc=$?
+    log "capture exit $rc: $(tail -1 $OUT/capture.log)"
+  fi
   memwatch_stop
 }
 
@@ -115,7 +126,12 @@ cron_clash() {  # $1 $2: epochs; true when [$1, $2] overlaps 05:00-10:00 of a we
 [ -n "${JUNKCAP_STUB:-}" ] && source "$JUNKCAP_STUB"   # the dry run of test_junk_capture.py: stub servers and client
 
 log "junk capture: $ROUNDS rounds; start after $START_AFTER; boot by $BOOT_BY; restore at $RESTORE_AT"
-for need in $PROMPTS $PILOT $S/junk_routes.py $S/compose-capture.yml $S/compose-capture-junk.yml; do
+case $CLIENT in
+  junk) NEEDS="$PROMPTS $PILOT $S/junk_routes.py";;
+  rank) NEEDS="$DATA/sessions.jsonl $DATA/tools.json $S/capture.py";;
+  *) log "ERROR: unknown CLIENT $CLIENT (junk or rank)"; exit 1;;
+esac
+for need in $NEEDS $S/compose-capture.yml $S/compose-capture-junk.yml; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ] || [ "$(now)" -ge $BOOT_BY_S ]; do sleep 30; done
