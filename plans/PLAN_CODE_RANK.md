@@ -1,7 +1,7 @@
 # Plan: a rank that counts coding traffic
 
-Status (2026-11-17 08:30): plan written. You asked to build the tools and run the chain at once. PR A (the client mode
-of §9) is open; the chain runs window 1 from its branch while PRs B and C are built.
+Status (2026-11-17 11:10): done. The chain ran from 08:22 to 11:07 (§10). code1 (MD + 359 coding experts, +3.17 GiB)
+cuts the junk from 35/60 on MD to 2/30 and the coding NLL by 2.92%. The next step is the memory for it.
 
 ## 1. The question
 
@@ -124,3 +124,33 @@ stay there for one more night.
 **Timeline:** about 3 h of tool work. Then window 1, the curve and the builds (about 1 h 30 min), then window 2.
 Window 1, the builds and window 2 can run as one night chain, as on 2026-11-16, with the candidates chosen by the
 fixed rules of §5.
+
+
+## 10. Results (2026-11-17, the chain `code_night.sh`)
+
+- **Window 1** (08:22 to 08:52): 79 rows of `qwen-data` (37 Claude Code segments, 42 repository files), no errors,
+  24 min of capture.
+- **The rank** (`results/code-rank/code-rank.md`): ranked by your own coding traffic, the additions help the pilot tasks
+  less than the estimate of §3 (which ranked on pilot tasks).
+  - code1 = +359 experts (+3.17 GiB, mean K 157): c3 drops 9.35%.
+  - code2 = +486 experts (+4.29 GiB, the cap, mean K 160): c2 drops 8.74%; the 7.5% of the rule is not reached.
+  - code2 has the memory of K 160 but beats it on every coding measure (pilot 8.91% against 9.87%, c2 8.74% against
+    9.91%, c3 8.14% against 9.37%) and ties it on the bot (4.73% against 4.77%).
+- **Window 2** (09:14 to 10:58, `results/code-probe/`), junk with the mean sane mass, and the coding NLL per token of
+  the 40 held-out turns (34 Claude Code, 6 repository files):
+
+  | Point | c1 | c2 | c3 | All | Coding NLL |
+  |---|---|---|---|---|---|
+  | MD control | 3/10 (0.67) | 3/10 (0.60) | 9/10 (0.16) | 15/30 | 0.7538 |
+  | code1, +3.17 GiB | 1/10 (0.85) | 0/10 (0.96) | 1/10 (0.84) | 2/30 | 0.7318 (−2.92%) |
+  | code2, +4.29 GiB | 1/10 (0.85) | 0/10 (0.93) | 2/10 (0.75) | 3/30 | 0.7264 (−3.63%) |
+  | MD control again | 5/10 | 5/10 | 10/10 | 20/30 | 0.7532 (−0.08%) |
+
+- **Against both MD controls** (35/60): code1 p = 9×10⁻⁷, code2 p = 6×10⁻⁶. c2: 0/10 against 8/20 (p = 0.022). c3: 1/10
+  and 2/10 against 19/20. The pass rule of §6 (2/10 or fewer, sane mass 0.9 or more): c2 passes on both; c3 meets the
+  junk count but its sane mass (0.84 and 0.75) stays under 0.9.
+- **The coding score** moves by 0.08% between the two MD controls, so the −2.92% and −3.63% are real. Tool names stay
+  at 100%; the decisions move by one.
+- **The answer:** the junk follows expert coverage of coding traffic. code1 gives almost all of the gain of code2 for
+  1.12 GiB less.
+- **After the window:** DeepSeek healthy at 10:58; Qwen up at 11:07 (`NEED_MB` 27,000). The cron jobs stay paused.
