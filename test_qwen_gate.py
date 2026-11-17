@@ -85,6 +85,24 @@ class GateTest(unittest.TestCase):
         self.assertEqual(rows[0]["turn"]["tool_calls"][0]["function"]["name"], "terminal")
         self.assertEqual(len(self.run_record(FakeServer())), 4)                     # a rerun adds nothing
 
+    def test_record_from_data_keeps_the_data_turns_with_no_server(self):
+        def no_server(*a, **k):
+            raise AssertionError("no request")
+        with mock.patch.object(qg, "post", no_server):
+            qg.record("http://x", "m", self.sessions, [], 4, self.d / "rec.jsonl", from_data=True)
+            qg.record("http://x", "m", self.sessions, [], 4, self.d / "rec.jsonl", from_data=True)   # a rerun adds none
+        rows = qg.load(self.d / "rec.jsonl")
+        self.assertEqual(len(rows), 4)
+        seg = {s["id"]: s for s in self.sessions}[rows[0]["session"]]["segments"][rows[0]["segment"]]
+        self.assertEqual(rows[0]["turn"], {k: v for k, v in seg[rows[0]["index"]].items() if k != "target"})
+        self.assertEqual(rows[0]["finish_reason"], "data")
+        with mock.patch.object(qg, "post", no_server):
+            qg.record("http://x", "m", self.sessions, [], 4, self.d / "short.jsonl", from_data=True, max_chars=1)
+        self.assertEqual(qg.load(self.d / "short.jsonl"), [])                      # every context is longer
+        with mock.patch.object(qg, "post", no_server):
+            qg.record("http://x", "m", self.sessions, [], 9, self.d / "disc.jsonl", from_data=True, sources=["discord"])
+        self.assertEqual({r["session"] for r in qg.load(self.d / "disc.jsonl")}, {"h3"})
+
     def test_score_reads_the_turn_tokens_after_the_context(self):
         self.run_record(FakeServer())
         row = self.run_score(FakeServer(lp=0.5), "ref.jsonl")[0]
