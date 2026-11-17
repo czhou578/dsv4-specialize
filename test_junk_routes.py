@@ -25,8 +25,9 @@ class Fake:
     """A capture server: n prompt tokens (raw: one per character; chat: 10 per message), random top-6 ids per row
     plus the row of the generated token, and a sums file that moves by the counts of the prompt rows."""
 
-    def __init__(self, sums=None, layers=43, move=True, routed=True):
+    def __init__(self, sums=None, layers=43, move=True, routed=True, graph=0):
         self.calls, self.sums, self.layers, self.move, self.routed = [], sums, layers, move, routed
+        self.graph = graph   # a step of this many tokens or fewer replays a CUDA graph: its sums wait for the next step
         if sums:
             self.write(np.zeros((43, 216)), np.zeros((43, 216)), np.zeros(43), 0)
 
@@ -39,7 +40,7 @@ class Fake:
         self.calls.append((path, body))
         n = len(body["prompt"]) if "prompt" in body else 10 * len(body["messages"])
         rows = np.random.default_rng(n).random((n + 1, self.layers, 216)).argsort(axis=2)[..., :6]
-        if self.sums and self.move:
+        if self.sums and self.move and n > self.graph:
             with np.load(self.sums) as z:
                 count = z["count"] + np.stack([np.bincount(rows[:n, l].ravel(), minlength=216) for l in range(43)])
                 self.write(count, z["weight"] + count * 0.25, z["tokens"] + n, int(z["steps"]) + 1)
@@ -91,8 +92,8 @@ class CaptureTest(unittest.TestCase):
 
     def test_smoke(self):
         sums = self.d / "sums.npz"
-        with mock.patch.object(jr, "post", Fake(sums)):
-            self.assertEqual(jr.smoke("u", "m", sums), 0)
+        with mock.patch.object(jr, "post", Fake(sums, graph=24)):
+            self.assertEqual(jr.smoke("u", "m", sums), 0)     # the smoke prompt runs eagerly
         with mock.patch.object(jr, "post", Fake(routed=False)):
             self.assertEqual(jr.smoke("u", "m"), 1)
         with mock.patch.object(jr, "post", Fake(sums, move=False)), mock.patch.object(jr.time, "sleep"):

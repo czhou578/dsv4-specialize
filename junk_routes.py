@@ -40,6 +40,10 @@ PILOT = S / "results/agent-eval/pilot"
 AGENT_EVAL = Path.home() / "Projects/dsv4-specialize-agent-eval/agent-eval"
 TAIL = 256          # the rows before the probe position: the quote and the JSON around it
 LAYERS, TOP_K = 43, 6
+# The smoke prompt must run eagerly: a step of 24 tokens or fewer replays a CUDA graph (MAX_CUDAGRAPH_CAPTURE_SIZE of
+# compose-capture.yml), and the patch writes the sums of such a step only at the start of the next step. "Say OK." alone
+# (about 4 tokens) failed the smoke of 2026-11-16 22:11 for that reason. This prompt has more than 100 tokens.
+SMOKE_PROMPT = " ".join(["Say OK."] * 40)
 
 
 def served_model(base):
@@ -160,7 +164,7 @@ def smoke(base, model=None, sums=None):
     """One short raw prompt: the reply must hold the routing rows of every token, and the sums file must move."""
     try:
         row, routed = capture_one(base, model or served_model(base), "/v1/completions",
-                                  {"prompt": "Say OK.", "add_special_tokens": False}, sums)
+                                  {"prompt": SMOKE_PROMPT, "add_special_tokens": False}, sums)
     except (urllib.error.URLError, OSError, RuntimeError, ValueError, KeyError) as e:
         print(f"smoke FAIL: {type(e).__name__}: {e}")
         return 1
