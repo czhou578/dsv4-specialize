@@ -129,5 +129,75 @@ class CaptureTest(unittest.TestCase):
             jr.main(["capture", "--out", str(self.d / "x.jsonl")])
 
 
+def arr(extra=(), add=0.0):
+    """A (43, 216) list of ones, plus `add` on the experts `extra` in layers 3-42."""
+    a = np.ones((43, 216))
+    a[3:, list(extra)] += add
+    return a.tolist()
+
+
+def row(key, kind, name, extra=(), add=0.0, last=None):
+    a = arr(extra, add)
+    fields = {"key": key, "kind": kind, "name": name, "prompt_tokens": 100, "counts": a, "tail_counts": a, "weight": a,
+              "last": last or [[200, 201, 202, 203, 204, 205]] * 43}
+    return {**fields, **({"family": name.rstrip("0123456789")} if kind == "pilot" else {"round": 1})}
+
+
+class ReportTest(unittest.TestCase):
+    """K 160 removes experts 0-55 in every layer; MD also removes 56-65 in layers 3-42 (400 MD-extra experts)."""
+
+    def setUp(self):
+        self.d = d = Path(tempfile.mkdtemp())
+        keep = lambda first: {str(l): list(range(first if l >= 3 else 56, 216)) for l in range(43)}
+        (d / "k160.json").write_text(json.dumps({"keep": keep(56)}))
+        (d / "md.json").write_text(json.dumps({"keep": keep(66)}))
+        (d / "cold.json").write_text(json.dumps({str(l): [e for e in range(216) if e not in keep(66)[str(l)]]
+                                                 for l in range(43)}))
+        nan = arr()
+        nan[10][5] = float("nan")
+        (d / "bot.jsonl").write_text("\n".join(json.dumps({"counts": arr(), "weight": w, "prompt_tokens": 50})
+                                               for w in (arr(), nan)))
+        c3_last = [[56, 57, 58, 59, 60, 0]] * 43
+        caps = [row("probe-c3-r1", "probe", "c3", (56, 57, 58), 30, c3_last),
+                row("probe-c3-r2", "probe", "c3", (56, 57, 58), 30, c3_last),
+                row("probe-c2-r1", "probe", "c2"),
+                row("pilot-C1-s0", "pilot", "C1", (56, 57, 58), 10),
+                row("pilot-C2-s0", "pilot", "C2", (61, 62, 63, 64, 65), 50),   # held out: must not choose X
+                row("pilot-D1-s0", "pilot", "D1"), {"key": "pilot-C4-s0", "kind": "pilot", "error": "URLError"}]
+        (d / "cap.jsonl").write_text("\n".join(map(json.dumps, caps)))
+
+    def test_report_applies_the_rules_and_select_writes_the_drop_file(self):
+        d = self.d
+        res = jr.report(d / "cap.jsonl", d / "out", d / "k160.json", d / "md.json", d / "bot.jsonl")
+        g = res["groups"]
+        self.assertEqual(list(g), ["probe c3", "probe c2", "pilot C", "pilot D", "pilot all", "pilot held-out", "bot"])
+        self.assertAlmostEqual(g["bot"]["picks"]["md"], 400 / (43 * 216))
+        self.assertAlmostEqual(g["bot"]["picks"]["k160_hash"], 56 / 216)
+        self.assertEqual(g["bot"]["weight_rows"], 1)                       # the row with a NaN slot is left out
+        self.assertEqual((g["probe c3"]["rows"], g["probe c3"]["last_k160"], g["probe c3"]["last_md"]), (2, 43, 200))
+        self.assertEqual(res["missing"], ["pilot-C4-s0"])
+        self.assertEqual((res["rules"]["G1"], res["rules"]["G2"], res["rules"]["G3"]), (True, False, True))
+        x = res["x"]["experts"]
+        # C1 + D1 per layer: 12 of 462 on each of 56-58; 84 x 12 >= 2000 / 2
+        self.assertEqual((len(x), res["x"]["basis"], res["x"]["pool"]), (84, "weight", 400))
+        self.assertTrue(all(l >= 3 and e in (56, 57, 58) for l, e in x))
+        self.assertIn("build MD + X", res["decision"])
+        self.assertIn("G1 (c3", (d / "out/report.md").read_text())
+        self.assertEqual(jr.select(d / "out/report.json", d / "cold.json", d / "mdx.json"), 0)
+        drops = json.loads((d / "mdx.json").read_text())
+        self.assertEqual(len(drops), 43)
+        self.assertNotIn(58, drops["42"])
+        self.assertIn(65, drops["42"])
+        self.assertEqual(sum(map(len, drops.values())), 56 * 43 + 400 - 84)
+
+    def test_x_stops_at_the_cap_and_select_refuses_a_kept_expert(self):
+        rows = [row("pilot-D1-s0", "pilot", "D1", (56, 57, 58), 10)]
+        r160, rmd = jr.removed_sets(self.d / "k160.json", self.d / "md.json")
+        self.assertEqual(len(jr.choose_x(rows, rmd, cap=5)["experts"]), 5)
+        (self.d / "bad.json").write_text(json.dumps({"x": {"experts": [[20, 100]]}}))
+        with self.assertRaises(ValueError):
+            jr.select(self.d / "bad.json", self.d / "cold.json", self.d / "x.json")
+
+
 if __name__ == "__main__":
     unittest.main()
