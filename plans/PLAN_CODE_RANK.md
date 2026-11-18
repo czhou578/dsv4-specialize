@@ -1,7 +1,7 @@
 # Plan: a rank that counts coding traffic
 
-Status (2026-11-17 11:10): done. The chain ran from 08:22 to 11:07 (§10). code1 (MD + 359 coding experts, +3.17 GiB)
-cuts the junk from 35/60 on MD to 2/30 and the coding NLL by 2.92%. The next step is the memory for it.
+Status (2026-11-17 18:45): done. code226 (MD + 226 coding experts, +2.0 GiB) cuts the junk from 33/60 on MD to 1/30
+and the coding NLL by 2.69% (§11). The next step is a deploy plan: the bot gate, the speed and the memory beside Qwen.
 
 ## 1. The question
 
@@ -154,3 +154,27 @@ fixed rules of §5.
 - **The answer:** the junk follows expert coverage of coding traffic. code1 gives almost all of the gain of code2 for
   1.12 GiB less.
 - **After the window:** DeepSeek healthy at 10:58; Qwen up at 11:07 (`NEED_MB` 27,000). The cron jobs stay paused.
+
+
+## 11. The smaller sets (2026-11-17 evening, the chain `small_night.sh`)
+
+You asked for two smaller sets from the same order: the first 170 and 226 experts (`code_rank.py --added 170 226`,
+`results/code-small`). The window ran from 17:21 to 18:31 (`results/code-probe-small`). The coding score of the sets
+reads against the MD score of the morning; two MD controls differed by 0.08% there.
+
+| Set | Memory | c1 | c2 | c3 | All | Coding NLL |
+|---|---|---|---|---|---|---|
+| MD control | 0 | 1/10 (0.71) | 6/10 (0.32) | 7/10 (0.37) | 14/30 | 0.7538 (morning) |
+| code170 | +1.50 GiB | 3/10 (0.64) | 0/10 (0.96) | 4/10 (0.59) | 7/30 | 0.7334 (−2.71%) |
+| code226 | +1.99 GiB | 0/10 (0.88) | 0/10 (0.95) | 1/10 (0.77) | 1/30 | 0.7335 (−2.69%) |
+| MD control again | 0 | 5/10 | 5/10 | 9/10 | 19/30 | – |
+| code1 (§10) | +3.17 GiB | 1/10 | 0/10 | 1/10 | 2/30 | 0.7318 (−2.92%) |
+| code2 (§10) | +4.29 GiB | 1/10 | 0/10 | 2/10 | 3/30 | 0.7264 (−3.63%) |
+
+- Against both MD controls (33/60): code226 1/30 (p = 4×10⁻⁷), c2 0/10 (p = 0.003), c3 1/10 (p = 4×10⁻⁴); code170
+  7/30 (p = 0.004), c3 4/10 (p = 0.04).
+- **The coding gain comes from the first 170 experts** (−2.71%); more experts add little to it.
+- **c2 is fixed at +1.5 GiB; c3 needs the next 56 experts** (code226). Beyond 2 GiB, the junk does not fall further.
+- **code226 is the candidate.** Its 1.99 GiB is about what the two memory levers of §8 free together (the Qwen KV pin
+  back to 133k tokens, about 1.5 GiB; the DeepSeek context cap, about 0.35 GiB).
+- After the window: DeepSeek healthy at 18:30, Qwen up at 18:40 (lowest available 9,112 MB in the idle check).

@@ -42,12 +42,12 @@ def messages(session, seg, i):
     return system + [{k: v for k, v in m.items() if k not in STRIP} for m in seg[:i]]
 
 
-def pick(sessions, n, max_chars=240_000, per_segment=2):
+def pick(sessions, n, max_chars=240_000, per_segment=2, sources=None):
     """``n`` held-out targets: one source and project after another in a fixed hash order, with a context of at most
     ``max_chars`` characters. Every segment gives one target before any segment gives a second one."""
     groups = defaultdict(list)
     for s in sessions:
-        if s["split"] != "held_out":
+        if s["split"] != "held_out" or (sources and s["source"] not in sources):
             continue
         for g, seg in enumerate(s["segments"]):
             sizes, total = [], 0
@@ -62,12 +62,20 @@ def pick(sessions, n, max_chars=240_000, per_segment=2):
     return [(sid, g, i) for _, _, sid, g, i in [r for round_ in rounds for r in round_][:n]]
 
 
-def record(base, model, sessions, tools, n, out, max_tokens=800, seed_offset=0):
+def record(base, model, sessions, tools, n, out, max_tokens=800, seed_offset=0, from_data=False, max_chars=240_000,
+           sources=None):
+    """The recorded turns. ``from_data``: each target's own turn in the data, with no server (plans/PLAN_CODE_RANK.md
+    §6: every DeepSeek point scores the same held-out text)."""
     by_id = {s["id"]: s for s in sessions}
     done = {(r["session"], r["segment"], r["index"]) for r in load(out)} if Path(out).exists() else set()
     with Path(out).open("a") as f:
-        for sid, g, i in pick(sessions, n):
+        for sid, g, i in pick(sessions, n, max_chars, sources=sources):
             if (sid, g, i) in done:
+                continue
+            if from_data:
+                turn = {k: v for k, v in by_id[sid]["segments"][g][i].items() if k != "target"}
+                f.write(json.dumps({"session": sid, "segment": g, "index": i, "skill": by_id[sid]["skill"], "turn": turn,
+                                    "completion_tokens": None, "finish_reason": "data"}) + "\n")
                 continue
             seed = int(hashlib.sha256(f"{sid}:{g}:{i}".encode()).hexdigest()[:8], 16) + seed_offset
             resp = post(base, "/v1/chat/completions", {
@@ -159,6 +167,9 @@ def main(argv=None):
     ap.add_argument("--out", type=Path, help="the score file of --score")
     ap.add_argument("--n", type=int, default=60, help="the turns of --record")
     ap.add_argument("--seed-offset", type=int, default=0, help="--record: add this to the seed of each turn (a new sample)")
+    ap.add_argument("--from-data", action="store_true", help="--record: the targets' own turns of the data, no server")
+    ap.add_argument("--max-chars", type=int, default=240_000, help="--record: the longest context, in characters")
+    ap.add_argument("--sources", default="", help="--record: only these sources, comma-separated (default: all)")
     cmd = ap.add_mutually_exclusive_group(required=True)
     cmd.add_argument("--record", action="store_true")
     cmd.add_argument("--score", action="store_true")
@@ -175,7 +186,8 @@ def main(argv=None):
     sessions = load(a.data / "sessions.jsonl")
     tools = json.loads((a.data / "tools.json").read_text())["tools"]
     if a.record:
-        record(a.base_url, a.model, sessions, tools, a.n, a.recorded, seed_offset=a.seed_offset)
+        record(a.base_url, a.model, sessions, tools, a.n, a.recorded, seed_offset=a.seed_offset, from_data=a.from_data,
+               max_chars=a.max_chars, sources=[x for x in a.sources.split(",") if x])
         print(f"{len(load(a.recorded))} recorded turns -> {a.recorded}")
     else:
         score(a.base_url, a.model, sessions, tools, load(a.recorded), a.out)
