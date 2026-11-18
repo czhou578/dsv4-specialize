@@ -1,0 +1,120 @@
+# code226 on the live server (dsv4-specialize plans/PLAN_CODE226_DEPLOY.md §3). The source is
+# dsv4-specialize/deploy/compose-code226t5.yml; deploy_md.sh prepare (DEPLOY=code226t5) copies it into the server
+# folder. Run it only there: ./cache-code226t5 is relative to the folder of this file.
+# A copy of compose-md149t5.yml (the live server from 2026-11-12), with these differences:
+# - /models/tp1 is data/tp1-code226t5: code226, tp1-prunecode226t5-k154 of dsv4-specialize (MD plus the 226 experts
+#   that coding traffic needs most, PLAN_CODE_RANK.md §11; 146 to 165 experts per layer, 15 counts, top-k 5).
+# - Its own kernel cache, ./cache-code226t5 (a copy of the test cache of dsv4-specialize), and its own project name.
+# - Lever B of the deploy plan: MAX_MODEL_LEN 160000 (was 256000) and a KV pin of 7,431,600,000 bytes (was
+#   7,784,628,224), about 0.35 GiB less. A prompt above 160k tokens fails; Hermes gets context_length 160000.
+# - The two served names do not change, so Hermes, its cron jobs, the gateway and the router need no change.
+#
+# CAUTION: only one model fits in memory. The rollback stops this server, then starts the old one, and puts the
+# Hermes backup of deploy_md.sh back:
+#   docker compose -f compose-code226t5.yml down && docker compose -f compose-md149t5.yml start
+
+name: deepseek-v4-flash-code226t5
+services:
+  deepseek-v4-flash:
+    image: ghcr.io/0xsero/deepseek-v4-flash-0731-spark-sparkinfer@sha256:2e077489a83a0360952828051fe7f7a32c1801e5ce8436d85f7267583d614ff4
+    pull_policy: missing
+    restart: on-failure:1   # CRITICAL: a boot loop can use all host memory and hard-reset the Spark
+    network_mode: host
+    ipc: host
+    shm_size: 16gb
+    entrypoint: ["/bin/bash", "-lc", "bash /patch-run-entrypoint.sh && exec /opt/recipe/scripts/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "http://127.0.0.1:8888/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20m
+      retries: 3
+    environment:
+      PORT: "8888"
+      HOST: "0.0.0.0"
+      SERVED_MODEL_NAME: deepseek-v4-flash-0731-k160t5
+      SKIP_DOWNLOAD: "1"
+      MAX_MODEL_LEN: "160000"
+      MAX_NUM_SEQS: "1"
+      MAX_NUM_BATCHED_TOKENS: "8224"
+      VLLM_DSV4_PADDED_NVFP4: "0"
+      KV_FP8_ROPE: "0"
+      MODE: dspark
+      DSPARK_TOKENS: "5"
+      DSPARK_CAPACITY: "0"
+      DSPARK_DYNAMIC_DRAFT_DEPTH: "0"
+      DSPARK_DYNAMIC_DRAFT_DEPTH_WINDOW: "8"
+      DSPARK_DRAFT_EXPERTS: "64"
+      DSPARK_STRUCTURED_EXPERTS_PER_CATEGORY: "32"
+      VLLM_USE_B12X_WO_PROJECTION: "1"
+      GPU_MEMORY_UTILIZATION: "0.90"   # only the boot check since the KV is pinned (--kv-cache-memory-bytes); 0.93 failed it on 2026-11-07 (112.9 GiB free, 113.2 needed)
+      VERIFY_MODEL_CHECKSUMS: "1"
+      MAX_CUDAGRAPH_CAPTURE_SIZE: "24"
+      CUDAGRAPH_CAPTURE_SIZES: "6,12,24"
+      VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
+      EXTRA_VLLM_ARGS: "--long-prefill-token-threshold 1024 --kv-cache-memory-bytes 7431600000 --served-model-name deepseek-v4-flash-0731-k160t5 deepseek-v4-flash-0731"   # KV fixed at 6.92 GiB for the 160k cap (1.04x of the need, as cap_switch.sh planned; the review window of PLAN_CODE226_DEPLOY.md §5 checks it); 7.25 GiB for 256k before
+      DEFAULT_CHAT_TEMPLATE_KWARGS_THINKING: "true"
+      DEFAULT_CHAT_TEMPLATE_KWARGS_EFFORT: "max"
+      KV_OFFLOAD_GB: "0"
+      VLLM_USE_SIMPLE_KV_OFFLOAD: "0"
+    volumes:
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1-code226t5"
+        target: /models/tp1
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1"
+        target: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1"
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/dspark-draft-k64-bot"   # the bot-rank draft since 2026-11-07 (PLAN_PHYSICAL_PRUNE.md §7.1); the stock draft is data/dspark-draft-k64
+        target: /models/dspark-draft-k64
+        read_only: true
+      - ./cache-code226t5:/cache
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/moe/fused_moe/_impl.py"
+        target: /opt/sparkinfer/sparkinfer/moe/fused_moe/_impl.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/moe/_shared/kernels/tiny_decode.py"
+        target: /opt/sparkinfer/sparkinfer/moe/_shared/kernels/tiny_decode.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/entrypoint-toolfix.sh"
+        target: /patch-run-entrypoint.sh
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/serve-ds4-flash.sh"
+        target: /opt/vllm/serve-ds4-flash.sh
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/vllm/models/deepseek_v4/nvidia/dspark.py"
+        target: /opt/vllm/vllm/models/deepseek_v4/nvidia/dspark.py
+        read_only: true
+      - type: bind   # the per-layer expert patch (dsv4-specialize image-patch/perlayer/, PLAN_LOADER_PATCH.md §5.2)
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/vllm/model_executor/layers/quantization/exl3.py"
+        target: /opt/vllm/vllm/model_executor/layers/quantization/exl3.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/vllm/models/deepseek_v4/nvidia/model.py"
+        target: /opt/vllm/vllm/models/deepseek_v4/nvidia/model.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/attention/_shared/mla/prefill.py"
+        target: /opt/sparkinfer/sparkinfer/attention/_shared/mla/prefill.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/attention/_shared/mla/prefill_mg.py"
+        target: /opt/sparkinfer/sparkinfer/attention/_shared/mla/prefill_mg.py
+        read_only: true
+      - type: bind
+        source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/entrypoint-no-download.sh"
+        target: /opt/recipe/scripts/entrypoint.sh
+        read_only: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
