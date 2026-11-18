@@ -8,15 +8,15 @@
 #   - main container stopped: stop every container of STOP_PROJECTS (default: dsv4-mask, the test server),
 #     wait until the memory is free,
 #     start the main container again (docker compose start: no pull, no new compose file).
-# The main server is MAIN_COMPOSE (default: compose-md149t5.yml, the MD prune, live since 2026-11-12).
+# The main server is MAIN_COMPOSE (default: compose-code226t5.yml, code226 at the 160k cap, live since 2026-11-17).
 # DRY_RUN=1 logs the actions instead of running them. GUARD_NOW=1 skips the wait for GUARD_AT.
 set -u
 GUARD_AT=${GUARD_AT:-04:15}
 RECHECK_AT=${RECHECK_AT:-04:35}
 MAIN_URL=${MAIN_URL:-http://127.0.0.1:8888}
 SERVER=/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark
-MAIN_COMPOSE=${MAIN_COMPOSE:-$SERVER/compose-md149t5.yml}
-MAIN_CONTAINER=${MAIN_CONTAINER:-deepseek-v4-flash-md149t5-deepseek-v4-flash-1}
+MAIN_COMPOSE=${MAIN_COMPOSE:-$SERVER/compose-code226t5.yml}
+MAIN_CONTAINER=${MAIN_CONTAINER:-deepseek-v4-flash-code226t5-deepseek-v4-flash-1}
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/overnight_guard.log}
 STOP_PROJECTS=${STOP_PROJECTS:-dsv4-mask}   # deploy_md.sh adds the project of the new server
 

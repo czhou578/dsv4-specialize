@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SUPERSEDED on 2026-11-17: the 160k cap is live in compose-code226t5.yml (plans/PLAN_CODE226_DEPLOY.md). This script
+# edits compose-md149t5.yml, which is no longer the live server: do not run it.
 # The DeepSeek context cap (D1 of PLAN_SECOND_MODEL_FIT.md §3.1; plans/PLAN_QWEN_PRUNE.md §8): 160,000 tokens
 # instead of 256,000, and a KV pin of about 6.92 GiB (1.04x of the need at 160k; the need is about 6.54 GiB at 128k
 # and 6.97 GiB at 256k) instead of 7.25 GiB. About 0.35 GiB more for Qwen.
