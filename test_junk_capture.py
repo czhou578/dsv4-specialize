@@ -35,15 +35,20 @@ class WindowTest(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         d = self.d = Path(tmp.name)
         (d / "stub.sh").write_text(STUB)
-        for name in ("prompts.json", "junk_routes.py", "compose-capture.yml", "compose-capture-junk.yml", "sums.npz"):
+        for name in ("prompts.json", "junk_routes.py", "capture.py", "compose-capture.yml", "compose-capture-junk.yml",
+                     "sums.npz"):
             (d / name).write_text("x")
         (d / "pilot").mkdir()
+        (d / "data").mkdir()
+        for name in ("sessions.jsonl", "tools.json"):
+            (d / "data" / name).write_text("x")
         t = lambda m: time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() + 60 * m))
         full = {**{k: v for k, v in os.environ.items() if k != "TMUX"}, "JOB_WRAP": "0",
                 "JUNKCAP_STUB": str(d / "stub.sh"), "STUB_DIR": str(d), "LOG": str(d / "w.log"),
                 "OUT": str(d / "out"), "PROMPTS": str(d / "prompts.json"), "PILOT": str(d / "pilot"),
                 "SUMS": str(d / "sums.npz"), "CRON_OK": "1", "START_AFTER": t(minutes[0]),
-                "BOOT_BY": t(minutes[1]), "RESTORE_AT": t(minutes[2]), **env}
+                "BOOT_BY": t(minutes[1]), "RESTORE_AT": t(minutes[2]),
+                **{k: v.replace("{d}", str(d)) for k, v in env.items()}}
         proc = subprocess.run(["bash", str(HERE / "junk_capture.sh")], env=full, capture_output=True, text=True,
                               timeout=120)
         return proc.returncode, (d / "w.log").read_text()
@@ -83,6 +88,11 @@ class WindowTest(unittest.TestCase):
                 self.assertNotIn("STUB smoke", log)
                 self.assertOrder(log, line, "STUB restore", "STUB start_qwen")
 
+    def test_the_rank_client_runs_with_its_data(self):
+        rc, log = self.run_script(CLIENT="rank", DATA="{d}/data")
+        self.assertEqual(rc, 0, log)
+        self.assertOrder(log, "STUB smoke", "STUB client", "STUB restore")
+
     def test_no_qwen_no_restart_unless_asked(self):
         rc, log = self.run_script(STUB_QWEN="0")
         self.assertNotIn("STUB stop_qwen", log)
@@ -97,7 +107,9 @@ class WindowTest(unittest.TestCase):
         cron = int((datetime.datetime.combine(day, datetime.time(7, 0)) - datetime.datetime.now()).total_seconds() // 60)
         for kw, message in [({"minutes": (-30, -10, 30)}, "no window, no server action"),
                             ({"minutes": (-1, 20, cron), "CRON_OK": "0"}, "touches the cron window"),
-                            ({"PROMPTS": "/no/such/prompts.json"}, "ERROR: no /no/such/prompts.json")]:
+                            ({"PROMPTS": "/no/such/prompts.json"}, "ERROR: no /no/such/prompts.json"),
+                            ({"CLIENT": "rank", "DATA": "/no/such/data"}, "ERROR: no /no/such/data/sessions.jsonl"),
+                            ({"CLIENT": "other"}, "ERROR: unknown CLIENT other")]:
             with self.subTest(kw=kw):
                 rc, log = self.run_script(**kw)
                 self.assertEqual(rc, 1)
