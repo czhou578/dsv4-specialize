@@ -63,6 +63,14 @@ class RankTest(unittest.TestCase):
         self.assertEqual(cands["code1"]["k"], round((43 * 216 - (56 * 43 + 400 - 43)) / 43))
         self.assertIn("NOT REACHED", (self.d / "out/code-rank.md").read_text())
 
+    def test_chosen_counts_give_their_own_candidates(self):
+        res = self.run_rank(added=[43, 10, 43])
+        self.assertEqual([(x["name"], x["added"]) for x in res["candidates"]], [("code43", 43), ("code10", 10)])
+        self.assertIn("code10: +10 experts", (self.d / "out/code-rank.md").read_text())
+        self.assertIn("a chosen count", (self.d / "out/code-rank.md").read_text())
+        rule = {x["name"]: x for x in self.run_rank()["candidates"]}["code1"]     # the rule picks 43 too
+        self.assertEqual(Path(rule["drop"]).read_text(), (self.d / "out/cold-code43.json").read_text())
+
     def test_the_cap_marks_a_candidate_not_reached(self):
         res = self.run_rank(n_max=3)
         self.assertTrue(all(x["added"] <= 3 for x in res["candidates"]))

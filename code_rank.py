@@ -54,7 +54,8 @@ def curve(order, md_drop, arrays):
     return out
 
 
-def rank(code, pilot, bot, k160, md, cold, out_dir, n_max=N_MAX):
+def rank(code, pilot, bot, k160, md, cold, out_dir, n_max=N_MAX, added=None):
+    """The curve and the candidates: the two rules, or with ``added`` one candidate code<n> for each count n."""
     r160, rmd = jr.removed_sets(k160, md)
     md_drop = r160 | rmd
     a_code, n_code, basis = weights(code)
@@ -68,10 +69,12 @@ def rank(code, pilot, bot, k160, md, cold, out_dir, n_max=N_MAX):
     cold = {int(l): set(v) for l, v in json.loads(Path(cold).read_text()).items()}
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    cands = []
-    for name, probe, limit in (("code1", "c3", C3_MAX), ("code2", "c2", C2_MAX)):
+    specs = [(f"code{n}", None, None, min(n, len(order)), True) for n in added or ()]
+    for name, probe, limit in () if added else (("code1", "c3", C3_MAX), ("code2", "c2", C2_MAX)):
         hit = np.nonzero(c[probe] <= limit)[0]
-        n = int(hit[0]) if len(hit) else len(order)
+        specs.append((name, probe, limit, int(hit[0]) if len(hit) else len(order), bool(len(hit))))
+    cands = []
+    for name, probe, limit, n, reached in specs:
         if any(x["added"] == n for x in cands):
             continue
         drops = {l: set(v) for l, v in cold.items()}
@@ -79,7 +82,8 @@ def rank(code, pilot, bot, k160, md, cold, out_dir, n_max=N_MAX):
             drops[l].discard(e)
         path = out_dir / f"cold-{name}.json"
         path.write_text(json.dumps({str(l): sorted(v) for l, v in sorted(drops.items())}))
-        cands.append({"name": name, "probe": probe, "limit": limit, "added": n, "reached": bool(len(hit)),
+        cands.append({"name": name, "probe": probe, "limit": limit, "added": n, "reached": reached,
+                      "c2": float(c["c2"][n]), "c3": float(c["c3"][n]),
                       "gib": round(n * jr.MIB_PER_EXPERT / 1024, 2), "drop": str(path),
                       "k": round(sum(jr.EXPERTS - len(v) for v in drops.values()) / jr.LAYERS)})
     points = sorted({min(n, len(order)) for n in GRID} | {x["added"] for x in cands})
@@ -106,8 +110,10 @@ def markdown(res):
     lines += [f"| K 160 (reference) | +4.29 GiB | {pct(k['bot'])} | {pct(k['pilot'])} | {pct(k['c2'])} | "
               f"{pct(k['c3'])} |", "", "## The candidates", ""]
     for x in res["candidates"]:
-        lines.append(f"- {x['name']}: +{x['added']} experts (+{x['gib']} GiB, mean K {x['k']}): {x['probe']} drops at "
-                     f"most {pct(x['limit'])}{'' if x['reached'] else ' NOT REACHED within the cap'}. `{x['drop']}`")
+        rule = (f"{x['probe']} drops at most {pct(x['limit'])}{'' if x['reached'] else ' NOT REACHED within the cap'}"
+                if x["probe"] else "a chosen count")
+        lines.append(f"- {x['name']}: +{x['added']} experts (+{x['gib']} GiB, mean K {x['k']}): {rule}; c2 drops "
+                     f"{pct(x['c2'])}, c3 drops {pct(x['c3'])}. `{x['drop']}`")
     return "\n".join(lines) + "\n"
 
 
@@ -120,8 +126,10 @@ def main(argv=None):
     ap.add_argument("--md", type=Path, default=MAIN / "tp1-prunemd5-k149/PRUNE.json")
     ap.add_argument("--cold", type=Path, default=MAIN / "results/cold-md.json")
     ap.add_argument("--out-dir", type=Path, default=MAIN / "results/code-rank")
+    ap.add_argument("--added", type=int, nargs="+",
+                    help="candidates code<n> for these counts, in place of the two rules")
     a = ap.parse_args(argv)
-    rank(a.code, a.pilot, a.bot, a.k160, a.md, a.cold, a.out_dir)
+    rank(a.code, a.pilot, a.bot, a.k160, a.md, a.cold, a.out_dir, added=a.added)
 
 
 if __name__ == "__main__":
