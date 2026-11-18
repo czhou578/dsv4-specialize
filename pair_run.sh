@@ -15,7 +15,10 @@
 # VISION=1 loads the vision tower with the two cuts of §8.6 (one image per prompt, no cache of processed images, at
 # most 2560x1440 pixels). TESTS names the tests to run (default: the six above). One more test for VISION=1:
 #      qimg    Qwen: the hard image set (qwen_vision.py, hard.json), while DeepSeek decodes
-# SEQS sets --max-num-seqs of Qwen (default 1). Two more tests for SEQS of 2 or more:
+# Sampling: the model's generation_config.json (temperature 1.0, top_p 0.95, top_k 20) plus presence_penalty 1.5, the
+# values of the model card for thinking mode; a request can set its own. With --generation-config vllm (before
+# 2026-11-15), Qwen sampled from the full vocabulary, and a subagent turn ran to 20,072 tokens.
+# KV_BYTES sets the pinned KV cache of Qwen (default 1965377034). SEQS sets --max-num-seqs of Qwen (default 1). Two more tests for SEQS of 2 or more:
 #      qn      Qwen: SEQS bot decode tests at the same time; compare each stream with qspeed
 #      qnd     as qn, while the bot decode test runs on DeepSeek; compare DeepSeek with dspeed and both
 # Each result line also gives the lowest swap-free memory, from the log of tmux pair-swap (results/pair-swap.log).
@@ -29,6 +32,7 @@ TAG=${TAG:?set TAG, e.g. nocap or cap}
 LOG=${LOG:-$S/logs/pair-$TAG.log} MEM=${MEM:-$R/pair-mem.log} PIDFILE=${PIDFILE:-$R/pair-qwen.pid}
 NEED_MB=${NEED_MB:-28600}   # the peak of d2 (25.42 GiB) + the floor of the watch (2 GiB) + 0.5 GiB
 KEEP=${KEEP:-1} SEQS=${SEQS:-1}
+KV_BYTES=${KV_BYTES:-1965377034}   # the pinned KV cache of Qwen: 1965377034 bytes hold 132,987 tokens (about 14.8 KB each)
 DS=http://127.0.0.1:8888 DSNAME=deepseek-v4-flash-0731-k160t5 QURL=http://127.0.0.1:8889 QNAME=second-model-fit
 QSNAP=$(ls -d $HOME/.cache/huggingface/hub/models--unsloth--Qwen3.6-35B-A3B-NVFP4-Fast/snapshots/*/ 2>/dev/null | head -1)
 DRAFT="{\"method\":\"mtp\",\"model\":\"$S/qwen-draft-nvfp4\",\"num_speculative_tokens\":3,\"moe_backend\":\"marlin\"}"
@@ -72,9 +76,9 @@ boot() {
   local t0
   env PYTHONPATH=$S/qwen_mtp_patch HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 CUTE_DSL_ARCH=sm_121a PATH=$QV:$PATH \
     setsid "$QV/vllm" serve $S/qwen-k208 --host 127.0.0.1 --port 8889 --served-model-name $QNAME \
-    --tensor-parallel-size 1 --gpu-memory-utilization 0.005 --kv-cache-memory-bytes 1965377034 --max-model-len 128000 \
+    --tensor-parallel-size 1 --gpu-memory-utilization 0.005 --kv-cache-memory-bytes $KV_BYTES --max-model-len 128000 \
     --max-num-seqs $SEQS --max-num-batched-tokens 2048 --kv-cache-dtype fp8_e4m3 --enable-chunked-prefill --async-scheduling \
-    --enable-auto-tool-choice --generation-config vllm --attention-backend flashinfer --moe-backend flashinfer_cutlass \
+    --enable-auto-tool-choice --generation-config auto --override-generation-config '{"presence_penalty":1.5}' --attention-backend flashinfer --moe-backend flashinfer_cutlass \
     --reasoning-parser qwen3 --tool-call-parser qwen3_xml $MM --speculative-config "$DRAFT" \
     > $R/pair-$TAG-server.log 2>&1 &
   echo $! > "$PIDFILE"
@@ -144,7 +148,7 @@ qn_rates() {  # $1 the test name: the rate of each Qwen stream and their sum
 [ -n "${PAIR_STUB:-}" ] && source "$PAIR_STUB"   # the dry run of test_pair_scripts.py
 log "phase D ($TAG) start: $(avail_mb) MB available beside DeepSeek"
 checks || exit 1
-log "boot Qwen K 208 with the NVFP4 draft on port 8889, max-num-seqs $SEQS ($MM)"
+log "boot Qwen K 208 with the NVFP4 draft on port 8889, max-num-seqs $SEQS, KV cache $KV_BYTES bytes ($MM)"
 if ! boot; then
   log "ERROR: Qwen did not boot: $(grep -iE 'error|exception' $R/pair-$TAG-server.log | tail -2 | cut -c1-300)"
   stop_qwen; exit 1
