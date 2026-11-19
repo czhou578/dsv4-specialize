@@ -45,7 +45,7 @@ qwen_up() { [ -s "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
 lowest() {  # $1 $2: epochs; the lowest available MB of the watch between them
   awk -v a="$1" -v b="$2" '$1 >= a && $1 <= b && (m == "" || $2 < m) {m = $2} END {print m}' "$MEM"
 }
-rate() { $PY $S/qwen_fit.py --rate "$1" 2>&1 | tail -1; }
+rate() { $PY $S/tools/qwen_fit.py --rate "$1" 2>&1 | tail -1; }
 swaplow() {  # $1 $2: epochs; the lowest swap-free MB of the swap log between them (a sample every 10 s), or "?"
   awk -v a="$1" -v b="$2" '$1 >= a - 10 && $1 <= b && (m == "" || $4 < m) {m = $4} END {print (m == "" ? "?" : m)}' "${SWAPLOG:-$R/pair-swap.log}" 2>/dev/null || echo "?"
 }
@@ -101,21 +101,21 @@ run_test() {  # $1 name, then the command; logs the exit and the lowest availabl
 }
 t_idle() { sleep 60; }
 t_qimg() {
-  $PY $S/qwen_vision.py --base-url $QURL --model $QNAME --answer --questions hard.json --out $R/pair-$TAG-qimg.jsonl > $R/pair-$TAG-qimg.log 2>&1 &
+  $PY $S/tools/qwen_vision.py --base-url $QURL --model $QNAME --answer --questions hard.json --out $R/pair-$TAG-qimg.jsonl > $R/pair-$TAG-qimg.log 2>&1 &
   local q=$!
-  $PY $S/qwen_fit.py --base-url $DS --model $DSNAME --long 2000 > $R/pair-$TAG-ddecode-img.json 2>&1
+  $PY $S/tools/qwen_fit.py --base-url $DS --model $DSNAME --long 2000 > $R/pair-$TAG-ddecode-img.json 2>&1
   wait $q
 }
 t_qlong() {
-  $PY $S/qwen_fit.py --base-url $QURL --model $QNAME --long 120000 > $R/pair-$TAG-qlong.json 2>&1 &
+  $PY $S/tools/qwen_fit.py --base-url $QURL --model $QNAME --long 120000 > $R/pair-$TAG-qlong.json 2>&1 &
   local q=$!
-  $PY $S/qwen_fit.py --base-url $DS --model $DSNAME --long 2000 > $R/pair-$TAG-ddecode.json 2>&1
+  $PY $S/tools/qwen_fit.py --base-url $DS --model $DSNAME --long 2000 > $R/pair-$TAG-ddecode.json 2>&1
   wait $q
 }
 t_dlong() {
   (cd $W && $PY -m model_eval.speed --base-url $QURL --model $QNAME --sessions 5 --runs 1 --out $R/pair-$TAG-qdecode.jsonl > $R/pair-$TAG-qdecode.log 2>&1) &
   local q=$!
-  timeout 1200 $PY $S/qwen_fit.py --base-url $DS --model $DSNAME --long 128000 > $R/pair-$TAG-dlong.json 2>&1
+  timeout 1200 $PY $S/tools/qwen_fit.py --base-url $DS --model $DSNAME --long 128000 > $R/pair-$TAG-dlong.json 2>&1
   wait $q
 }
 speed_of() {  # $1 url, $2 model, $3 out

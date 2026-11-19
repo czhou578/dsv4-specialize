@@ -32,7 +32,7 @@ CPID= SAMPLER=
 CPAT='^[^ ]*python[^ ]* -m engine\.server( |$)'   # a colinfer server on any port; the gateway (engine.server.gateway) does not match
 crunning() { pgrep -f "$CPAT" > /dev/null; }
 cpid() { pgrep -f "$CPAT" | head -1; }
-client() { $PY $HERE/colinfer_floor.py --base-url $CURL --model $CNAME "$@"; }
+client() { $PY $HERE/tools/colinfer_floor.py --base-url $CURL --model $CNAME "$@"; }
 sample_start() {  # $1 file: the available memory every 2 s
   ( while true; do echo "$(date +%s) $(avail_mb)" >> "$1"; sleep 2; done ) & SAMPLER=$!
 }
@@ -65,9 +65,9 @@ tests() {  # $1 point, $2 the available MB before the boot: each test of TESTS, 
   for t in ${TESTS[$p]}; do
     left=$(( RESTORE_S - $(now) - 300 ))
     case $t in
-      smoke) $PY $HERE/qwen_fit.py --base-url $CURL --model $CNAME --smoke > $o-smoke.json 2>&1
+      smoke) $PY $HERE/tools/qwen_fit.py --base-url $CURL --model $CNAME --smoke > $o-smoke.json 2>&1
         log "colinfer-$p smoke: exit $?; $(tail -1 $o-smoke.json | cut -c1-200)";;
-      long) timeout $left $PY $HERE/colinfer_floor.py --base-url $CURL --model $CNAME --long $LONG > $o-long.json 2>&1
+      long) timeout $left $PY $HERE/tools/colinfer_floor.py --base-url $CURL --model $CNAME --long $LONG > $o-long.json 2>&1
         log "colinfer-$p long prompt: exit $?; $(tail -1 $o-long.json | cut -c1-200)";;
     esac
     snap $p $t $2
@@ -95,7 +95,7 @@ fpoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
 }
 
 log "colinfer floor window start (points $POINTS; boot by $BOOT_BY; restore at $RESTORE_AT)"
-for need in $CV/python $C/engine/server/api.py $HERE/colinfer_floor.py $HERE/qwen_fit.py; do [ -e $need ] || { log "ERROR: no $need"; exit 1; }; done
+for need in $CV/python $C/engine/server/api.py $HERE/tools/colinfer_floor.py $HERE/tools/qwen_fit.py; do [ -e $need ] || { log "ERROR: no $need"; exit 1; }; done
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done
 [ "$(now)" -ge $BOOT_BY_S ] && { log "after $BOOT_BY: no boot"; exit 1; }
 

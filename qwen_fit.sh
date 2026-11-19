@@ -183,28 +183,28 @@ qboot() {  # $1 point: launch; if the KV pin is too small, one more launch with 
   qstop; log "ERROR: qwen-$p did not boot with the larger pin"; return 1
 }
 tests() {  # $1 point: the tests of TESTS, in order
-  local p=$1 t left o=$R/qwen-fit-$1 gate="$PY $S/qwen_gate.py --base-url $QURL --model $QNAME --data $S/qwen-data --recorded $R/qwen-recorded.jsonl"
-  local cap="$PY $S/capture.py --base-url $QURL --model $QNAME --data $S/qwen-data --sources claude,discord,repo --experts 256"
+  local p=$1 t left o=$R/qwen-fit-$1 gate="$PY $S/tools/qwen_gate.py --base-url $QURL --model $QNAME --data $S/qwen-data --recorded $R/qwen-recorded.jsonl"
+  local cap="$PY $S/tools/capture.py --base-url $QURL --model $QNAME --data $S/qwen-data --sources claude,discord,repo --experts 256"
   for t in ${TESTS[$p]:-smoke long speed}; do
     left=$(( RESTORE_S - $(now) - 300 ))
     case $t in
-      smoke) $PY $S/qwen_fit.py --base-url $QURL --model $QNAME --smoke > $o-smoke.json 2>&1
+      smoke) $PY $S/tools/qwen_fit.py --base-url $QURL --model $QNAME --smoke > $o-smoke.json 2>&1
         log "qwen-$p smoke: exit $?; $(tail -1 $o-smoke.json | cut -c1-200)";;
-      long) timeout $left $PY $S/qwen_fit.py --base-url $QURL --model $QNAME --long ${LONG[$p]:-250000} > $o-long.json 2>&1
+      long) timeout $left $PY $S/tools/qwen_fit.py --base-url $QURL --model $QNAME --long ${LONG[$p]:-250000} > $o-long.json 2>&1
         log "qwen-$p long prompt: exit $?; $(tail -1 $o-long.json | cut -c1-200)";;
       speed) (cd $W && timeout $left $PY -m model_eval.speed --base-url $QURL --model $QNAME --sessions 5 --runs 1 \
           --out $o-speed.jsonl > $o-speed.log 2>&1)
         log "qwen-$p bot decode test: exit $?; $(tail -1 $o-speed.log | cut -c1-200)"
-        log "qwen-$p decode rate from the rows: $($PY $S/qwen_fit.py --rate $o-speed.jsonl 2>&1 | tail -1)";;
-      facts) timeout $(( left < ${FACTS_S:-1200} ? left : ${FACTS_S:-1200} )) $PY $S/qwen_facts.py --base-url $QURL --model $QNAME --answer --out $o-facts.jsonl > $o-facts.log 2>&1
+        log "qwen-$p decode rate from the rows: $($PY $S/tools/qwen_fit.py --rate $o-speed.jsonl 2>&1 | tail -1)";;
+      facts) timeout $(( left < ${FACTS_S:-1200} ? left : ${FACTS_S:-1200} )) $PY $S/tools/qwen_facts.py --base-url $QURL --model $QNAME --answer --out $o-facts.jsonl > $o-facts.log 2>&1
         log "qwen-$p facts: exit $?; $(tail -1 $o-facts.log | cut -c1-200)";;
-      pairs) timeout $left $PY $S/qwen_gate.py --base-url $QURL --model $QNAME --data $S/qwen-data --recorded $o-pairs.jsonl \
+      pairs) timeout $left $PY $S/tools/qwen_gate.py --base-url $QURL --model $QNAME --data $S/qwen-data --recorded $o-pairs.jsonl \
           --record --seed-offset 1 > $o-pairs.log 2>&1
         log "qwen-$p new sample of the recorded turns: exit $?; $(tail -1 $o-pairs.log | cut -c1-200)";;
-      images) timeout $(( left < 720 ? left : 720 )) $PY $S/qwen_vision.py --base-url $QURL --model $QNAME --answer \
+      images) timeout $(( left < 720 ? left : 720 )) $PY $S/tools/qwen_vision.py --base-url $QURL --model $QNAME --answer \
           ${IMGLIMIT[$p]:+--limit ${IMGLIMIT[$p]}} --out $o-images.jsonl > $o-images.log 2>&1
         log "qwen-$p image questions: exit $?; $(tail -1 $o-images.log | cut -c1-200)";;
-      hard) timeout $(( left < 420 ? left : 420 )) $PY $S/qwen_vision.py --base-url $QURL --model $QNAME --answer --questions hard.json \
+      hard) timeout $(( left < 420 ? left : 420 )) $PY $S/tools/qwen_vision.py --base-url $QURL --model $QNAME --answer --questions hard.json \
           --out $o-hard.jsonl > $o-hard.log 2>&1
         log "qwen-$p hard image questions: exit $?; $(tail -1 $o-hard.log | cut -c1-200)";;
       capture) timeout $left $cap --generate 256 --out $R/qwen-capture.jsonl > $o-capture.log 2>&1
@@ -247,12 +247,12 @@ fpoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
   procs $p
   nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader > $R/qwen-fit-$p-gpu.txt 2>&1
   sample_stop; qstop
-  $PY $S/qwen_fit.py --report --before $before --healthy $healthy --healthy-at $healthy_at --pin $PIN --mem-log $m \
+  $PY $S/tools/qwen_fit.py --report --before $before --healthy $healthy --healthy-at $healthy_at --pin $PIN --mem-log $m \
     --server-log $R/qwen-fit-$p-server.log --gpu $R/qwen-fit-$p-gpu.txt --out $R/qwen-fit-$p.json 2>&1 | while read -r line; do log "qwen-$p: $line"; done
 }
 
 log "qwen fit window start (points $POINTS; boot by $BOOT_BY; restore at $RESTORE_AT)"
-for need in $QV/vllm $S/qwen_fit.py $W/model_eval/speed.py; do [ -e $need ] || { log "ERROR: no $need"; exit 1; }; done
+for need in $QV/vllm $S/tools/qwen_fit.py $W/model_eval/speed.py; do [ -e $need ] || { log "ERROR: no $need"; exit 1; }; done
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done
 [ "$(now)" -ge $BOOT_BY_S ] && { log "after $BOOT_BY: no boot"; exit 1; }
 

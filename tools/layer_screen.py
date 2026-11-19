@@ -398,7 +398,7 @@ def report(rows):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    here = Path(__file__).resolve().parent
+    here = Path(__file__).resolve().parent.parent
     ap.add_argument("--base-url", default="http://127.0.0.1:8890")
     ap.add_argument("--model", help="served model name (default: the server's first model)")
     ap.add_argument("--skip-dir", type=Path, default=here / "skip-out")

@@ -14,9 +14,9 @@ log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 build() {  # $1 rank file, $2 K, $3 top-k 6 folder, $4 top-k 5 folder
   [ -d "$4" ] && { log "$4 exists; skipped"; return 0; }
   log "build $3 from $1 (K $2)"
-  $PY mask_checkpoint.py --keep "$2" --rank "$1" --out "$3" >> "$LOG" 2>&1 || { log "ERROR: mask build failed for $3"; return 1; }
+  $PY tools/mask_checkpoint.py --keep "$2" --rank "$1" --out "$3" >> "$LOG" 2>&1 || { log "ERROR: mask build failed for $3"; return 1; }
   log "build $4 (top-k 5)"
-  $PY topk_checkpoint.py --source "$3" --top-k 5 --out "$4" >> "$LOG" 2>&1 || { log "ERROR: top-k build failed for $4"; return 1; }
+  $PY tools/topk_checkpoint.py --source "$3" --top-k 5 --out "$4" >> "$LOG" 2>&1 || { log "ERROR: top-k build failed for $4"; return 1; }
   python3 "$VERIFY" "$4" --skip-checksums >> "$LOG" 2>&1 && log "$4 ok" || { log "ERROR: manifest check failed for $4"; return 1; }
 }
 for f in ${RANK_NEW:-$R/expert_rank_skill_floor.json} $R/expert_rank_count.json; do [ -f "$f" ] || { log "ERROR: no $f"; exit 1; }; done

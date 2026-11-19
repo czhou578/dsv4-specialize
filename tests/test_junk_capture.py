@@ -35,7 +35,7 @@ class WindowTest(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         d = self.d = Path(tmp.name)
         (d / "stub.sh").write_text(STUB)
-        for name in ("prompts.json", "junk_routes.py", "capture.py", "compose/compose-capture.yml",
+        for name in ("prompts.json", "tools/junk_routes.py", "tools/capture.py", "compose/compose-capture.yml",
                      "compose/compose-capture-junk.yml", "sums.npz"):
             (d / name).parent.mkdir(exist_ok=True)
             (d / name).write_text("x")

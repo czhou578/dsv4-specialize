@@ -57,14 +57,14 @@ cpoint() {  # $1 point; returns 0 done, 1 boot failed, 2 skipped, 9 safety failu
   replay $label
   if [ $base != r0 ] && [ -s $R/$r0.jsonl ]; then
     (cd $W && $PY -m model_eval.replay --compare $R/$r0.jsonl $R/$label.jsonl > $R/$label-vs-$r0.txt 2>&1)
-    $PY $S/cold_sets.py --report $R/$r0.jsonl $R/$label.jsonl > $R/$label-report.txt 2>&1
+    $PY $S/tools/cold_sets.py --report $R/$r0.jsonl $R/$label.jsonl > $R/$label-report.txt 2>&1
     log "$label against $r0: $(head -1 $R/$label-report.txt)"
   fi
   down || return 9
 }
 
 log "cold window start (points $POINTS; boot by $BOOT_BY; restore at $RESTORE_AT)"
-for need in $S/serve-tune/compose-tune.yml $S/serve-tune/prefill_probe.py $S/cold_sets.py $R/baseline-k216.jsonl \
+for need in $S/serve-tune/compose-tune.yml $S/serve-tune/prefill_probe.py $S/tools/cold_sets.py $R/baseline-k216.jsonl \
   $R/botmask5-k160.jsonl; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done

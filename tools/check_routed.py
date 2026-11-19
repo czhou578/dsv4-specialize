@@ -2,7 +2,7 @@
 
 Boot the mask with ``compose-capture.yml`` (Model Runner V2 rejects the capture flag, so
 ``compose-mask.yml`` cannot do it): ``CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d``.
-Then run ``python check_routed.py --keep 192``. It sends a few prompts to the test server and decodes
+Then run ``python tools/check_routed.py --keep 192``. It sends a few prompts to the test server and decodes
 ``choices[0].routed_experts``: a base64 ``.npy`` array of shape (prompt + output tokens - 1,
 43 layers, 6), one row per token that went through the model (vLLM ``chat_completion/protocol.py``).
 

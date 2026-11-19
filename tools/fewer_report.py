@@ -3,16 +3,16 @@
 It reads the files that ``fewer_night.sh`` writes to ``results/``: ``fewer-cN.jsonl``, ``fewer-cN-compare.txt``
 (against the stock baseline, ``baseline-k216.jsonl``) and ``fewer-c5.rule``.
 
-    python fewer_report.py               # the Phase C table (Markdown)
-    python fewer_report.py --decide      # the point for Phase D, or "none" (the table of §7)
-    python fewer_report.py --c5-norm     # the best normalization at top-k 4 (kept, C3 or C4), for C5
+    python tools/fewer_report.py               # the Phase C table (Markdown)
+    python tools/fewer_report.py --decide      # the point for Phase D, or "none" (the table of §7)
+    python tools/fewer_report.py --c5-norm     # the best normalization at top-k 4 (kept, C3 or C4), for C5
 """
 
 import argparse
 import re
 from pathlib import Path
 
-R = Path(__file__).resolve().parent / "results"
+R = Path(__file__).resolve().parent.parent / "results"
 RULES = {"fewer-c0": ("none", "kept"), "fewer-c1": ("lowest:1", "kept"), "fewer-c2": ("lowest:1", "anchor:6"),
          "fewer-c3": ("lowest:2", "anchor:6"), "fewer-c4": ("lowest:2", "anchor:8")}
 REFS = {"botmask-k160": "K 160, top-k 6 (the mask)", "botmask5-k160": "K 160, top-k 5 (the live rule)",

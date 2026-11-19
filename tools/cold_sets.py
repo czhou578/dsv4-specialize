@@ -24,7 +24,7 @@ from pathlib import Path
 
 import mask_checkpoint as mc
 
-S = Path(__file__).resolve().parent
+S = Path(__file__).resolve().parent.parent
 RANK = S / "results/expert_rank_k160.json"
 LIVE = Path.home() / "Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1-k160t5/MASK.json"
 EXPERT_GIB = 60.71 / 6880          # one routed expert of the live set (PRUNE.md)

@@ -126,6 +126,6 @@ S0=$(mean_nll skip-s0)
 for p in $POINTS; do
   m=$(mean_nll skip-$p)
   [ -n "$m" ] && log "skip-$p: $(grep -oE '(PASS|FAIL)$' $R/skip-$p-gate.txt); mean NLL $m$( [ -n "$S0" ] && [ $p != s0 ] &&
-    awk -v m=$m -v s=$S0 'BEGIN {printf ", %+.2f%% against S0", 100 * (m / s - 1)}'); speed: $($PY $S/speed_result.py --results $R skip-$p 2>/dev/null | tail -1 | cut -c1-200)"
+    awk -v m=$m -v s=$S0 'BEGIN {printf ", %+.2f%% against S0", 100 * (m / s - 1)}'); speed: $($PY $S/tools/speed_result.py --results $R skip-$p 2>/dev/null | tail -1 | cut -c1-200)"
 done
 log "replay window done"

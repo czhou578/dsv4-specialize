@@ -159,7 +159,7 @@ def compare(ref_path, new_path):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    here = Path(__file__).resolve().parent
+    here = Path(__file__).resolve().parent.parent
     ap.add_argument("--base-url", default="http://127.0.0.1:8889")
     ap.add_argument("--model", default="second-model-fit")
     ap.add_argument("--data", type=Path, default=here / "qwen-data")

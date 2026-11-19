@@ -90,5 +90,5 @@ for pair in "$LIVE" "$LABELS"; do   # the controls: one model on both sides
   (cd $W && $PY -m model_eval.e2e.judge $pair) > "$R/review-judge-control-${pair// /-}.log" 2>&1
   log "control $pair: exit $?; $(tail -1 "$R/review-judge-control-${pair// /-}.log" | cut -c1-300)"
 done
-$PY $S/review_report.py --live $LIVE --new $LABELS 2>&1 | while read -r line; do log "$line"; done
+$PY $S/tools/review_report.py --live $LIVE --new $LABELS 2>&1 | while read -r line; do log "$line"; done
 log "review done"

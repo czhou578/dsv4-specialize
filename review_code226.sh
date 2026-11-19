@@ -121,7 +121,7 @@ print(f"code226 against md, the mean of the replays on {len(keys)} common target
       f"{100 * (nll['code226'] / nll['md'] - 1):+.2f}% (the gate: at most +0.5%)")
 rate = {}
 for p in ("md", "code226"):
-    out = subprocess.run([sys.executable, str(r.parent / "speed_result.py"), "--results", str(r), f"rv-{p}"],
+    out = subprocess.run([sys.executable, str(r.parent / "tools/speed_result.py"), "--results", str(r), f"rv-{p}"],
                          capture_output=True, text=True).stdout.strip().splitlines()
     rate[p] = json.loads(out[-1])["bot"]["rate"] if out else None
 if all(rate.values()):

@@ -22,7 +22,7 @@ else
   log "§5.2: top-k 5 does not pass (boot rc $rc51): bot K 144 at top-k 6, replay only"
   if [ ! -d $S/tp1-botmask-k144 ]; then
     log "build $S/tp1-botmask-k144"
-    (cd $S && $PY mask_checkpoint.py --keep 144 --rank $R/expert_rank_bot.json --out $S/tp1-botmask-k144) >> "$LOG" 2>&1 \
+    (cd $S && $PY tools/mask_checkpoint.py --keep 144 --rank $R/expert_rank_bot.json --out $S/tp1-botmask-k144) >> "$LOG" 2>&1 \
       && python3 $SERVER/image-patch/verify_tp1_manifest.py $S/tp1-botmask-k144 --skip-checksums >> "$LOG" 2>&1 \
       || { log "ERROR: the K 144 build failed"; }
   fi

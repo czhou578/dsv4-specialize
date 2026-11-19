@@ -30,7 +30,7 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # mask_checkpoint.py is in the repo root
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))  # mask_checkpoint.py
 import mask_checkpoint as mc  # noqa: E402
 
 RANK = Path.home() / "Projects/dsv4-specialize/results/expert_rank_weight.json"
