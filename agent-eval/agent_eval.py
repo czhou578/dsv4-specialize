@@ -70,7 +70,8 @@ def sha(path: Path) -> str | None:
 def workspace(task: dict, ws: Path) -> None:
     """A new workspace: the files of the task, and its data (paths under DATA) at the same relative paths."""
     shutil.rmtree(ws, ignore_errors=True)
-    shutil.copytree(TASKS / task["id"] / "files", ws) if (TASKS / task["id"] / "files").is_dir() else ws.mkdir(parents=True)
+    files, skip = TASKS / task["id"] / "files", shutil.ignore_patterns("__pycache__", ".pytest_cache", "target")
+    shutil.copytree(files, ws, ignore=skip) if files.is_dir() else ws.mkdir(parents=True)
     for rel in task.get("data", []):
         src, dst = DATA / rel, ws / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
