@@ -1,7 +1,7 @@
 """The factual and side-by-side test of a pruned Qwen (plans/PLAN_QWEN_PRUNE.md §7.5).
 
 - ``--answer``: a model answers N questions of SimpleQA (short facts with one known answer; a public set of OpenAI,
-  in ``qwen-data/simpleqa/``). The pick is fixed: 120 questions of the topic "Science and technology" and 80 of the
+  in ``data/qwen-data/simpleqa/``). The pick is fixed: 120 questions of the topic "Science and technology" and 80 of the
   other topics, by a hash of the question. Each answer uses the thinking-mode sampling of the Qwen model card and a
   fixed seed per question. No tools: the test measures what the model knows, not what it can look up.
 - ``--grade``: a grader model (the live DeepSeek) grades each answer against the known answer: CORRECT, INCORRECT or
@@ -200,8 +200,8 @@ def main(argv=None):
     here = Path(__file__).resolve().parent.parent
     ap.add_argument("--base-url", default="http://127.0.0.1:8889")
     ap.add_argument("--model", default="second-model-fit")
-    ap.add_argument("--data", type=Path, default=here / "qwen-data")
-    ap.add_argument("--questions", type=Path, default=here / "qwen-data/simpleqa/simple_qa_test_set.csv")
+    ap.add_argument("--data", type=Path, default=here / "data/qwen-data")
+    ap.add_argument("--questions", type=Path, default=here / "data/qwen-data/simpleqa/simple_qa_test_set.csv")
     ap.add_argument("--out", type=Path)
     cmd = ap.add_mutually_exclusive_group(required=True)
     cmd.add_argument("--answer", action="store_true")

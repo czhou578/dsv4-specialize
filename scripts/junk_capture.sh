@@ -7,7 +7,7 @@
 # process and the KV size of the boot lines; junk_routes.py smoke; junk_routes.py capture of the probe prompts
 # (ROUNDS rounds) and the pilot transcripts, stopped at RESTORE_AT; down; restore DeepSeek; after 5 min, start Qwen
 # again with pair_run.sh if it ran before (QWEN_AFTER=1: also when it did not). A failed check skips the capture.
-# CLIENT=rank runs capture.py on the calibration split of DATA (default qwen-data, SOURCES claude,repo) in place of
+# CLIENT=rank runs capture.py on the calibration split of DATA (default data/qwen-data, SOURCES claude,repo) in place of
 # junk_routes.py: the coding capture of plans/PLAN_CODE_RANK.md §4, into OUT/capture-code.jsonl.
 # CAUTION: this stops both model servers for about 45 min. Start it only with the user's go, in tmux, with the
 # deadlines (SPEED_BY is not used; it defaults to BOOT_BY):
@@ -23,8 +23,8 @@ source "$D/run_lib.sh"
 
 OUT=${OUT:-$R/junk-capture} ROUNDS=${ROUNDS:-3}
 PROMPTS=${PROMPTS:-$R/junk-bisect/prompts.json} PILOT=${PILOT:-$R/agent-eval/pilot}
-CLIENT=${CLIENT:-junk} DATA=${DATA:-$S/qwen-data} SOURCES=${SOURCES:-claude,repo}
-SUMS=${SUMS:-$S/capture-out/routing_sums.npz}
+CLIENT=${CLIENT:-junk} DATA=${DATA:-$S/data/qwen-data} SOURCES=${SOURCES:-claude,repo}
+SUMS=${SUMS:-$S/data/capture-out/routing_sums.npz}
 PIDFILE=${PIDFILE:-$R/pair-qwen.pid}
 QWEN_SEQS=${QWEN_SEQS:-4} QWEN_KV_BYTES=${QWEN_KV_BYTES:-3575989770}   # the live Qwen (TAG=textkv) of 2026-11-15
 KV_MAX=${KV_MAX:-150000}   # the 6.5 GiB pin gave 70,514 tokens on 2026-11-15; the 0.93 boot of 11-06 gave 473,251

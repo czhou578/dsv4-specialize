@@ -2,7 +2,7 @@
 
 The rank of the prune counted text tokens only, so the experts that image tokens use were never counted. This tool:
 
-- ``--build``: renders 12 images with headless Chromium into ``qwen-data/vision/`` (not in git): 4 code screenshots,
+- ``--build``: renders 12 images with headless Chromium into ``data/qwen-data/vision/`` (not in git): 4 code screenshots,
   3 charts, 3 UI screens and 2 diagrams, each from an HTML string of this file, and writes ``questions.json``: 3
   questions per image with a known short answer that is visible in the image. It also renders the hard set
   (``hard.json``, 5 images): a full-HD screenshot of dense code, a table of 16 rows, a chart of two series with no
@@ -269,7 +269,7 @@ def main(argv=None):
     here = Path(__file__).resolve().parent.parent
     ap.add_argument("--base-url", default="http://127.0.0.1:8889")
     ap.add_argument("--model", default="second-model-fit")
-    ap.add_argument("--images", type=Path, default=here / "qwen-data/vision")
+    ap.add_argument("--images", type=Path, default=here / "data/qwen-data/vision")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--limit", type=int, help="--answer: only the first N questions")
     ap.add_argument("--questions", default="questions.json", help="--answer: the question file (hard.json: the hard set)")

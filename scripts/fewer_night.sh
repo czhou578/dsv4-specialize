@@ -27,14 +27,14 @@ on() { [[ " $PHASES " == *" $1 "* ]]; }
 
 [ -f $S/image-patch/fused_topk_bias_router.py ] || $S/image-patch/build_router.sh >> "$LOG" 2>&1 \
   || { log "ERROR: image-patch/build_router.sh failed"; exit 1; }
-[ -f $S/tp1-botmask-k160/rank-sliced-tp1-manifest.json ] || { log "ERROR: no tp1-botmask-k160"; exit 1; }
+[ -f $S/data/tp1-botmask-k160/rank-sliced-tp1-manifest.json ] || { log "ERROR: no tp1-botmask-k160"; exit 1; }
 log "fewer night start (phases $PHASES; points $POINTS; boot by $BOOT_BY; speed by $SPEED_BY; restore at $RESTORE_AT)"
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done
 
 phase_a() {  # the capture boot with the routing profile, on the capture compose; a safety failure restores here
   local keep="$TEST_COMPOSE" keep_p="$TEST_PROJECT" keep_m="$MASK" rc
   TEST_COMPOSE="-f compose/compose-capture.yml"; TEST_PROJECT=dsv4-capture; MASK=dsv4-capture-deepseek-v4-flash-capture-1
-  export CAPTURE_DIR=$S/tp1-botmask-k160 ROUTING_PROFILE=1 CAPTURE_UTIL=0.90
+  export CAPTURE_DIR=$S/data/tp1-botmask-k160 ROUTING_PROFILE=1 CAPTURE_UTIL=0.90
   export CAPTURE_EXTRA_ARGS="--kv-cache-memory-bytes 8589934592"
   capture_profile; rc=$?
   [ $rc = 9 ] && { log "safety failure in Phase A: restore"; restore; exit 1; }
@@ -43,7 +43,7 @@ phase_a() {  # the capture boot with the routing profile, on the capture compose
 }
 
 capture_profile() {  # 0 done, 1 boot failed, 9 safety failure
-  local label=capture-profile-k160 sums=$S/capture-out/routing_sums.npz rc left
+  local label=capture-profile-k160 sums=$S/data/capture-out/routing_sums.npz rc left
   rm -f "$sums" "$sums.tmp.npz"
   stop_main || return 9
   boot $label; rc=$?

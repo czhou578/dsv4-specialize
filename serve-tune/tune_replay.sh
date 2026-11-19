@@ -34,7 +34,7 @@ hpoint() {
   TEST_COMPOSE="$TUNE$([ $4 = 1 ] && echo ' -f serve-tune/compose-head.yml')"
   [ $(( $(now) + 60 * $7 )) -gt $RESTORE_S ] && { log "$label: needs $7 min, no time before $RESTORE_AT"; return 2; }
   [ "$(now)" -ge $BOOT_BY_S ] && { log "$label: after $BOOT_BY, not booted"; return 2; }
-  [ -f $S/tp1-$2-k$3/rank-sliced-tp1-manifest.json ] || { log "ERROR: no folder $S/tp1-$2-k$3"; return 2; }
+  [ -f $S/data/tp1-$2-k$3/rank-sliced-tp1-manifest.json ] || { log "ERROR: no folder $S/data/tp1-$2-k$3"; return 2; }
   [ $4 = 0 ] || [ -s $S/serve-tune/image-patch/deepseek_v4_model.py ] || { log "ERROR: no deepseek_v4_model.py"; return 2; }
   stop_main || return 9
   log "$label: folder tp1-$2-k$3, FP8 target head $4, compose $TEST_COMPOSE"
@@ -64,7 +64,7 @@ run() {  # hpoint with the rules of run_lib.sh: two failed boots in a row, or a 
 }
 
 log "replay window start (points $POINTS; boot by $BOOT_BY; speed by $SPEED_BY; restore at $RESTORE_AT)"
-for need in $S/serve-tune/compose-tune.yml $S/serve-tune/compose-head.yml $S/tp1-prune5b-k160/rank-sliced-tp1-manifest.json \
+for need in $S/serve-tune/compose-tune.yml $S/serve-tune/compose-head.yml $S/data/tp1-prune5b-k160/rank-sliced-tp1-manifest.json \
   $R/baseline-k216.jsonl $R/prune5-k160.jsonl; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done

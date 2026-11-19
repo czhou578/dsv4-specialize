@@ -14,7 +14,7 @@ source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 log "prune boot start (start after $START_AFTER; boot by $BOOT_BY; speed by $SPEED_BY; restore at $RESTORE_AT)"
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done
-grep -q '"self_check": {' $S/tp1-prune5-k160/PRUNE.json || { log "ERROR: tp1-prune5-k160 has no passed self-check"; exit 1; }
+grep -q '"self_check": {' $S/data/tp1-prune5-k160/PRUNE.json || { log "ERROR: tp1-prune5-k160 has no passed self-check"; exit 1; }
 run_point prune5 160 full
 if [ -f $R/prune5-k160.jsonl ]; then
   (cd $W && $PY -m model_eval.replay --compare $R/botmask5-k160.jsonl $R/prune5-k160.jsonl > $R/prune5-k160-vs-botmask5-k160.txt 2>&1)

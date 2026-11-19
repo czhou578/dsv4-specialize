@@ -6,7 +6,7 @@
 #   s0   no skip (the patch on). The S0 check: the mean NLL of its two replays within 1% of the live replays (0.4562);
 #        else the window restores and stops (§8.3 and the refresh §0).
 #   s3, s2, s1   the sets of 3, 2 and 1 block (S3_SET, S2_SET, S1_SET from the probe report).
-#   s1h  S1_SET with the heal maps of HEAL_FILE (layer_screen.py --fit), copied to skip-out/heal.npz.
+#   s1h  S1_SET with the heal maps of HEAL_FILE (layer_screen.py --fit), copied to data/skip-out/heal.npz.
 #   sa   the 6 A blocks (SA_SET).
 # Each point: boot, the boot check (the skip line of the set, the heal line, no graph from the compile cache), the
 # smoke requests (prefill_probe.py --smoke), two replays, the gate on their mean against baseline-k216 (NLL at most +3%,
@@ -76,7 +76,7 @@ spoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
   export TUNE_LABEL=$label LAYER_SKIP=$blocks LAYER_HEAL=
   if [ $heal = 1 ]; then
     [ -s "${HEAL_FILE:-}" ] || { log "ERROR: $label needs HEAL_FILE"; return 2; }
-    mkdir -p $S/skip-out && cp "$HEAL_FILE" $S/skip-out/heal.npz && export LAYER_HEAL=/skip/heal.npz
+    mkdir -p $S/data/skip-out && cp "$HEAL_FILE" $S/data/skip-out/heal.npz && export LAYER_HEAL=/skip/heal.npz
   fi
   [ $(( $(now) + ${NEED[$p]} * 60 )) -gt $RESTORE_S ] && { log "$label: needs ${NEED[$p]} min, no time before $RESTORE_AT"; return 2; }
   [ "$(now)" -ge $BOOT_BY_S ] && { log "$label: after $BOOT_BY, not booted"; return 2; }
@@ -99,7 +99,7 @@ spoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
 
 log "replay window start (points $POINTS; boot by $BOOT_BY; restore at $RESTORE_AT)"
 for need in $S/image-patch/skip/deepseek_v4_model.py $S/compose/compose-skip.yml $S/serve-tune/prefill_probe.py \
-  $R/baseline-k216.jsonl $S/tp1-$MASK_NAME-k$MASK_K/rank-sliced-tp1-manifest.json; do
+  $R/baseline-k216.jsonl $S/data/tp1-$MASK_NAME-k$MASK_K/rank-sliced-tp1-manifest.json; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done
 for p in $POINTS; do   # the replay skips the targets of its out file: an old file would join this window's result

@@ -45,7 +45,7 @@ cpoint() {  # $1 point; returns 0 done, 1 boot failed, 2 skipped, 9 safety failu
   export TUNE_LABEL=$label MASK_NAME=$name MASK_K=$k
   [ $(( $(now) + 44 * 60 )) -gt $RESTORE_S ] && { log "$label: needs 44 min, no time before $RESTORE_AT"; return 2; }
   [ "$(now)" -ge $BOOT_BY_S ] && { log "$label: after $BOOT_BY, not booted"; return 2; }
-  [ -f $S/tp1-$name-k$k/rank-sliced-tp1-manifest.json ] || { log "ERROR: no folder $S/tp1-$name-k$k"; return 2; }
+  [ -f $S/data/tp1-$name-k$k/rank-sliced-tp1-manifest.json ] || { log "ERROR: no folder $S/data/tp1-$name-k$k"; return 2; }
   stop_main || return 9
   log "$label: folder tp1-$name-k$k"
   boot $label; rc=$?

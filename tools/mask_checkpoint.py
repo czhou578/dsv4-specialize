@@ -34,7 +34,7 @@ from pathlib import Path
 import numpy as np
 
 BASE = Path.home() / "Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1"
-OUT_ROOT = Path(__file__).resolve().parent.parent
+OUT_ROOT = Path(__file__).resolve().parent.parent / "data"   # the folder of the tp1-* checkpoints
 HASH_LAYERS = 3
 MASK_BIAS = -1e4
 MANDATORY_PER_CATEGORY = 32
@@ -255,7 +255,7 @@ def main(argv=None):
     parser.add_argument("--base", type=Path, default=BASE)
     parser.add_argument("--rank", type=Path, help="expert_rank_bot.json; default: the REAP rank")
     parser.add_argument("--out", type=Path,
-                        help="default: tp1-mask-k{K} (REAP) or tp1-botmask-k{K} (--rank) next to this script")
+                        help="default: tp1-mask-k{K} (REAP) or tp1-botmask-k{K} (--rank) in data/")
     parser.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
     args = parser.parse_args(argv)
     if (args.keep_per_layer or args.drop_file) and not args.out:

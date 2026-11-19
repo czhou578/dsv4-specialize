@@ -23,7 +23,7 @@ for f in ${RANK_NEW:-$R/expert_rank_skill_floor.json} $R/expert_rank_count.json;
 rc=0
 RANK_NEW=${RANK_NEW:-$R/expert_rank_skill_floor.json}
 log "the new rank: $RANK_NEW"
-build $RANK_NEW 160 tp1-wmask-k160 tp1-wmask5-k160 || rc=1
-build $RANK_NEW 144 tp1-wmask-k144 tp1-wmask5-k144 || rc=1
-build $R/expert_rank_count.json 144 tp1-cmask-k144 tp1-botmask5-k144 || rc=1
+build $RANK_NEW 160 data/tp1-wmask-k160 data/tp1-wmask5-k160 || rc=1
+build $RANK_NEW 144 data/tp1-wmask-k144 data/tp1-wmask5-k144 || rc=1
+build $R/expert_rank_count.json 144 data/tp1-cmask-k144 data/tp1-botmask5-k144 || rc=1
 log "rank masks done (rc $rc)"; exit $rc

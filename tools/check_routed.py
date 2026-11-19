@@ -1,7 +1,7 @@
 """PLAN_MODEL_SPECIALIZE.md §5.2 check: no dropped expert appears in the routing of a mask test boot.
 
 Boot the mask with ``compose-capture.yml`` (Model Runner V2 rejects the capture flag, so
-``compose-mask.yml`` cannot do it): ``CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d``.
+``compose-mask.yml`` cannot do it): ``CAPTURE_DIR=$PWD/data/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d``.
 Then run ``python tools/check_routed.py --keep 192``. It sends a few prompts to the test server and decodes
 ``choices[0].routed_experts``: a base64 ``.npy`` array of shape (prompt + output tokens - 1,
 43 layers, 6), one row per token that went through the model (vLLM ``chat_completion/protocol.py``).
@@ -69,7 +69,7 @@ def post(base, body):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--keep", type=int, required=True, help="K of the mask folder")
-    parser.add_argument("--mask", type=Path, help="default: tp1-mask-k{K} next to this script")
+    parser.add_argument("--mask", type=Path, help="default: data/tp1-mask-k{K}")
     parser.add_argument("--base-url", default="http://127.0.0.1:8890")
     parser.add_argument("--max-tokens", type=int, default=128)
     args = parser.parse_args(argv)

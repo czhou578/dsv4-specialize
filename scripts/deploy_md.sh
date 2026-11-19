@@ -21,9 +21,9 @@
 set -u
 S=/home/colin-spark/Projects/dsv4-specialize
 case ${DEPLOY:-md149t5} in
-  md149t5) NEW_NAME=md149t5 FOLDER_SRC=$S/tp1-prunemd5-k149 OLD_NAME=k160t5 MIN_KV=256000 CAP= REVIEW=boot-md-review
+  md149t5) NEW_NAME=md149t5 FOLDER_SRC=$S/data/tp1-prunemd5-k149 OLD_NAME=k160t5 MIN_KV=256000 CAP= REVIEW=boot-md-review
            : "${EXPECT_GIB:=69.79}";;
-  code226t5) NEW_NAME=code226t5 FOLDER_SRC=$S/tp1-prunecode226t5-k154 OLD_NAME=md149t5 MIN_KV=160000 CAP=160000
+  code226t5) NEW_NAME=code226t5 FOLDER_SRC=$S/data/tp1-prunecode226t5-k154 OLD_NAME=md149t5 MIN_KV=160000 CAP=160000
              REVIEW=boot-rv-code226; : "${EXPECT_GIB:=71.78}";;   # 68.53 GiB at mtp0 plus the 3.25 GiB of the draft
   *) echo "unknown DEPLOY ${DEPLOY}: md149t5 or code226t5"; exit 2;;
 esac
@@ -93,7 +93,7 @@ prepare() {
     log "the kernel cache is in place: $CACHE"
   else
     # root owns some cache files (mode 600), so a container copies them
-    mkdir "$CACHE" && docker run --rm --network none --entrypoint cp -v "$S/cache:/src:ro" -v "$CACHE:/dst" "$IMAGE" \
+    mkdir "$CACHE" && docker run --rm --network none --entrypoint cp -v "$S/data/cache:/src:ro" -v "$CACHE:/dst" "$IMAGE" \
       -a /src/. /dst/ >> "$LOG" 2>&1 || fail "the copy of the kernel cache failed"
     log "copied the kernel cache to $CACHE ($(du -sh "$CACHE" 2>/dev/null | cut -f1))"
   fi

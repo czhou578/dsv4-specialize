@@ -8,7 +8,7 @@
 # The q and n points use a prefill budget of 2,048 tokens and the default loader (the fastsafetensors loader of the
 # f points has a large peak at the load). Download a model first: the boots run with HF_HUB_OFFLINE=1.
 # The windows of plans/PLAN_QWEN_PRUNE.md, all with Qwen3.6-35B-A3B at a context of 128,000 tokens:
-#   c1          §6 the capture: the full model with --enable-return-routed-experts. The capture of qwen-data with 256
+#   c1          §6 the capture: the full model with --enable-return-routed-experts. The capture of data/qwen-data with 256
 #               generated tokens per segment (capture.py), the recorded set (qwen_gate.py --record), the tool-call
 #               suite of model-benchmarks, the bot decode test
 #   c2          the full model with the MTP draft and the capture flag: a short capture (does it cover the draft
@@ -16,7 +16,7 @@
 #   c3          the full model with the ngram draft, which needs no weights: the bot decode test
 #   g256        §7 the reference of the gate window: the full model with the MTP draft. The score of the recorded set
 #               (qwen_gate.py --score), the tool-call suite, the bot decode test
-#   g208 g192 g176 g160   the pruned folders qwen-k208 ... qwen-k160 (qwen_prune.py --draft keep) with the MTP draft
+#   g208 g192 g176 g160   the pruned folders data/qwen-k208 ... data/qwen-k160 (qwen_prune.py --draft keep) with the MTP draft
 #               of the original snapshot (vLLM reads one num_experts per folder, so the draft keeps its 256 experts):
 #               the same tests, and the comparison with g256 (qwen_gate.py --compare). vLLM builds the draft with the
 #               config of the target, so these points load qwen_mtp_patch (PYTHONPATH), which gives the draft its own
@@ -32,8 +32,8 @@
 #   h256 h208   §7.5 the facts and the side-by-side: the full model and K 208, both with the draft. Tests: smoke, 200
 #               questions of SimpleQA (qwen_facts.py --answer, at most FACTS_S seconds, default 1200), and a new sample of the 60 recorded turns (qwen_gate.py
 #               --record --seed-offset 1). DeepSeek grades and judges them after the window
-#   d1          §7.7 K 208 with the NVFP4 draft (qwen_draft_quant.py: qwen-draft-nvfp4, and the patched quant config of
-#               qwen-k208), the draft's MoE on Marlin (weight-only NVFP4). Tests: smoke, a prompt of 120,000 tokens,
+#   d1          §7.7 K 208 with the NVFP4 draft (qwen_draft_quant.py: data/qwen-draft-nvfp4, and the patched quant config of
+#               data/qwen-k208), the draft's MoE on Marlin (weight-only NVFP4). Tests: smoke, a prompt of 120,000 tokens,
 #               the bot decode test. The baseline is k0 (the BF16 draft)
 #   d2 d3       d1 again with a warm torch.compile cache (d1 compiled the new graph cold and held about 1 GiB more),
 #               and d1 with the allocator's expandable segments
@@ -85,39 +85,39 @@ for p in c1 c2 c3 g256 g208 g192 g176 g160; do
   BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$QM FLAGS[$p]=$Q35 DRAFT[$p]=$MTP PIN0[$p]=1965377034 TESTS[$p]="smoke score tools speed" NEED[$p]=25
 done
 for p in g208 g192 g176 g160; do
-  MODEL[$p]=$S/qwen-k${p#g} DRAFT[$p]="{\"method\":\"mtp\",\"model\":\"${QSNAP%/}\",\"num_speculative_tokens\":3}" PYPATH[$p]=$S/qwen_mtp_patch
+  MODEL[$p]=$S/data/qwen-k${p#g} DRAFT[$p]="{\"method\":\"mtp\",\"model\":\"${QSNAP%/}\",\"num_speculative_tokens\":3}" PYPATH[$p]=$S/qwen_mtp_patch
 done
 for k in 208 192 176; do
-  BUDGET[p$k]=2048 CTX[p$k]=128000 MODEL[p$k]=$S/qwen-k$k FLAGS[p$k]=$Q35 PIN0[p$k]=1574535010 TESTS[p$k]="smoke score tools" NEED[p$k]=30 SKIPIF[p$k]=g$k
+  BUDGET[p$k]=2048 CTX[p$k]=128000 MODEL[p$k]=$S/data/qwen-k$k FLAGS[p$k]=$Q35 PIN0[p$k]=1574535010 TESTS[p$k]="smoke score tools" NEED[p$k]=30 SKIPIF[p$k]=g$k
 done
 for p in o0 o1 o2 o3 o4 k0 k1; do
   BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$QM FLAGS[$p]=$Q35 DRAFT[$p]=$MTP PIN0[$p]=1965377034 TESTS[$p]="smoke long speed" NEED[$p]=12 LONG[$p]=120000
 done
 BUDGET[o1]=512 FLAGS[o2]="$Q35 --enforce-eager" ENVS[o3]=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True BUDGET[o4]=512 ENVS[o4]=${ENVS[o3]}
-for p in k0 k1; do MODEL[$p]=$S/qwen-k208 DRAFT[$p]=${DRAFT[g208]} PYPATH[$p]=$S/qwen_mtp_patch; done
+for p in k0 k1; do MODEL[$p]=$S/data/qwen-k208 DRAFT[$p]=${DRAFT[g208]} PYPATH[$p]=$S/qwen_mtp_patch; done
 BUDGET[k1]=512 ENVS[k1]=${ENVS[o3]}
 for p in h256 h208; do
   BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$QM FLAGS[$p]=$Q35 DRAFT[$p]=$MTP PIN0[$p]=1965377034 TESTS[$p]="smoke facts pairs" NEED[$p]=35
 done
-MODEL[h208]=$S/qwen-k208 DRAFT[h208]=${DRAFT[g208]} PYPATH[h208]=$S/qwen_mtp_patch
-BUDGET[d1]=2048 CTX[d1]=128000 MODEL[d1]=$S/qwen-k208 FLAGS[d1]=$Q35 PIN0[d1]=1965377034 TESTS[d1]="smoke long speed" NEED[d1]=12
+MODEL[h208]=$S/data/qwen-k208 DRAFT[h208]=${DRAFT[g208]} PYPATH[h208]=$S/qwen_mtp_patch
+BUDGET[d1]=2048 CTX[d1]=128000 MODEL[d1]=$S/data/qwen-k208 FLAGS[d1]=$Q35 PIN0[d1]=1965377034 TESTS[d1]="smoke long speed" NEED[d1]=12
 for p in d2 d3; do
-  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$S/qwen-k208 FLAGS[$p]=$Q35 PIN0[$p]=1965377034 TESTS[$p]="smoke long speed" NEED[$p]=12
+  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$S/data/qwen-k208 FLAGS[$p]=$Q35 PIN0[$p]=1965377034 TESTS[$p]="smoke long speed" NEED[$p]=12
   LONG[$p]=120000 PYPATH[$p]=$S/qwen_mtp_patch
 done
 ENVS[d3]=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-LONG[d1]=120000 PYPATH[d1]=$S/qwen_mtp_patch DRAFT[d1]="{\"method\":\"mtp\",\"model\":\"$S/qwen-draft-nvfp4\",\"num_speculative_tokens\":3,\"moe_backend\":\"marlin\"}"
+LONG[d1]=120000 PYPATH[d1]=$S/qwen_mtp_patch DRAFT[d1]="{\"method\":\"mtp\",\"model\":\"$S/data/qwen-draft-nvfp4\",\"num_speculative_tokens\":3,\"moe_backend\":\"marlin\"}"
 DRAFT[d2]=${DRAFT[d1]} DRAFT[d3]=${DRAFT[d1]}
 Q35V="${Q35/ --language-model-only/} --limit-mm-per-prompt {\"image\":1,\"video\":0}"
 for p in i208 i256 m208; do
-  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$S/qwen-k208 FLAGS[$p]=$Q35V PIN0[$p]=1965377034 TESTS[$p]="smoke images" NEED[$p]=16
+  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$S/data/qwen-k208 FLAGS[$p]=$Q35V PIN0[$p]=1965377034 TESTS[$p]="smoke images" NEED[$p]=16
   DRAFT[$p]=${DRAFT[d1]} PYPATH[$p]=$S/qwen_mtp_patch
 done
 MODEL[i256]=$QM DRAFT[i256]=$MTP; unset "PYPATH[i256]"
 TESTS[m208]="smoke images long speed" IMGLIMIT[m208]=6 LONG[m208]=120000 NEED[m208]=12
 Q35T="$Q35V --mm-processor-cache-gb 0 --mm-processor-kwargs {\"max_pixels\":3686400}"
 for p in t208 t256 u208; do
-  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$S/qwen-k208 FLAGS[$p]=$Q35T PIN0[$p]=1965377034 TESTS[$p]="smoke hard" NEED[$p]=8
+  BUDGET[$p]=2048 CTX[$p]=128000 MODEL[$p]=$S/data/qwen-k208 FLAGS[$p]=$Q35T PIN0[$p]=1965377034 TESTS[$p]="smoke hard" NEED[$p]=8
   DRAFT[$p]=${DRAFT[d1]} PYPATH[$p]=$S/qwen_mtp_patch
 done
 MODEL[t256]=$QM DRAFT[t256]=$MTP; unset "PYPATH[t256]"
@@ -183,8 +183,8 @@ qboot() {  # $1 point: launch; if the KV pin is too small, one more launch with 
   qstop; log "ERROR: qwen-$p did not boot with the larger pin"; return 1
 }
 tests() {  # $1 point: the tests of TESTS, in order
-  local p=$1 t left o=$R/qwen-fit-$1 gate="$PY $S/tools/qwen_gate.py --base-url $QURL --model $QNAME --data $S/qwen-data --recorded $R/qwen-recorded.jsonl"
-  local cap="$PY $S/tools/capture.py --base-url $QURL --model $QNAME --data $S/qwen-data --sources claude,discord,repo --experts 256"
+  local p=$1 t left o=$R/qwen-fit-$1 gate="$PY $S/tools/qwen_gate.py --base-url $QURL --model $QNAME --data $S/data/qwen-data --recorded $R/qwen-recorded.jsonl"
+  local cap="$PY $S/tools/capture.py --base-url $QURL --model $QNAME --data $S/data/qwen-data --sources claude,discord,repo --experts 256"
   for t in ${TESTS[$p]:-smoke long speed}; do
     left=$(( RESTORE_S - $(now) - 300 ))
     case $t in
@@ -198,7 +198,7 @@ tests() {  # $1 point: the tests of TESTS, in order
         log "qwen-$p decode rate from the rows: $($PY $S/tools/qwen_fit.py --rate $o-speed.jsonl 2>&1 | tail -1)";;
       facts) timeout $(( left < ${FACTS_S:-1200} ? left : ${FACTS_S:-1200} )) $PY $S/tools/qwen_facts.py --base-url $QURL --model $QNAME --answer --out $o-facts.jsonl > $o-facts.log 2>&1
         log "qwen-$p facts: exit $?; $(tail -1 $o-facts.log | cut -c1-200)";;
-      pairs) timeout $left $PY $S/tools/qwen_gate.py --base-url $QURL --model $QNAME --data $S/qwen-data --recorded $o-pairs.jsonl \
+      pairs) timeout $left $PY $S/tools/qwen_gate.py --base-url $QURL --model $QNAME --data $S/data/qwen-data --recorded $o-pairs.jsonl \
           --record --seed-offset 1 > $o-pairs.log 2>&1
         log "qwen-$p new sample of the recorded turns: exit $?; $(tail -1 $o-pairs.log | cut -c1-200)";;
       images) timeout $(( left < 720 ? left : 720 )) $PY $S/tools/qwen_vision.py --base-url $QURL --model $QNAME --answer \

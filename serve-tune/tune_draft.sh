@@ -19,7 +19,7 @@ NOISE=0.042                        # the noise floor of the bot decode test
 export MASK_NAME=prune5b MASK_K=160 TUNE_LABEL=tune-d0   # compose-tune.yml needs TUNE_LABEL, also for a down
 BOOT_MIN_GIB=110                   # vLLM's boot check at util 0.90 needs 109.5 GiB free
 FAILS=0
-draft() { [ $1 = k64 ] && echo $SERVER/data/dspark-draft-k64-bot || echo $S/dspark-draft-$1-bot; }
+draft() { [ $1 = k64 ] && echo $SERVER/data/dspark-draft-k64-bot || echo $S/data/dspark-draft-$1-bot; }
 rate() { $PY -c 'import json,sys; print(json.loads(sys.argv[1])["bot"]["rate"])' \
   "$($PY $S/tools/speed_result.py --results $R $1)" 2>/dev/null || echo 0; }
 

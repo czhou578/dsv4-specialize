@@ -16,7 +16,7 @@ POINTS=${POINTS:-wmask5:160 wmask5:144 botmask5:144}
 log "rank night start (points $POINTS; start after $START_AFTER; boot by $BOOT_BY; restore at $RESTORE_AT)"
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done
 for p in $POINTS; do
-  [ -f $S/tp1-${p%:*}-k${p#*:}/rank-sliced-tp1-manifest.json ] || { log "ERROR: no folder tp1-${p%:*}-k${p#*:}"; restore; exit 1; }
+  [ -f $S/data/tp1-${p%:*}-k${p#*:}/rank-sliced-tp1-manifest.json ] || { log "ERROR: no folder tp1-${p%:*}-k${p#*:}"; restore; exit 1; }
 done
 for p in $POINTS; do run_point ${p%:*} ${p#*:} replay; done
 for p in $POINTS; do

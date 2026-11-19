@@ -39,9 +39,9 @@ page. `overnight_guard.sh` also shows on the page, with its waits until `GUARD_A
 
 The live folder `data/tp1-k160t5` came from these steps. The rank file is `results/expert_rank_bot.json` (in git).
 
-1. Build the bot-rank mask: `python tools/mask_checkpoint.py --keep 160 --rank <rank file> --out tp1-botmask-k160`.
-2. Build the top-k copy: `python tools/topk_checkpoint.py --source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`.
-3. Build the pruned folder: `SRC=tp1-botmask5-k160 OUT=tp1-prune5-k160 ./scripts/prune_run.sh`. It takes about 11 minutes
+1. Build the bot-rank mask: `python tools/mask_checkpoint.py --keep 160 --rank <rank file> --out data/tp1-botmask-k160`.
+2. Build the top-k copy: `python tools/topk_checkpoint.py --source data/tp1-botmask-k160 --top-k 5 --out data/tp1-botmask5-k160`.
+3. Build the pruned folder: `SRC=data/tp1-botmask5-k160 OUT=data/tp1-prune5-k160 ./scripts/prune_run.sh`. It takes about 11 minutes
    and writes about 73 GB.
 
 Steps 1 and 2 take about a minute each and write about 12 GB each.
@@ -56,7 +56,7 @@ Steps 1 and 2 take about a minute each and write about 12 GB each.
 
    ```bash
    mkdir cache && docker run --rm --pull=never --network none --entrypoint cp \
-     -v ../DeepSeek-v4-Flash-One-DGX-Spark/cache:/src:ro -v ./cache:/dst IMAGE -a /src/. /dst/
+     -v ../DeepSeek-v4-Flash-One-DGX-Spark/cache:/src:ro -v ./data/cache:/dst IMAGE -a /src/. /dst/
    ```
 
 CAUTION: The next step stops the bot's model server. The bot gives no answers until step 8.
@@ -64,7 +64,7 @@ CAUTION: The next step stops the bot's model server. The bot gives no answers un
 4. Stop the live server: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml stop`.
 5. Boot the test: `MASK_K=192 docker compose -f compose/compose-mask.yml up -d`.
    - For the `PLAN_MODEL_SPECIALIZE.md` §5.2 check, boot
-     `CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d` instead.
+     `CAPTURE_DIR=$PWD/data/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d` instead.
    - Wait for `/health`, then run `python tools/check_routed.py --keep 192`. It must print PASS.
    - Model Runner V2 rejects the capture flag, so `compose-mask.yml` cannot do this check.
 6. Score the test from the bot repo's eval worktree:
@@ -82,9 +82,9 @@ CAUTION: The capture boot stops the bot's model server, like a mask test.
 1. Stop the live server: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml stop`.
 2. Boot the capture: `docker compose -f compose/compose-capture.yml up -d`. It serves the stock `data/tp1` with Model Runner
    V1 and no DSpark, so the decode is slower than on the live server. The patch writes the sums of the counts and
-   the router weights to `capture-out/routing_sums.npz` after each step.
+   the router weights to `data/capture-out/routing_sums.npz` after each step.
 3. From this repo, capture and rank:
-   `python tools/capture.py --out results/capture-rank.jsonl --data ~/Projects/stock-research-model-eval/model_eval/data/rank --sources discord,subagent,e2e,cron --sums capture-out/routing_sums.npz`,
+   `python tools/capture.py --out results/capture-rank.jsonl --data ~/Projects/stock-research-model-eval/model_eval/data/rank --sources discord,subagent,e2e,cron --sums data/capture-out/routing_sums.npz`,
    then `python tools/capture.py --rank results/capture-rank.jsonl results/expert_rank_weight.json --order weight`.
    The orders are `count`, `weight`, `skill_max` and `skill_floor`.
 4. Stop the capture: `docker compose -f compose/compose-capture.yml down`. Start the live server:

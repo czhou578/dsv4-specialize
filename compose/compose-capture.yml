@@ -12,7 +12,7 @@
 # CAUTION: only one model fits in memory. Stop the main server first
 #   (docker compose -f compose-k160t5.yml stop in its folder).
 #   docker compose -f compose/compose-capture.yml up -d
-#   CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d   # §5.2 check
+#   CAPTURE_DIR=$PWD/data/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d   # §5.2 check
 #   docker compose -f compose/compose-capture.yml down   # then docker compose -f compose-k160t5.yml start in the server folder
 name: dsv4-capture
 services:
@@ -55,7 +55,7 @@ services:
       KV_OFFLOAD_GB: "0"
       VLLM_USE_SIMPLE_KV_OFFLOAD: "0"
     volumes:
-      - /home/colin-spark/Projects/dsv4-specialize/capture-out:/capture
+      - /home/colin-spark/Projects/dsv4-specialize/data/capture-out:/capture
       - type: bind
         source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/base_router.py"
         target: /opt/vllm/vllm/model_executor/layers/fused_moe/router/base_router.py
@@ -76,7 +76,7 @@ services:
         source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1"
         target: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1"
         read_only: true
-      - /home/colin-spark/Projects/dsv4-specialize/cache:/cache
+      - /home/colin-spark/Projects/dsv4-specialize/data/cache:/cache
       - type: bind
         source: "/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/sparkinfer/moe/fused_moe/_impl.py"
         target: /opt/sparkinfer/sparkinfer/moe/fused_moe/_impl.py

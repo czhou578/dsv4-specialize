@@ -123,7 +123,7 @@ def main(argv=None):
     ap.add_argument("--pilot", type=Path, default=MAIN / "results/junk-capture/capture.jsonl")
     ap.add_argument("--bot", type=Path, default=MAIN / "results/capture-rank.jsonl")
     ap.add_argument("--k160", type=Path, default=jr.K160)
-    ap.add_argument("--md", type=Path, default=MAIN / "tp1-prunemd5-k149/PRUNE.json")
+    ap.add_argument("--md", type=Path, default=MAIN / "data/tp1-prunemd5-k149/PRUNE.json")
     ap.add_argument("--cold", type=Path, default=MAIN / "results/cold-md.json")
     ap.add_argument("--out-dir", type=Path, default=MAIN / "results/code-rank")
     ap.add_argument("--added", type=int, nargs="+",
