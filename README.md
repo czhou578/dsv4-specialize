@@ -389,7 +389,7 @@ Run the Python files with the stock-research venv: `~/.hermes/stock-research/.ve
 |---|---|
 | [mask_checkpoint.py](tools/mask_checkpoint.py) | Builds `tp1-mask-k{K}/`: K of 216 experts per layer stay (`PLAN_MODEL_SPECIALIZE.md` §5.3). With `--rank <rank file>`, the bot rank decides the dropped experts (§6.5); the folder is then `tp1-botmask-k{K}/`. With `--keep-per-layer FILE` (a JSON list from `serve-tune/alloc_k.py`), each layer keeps its own K; `--out` is then needed. With `--drop-file FILE` (from `cold_sets.py`), it drops exactly the listed ids, a mandatory expert too |
 | [cold_sets.py](tools/cold_sets.py) | The drop files of `plans/PLAN_COLD_EXPERTS.md` §4: R0 (the live set as a mask), M1 (cold tool experts), D1 (cold ordinary experts) and MD (both). `--share 0.15 0.2` adds S15 and S20 (`plans/PLAN_COLD_CUT2.md` §2): MD plus every expert below that weight share. `--report R0.jsonl POINT.jsonl` compares a replay with R0 (§5.2) |
-| [topk_checkpoint.py](tools/topk_checkpoint.py) | Builds a top-k copy of a tp1 folder (§8): `--source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`. `--check` runs the self-check only |
+| [topk_checkpoint.py](tools/topk_checkpoint.py) | Builds a top-k copy of a tp1 folder (§8): `--source data/tp1-botmask-k160 --top-k 5 --out data/tp1-botmask5-k160`. `--check` runs the self-check only |
 | [prune_experts.py](tools/prune_experts.py) | Builds a physically pruned copy of a mask folder (`PLAN_PHYSICAL_PRUNE.md` §3): the dropped experts leave the files, and the kept experts get the new ids 0 … K−1. A mask with a different K in each layer gives a folder for the loader patch (`plans/PLAN_LOADER_PATCH.md` §4.1). `--check` runs the self-check only |
 | [prune_run.sh](scripts/prune_run.sh) | Runs `prune_experts.py` in a root container from the server image, because the 43 expert files of `data/tp1` are `root:600`. The main server stays up |
 | [check_routed.py](tools/check_routed.py) | The `PLAN_MODEL_SPECIALIZE.md` §5.2 check: no dropped expert in the routing of a test boot |
@@ -467,8 +467,8 @@ measure a different inference engine for a later project, and are not part of th
 | [cap_switch.sh](scripts/cap_switch.sh) | The DeepSeek context cap of 160k (§8.3). Written and tested, not used |
 
 **Not in git.** The Qwen data (`data/qwen-data/`) and checkpoints (`qwen-k*/`, `qwen-draft-*/`), the test checkpoints
-(`tp1-*`), the kernel cache copy (`data/cache/`), the capture output (`data/capture-out/`), the probe output
-(`data/skip-out/`), the wide drafts (`dspark-draft-*/`), the result files (`results/`, except
+(`data/tp1-*`), the kernel cache copy (`data/cache/`), the capture output (`data/capture-out/`), the probe output
+(`data/skip-out/`), the wide drafts (`data/dspark-draft-*/`), the result files (`results/`, except
 `results/expert_rank_bot.json`), the logs (`logs/`) and `data/history/hermes-e2e/`: the step scripts of the full runs and
 their logs, moved from `~/.hermes-e2e/` on 2026-11-08. The step scripts keep their old paths, so they do not run as
 they are.

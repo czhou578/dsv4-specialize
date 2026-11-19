@@ -42,7 +42,7 @@ class ReviewTest(unittest.TestCase):
         (d / "stub.sh").write_text(STUB)
         for f in ("compose/compose-cap.yml", "compose/compose-perlayer.yml", "image-patch/perlayer/exl3.py", "baseline-k216.jsonl",
                   "image-patch/perlayer/deepseek_v4_model.py", "serve-tune/prefill_probe.py",
-                  "tp1-prunemd5-k149/config.json", "tp1-prunecode226t5-k154/config.json"):
+                  "data/tp1-prunemd5-k149/config.json", "data/tp1-prunecode226t5-k154/config.json"):
             (d / f).parent.mkdir(parents=True, exist_ok=True)
             (d / f).write_text("x")
         t = lambda m: time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() + 60 * m))

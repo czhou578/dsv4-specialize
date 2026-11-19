@@ -12,7 +12,7 @@
 # CAUTION: only one model fits in memory. Stop the main server first
 #   (docker compose -f compose-k160t5.yml stop in its folder).
 #   docker compose -f compose/compose-capture.yml up -d
-#   CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d   # §5.2 check
+#   CAPTURE_DIR=$PWD/data/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d   # §5.2 check
 #   docker compose -f compose/compose-capture.yml down   # then docker compose -f compose-k160t5.yml start in the server folder
 name: dsv4-capture
 services:

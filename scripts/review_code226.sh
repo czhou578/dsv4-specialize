@@ -45,7 +45,7 @@ rpoint() {  # $1 point; returns 0 done, 1 boot failed, 2 skipped, 9 safety failu
   export TUNE_LABEL=$label MASK_NAME=$name MASK_K=$k CAP_LEN=${LEN[$p]} TUNE_KV_BYTES=${PIN[$p]}
   [ $(( $(now) + ${NEED[$p]} * 60 )) -gt $RESTORE_S ] && { log "$label: needs ${NEED[$p]} min, no time before $RESTORE_AT"; return 2; }
   [ "$(now)" -ge $BOOT_BY_S ] && { log "$label: after $BOOT_BY, not booted"; return 2; }
-  [ -f $S/tp1-$name-k$k/config.json ] || { log "ERROR: no folder $S/tp1-$name-k$k"; return 2; }
+  [ -f $S/data/tp1-$name-k$k/config.json ] || { log "ERROR: no folder $S/data/tp1-$name-k$k"; return 2; }
   stop_main || return 9
   log "$label: folder tp1-$name-k$k, max-model-len ${LEN[$p]}, KV pin ${PIN[$p]} bytes"
   boot $label; rc=$?

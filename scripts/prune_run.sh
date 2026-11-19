@@ -3,8 +3,8 @@
 # The 43 expert files of data/tp1 are root:600, so only root can read them.
 set -euo pipefail
 cd "$(dirname "$0")/.."   # the repo root
-SRC=${SRC:-tp1-botmask5-k160}
-OUT=${OUT:-tp1-prune5-k160}
+SRC=${SRC:-data/tp1-botmask5-k160}
+OUT=${OUT:-data/tp1-prune5-k160}
 IMAGE=$(sed -n 's/^ *image: //p' compose/compose-mask.yml)
 SERVER=$HOME/Projects/DeepSeek-v4-Flash-One-DGX-Spark
 HERE=$PWD

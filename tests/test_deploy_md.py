@@ -52,7 +52,7 @@ class DeployTest(unittest.TestCase):
         rc, out = self.run_mode("vars", DEPLOY="code226t5", EXPECT_GIB="71.80")
         self.assertEqual(rc, 0, out)
         for s in (f"NEW={server}/compose-code226t5.yml", f"MAIN_COMPOSE={server}/compose-md149t5.yml",
-                  "FOLDER_SRC=/home/colin-spark/Projects/dsv4-specialize/tp1-prunecode226t5-k154",
+                  "FOLDER_SRC=/home/colin-spark/Projects/dsv4-specialize/data/tp1-prunecode226t5-k154",
                   f"FOLDER={server}/data/tp1-code226t5", "MAIN_CONTAINER=deepseek-v4-flash-md149t5-deepseek-v4-flash-1",
                   "EXPECT_GIB=71.80", "MIN_KV=160000", "CAP=160000"):
             self.assertIn(s, out)

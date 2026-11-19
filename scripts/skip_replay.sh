@@ -99,7 +99,7 @@ spoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
 
 log "replay window start (points $POINTS; boot by $BOOT_BY; restore at $RESTORE_AT)"
 for need in $S/image-patch/skip/deepseek_v4_model.py $S/compose/compose-skip.yml $S/serve-tune/prefill_probe.py \
-  $R/baseline-k216.jsonl $S/tp1-$MASK_NAME-k$MASK_K/rank-sliced-tp1-manifest.json; do
+  $R/baseline-k216.jsonl $S/data/tp1-$MASK_NAME-k$MASK_K/rank-sliced-tp1-manifest.json; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done
 for p in $POINTS; do   # the replay skips the targets of its out file: an old file would join this window's result

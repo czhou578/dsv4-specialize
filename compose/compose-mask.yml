@@ -59,7 +59,7 @@ services:
       VLLM_USE_SIMPLE_KV_OFFLOAD: "0"
     volumes:
       - type: bind
-        source: "/home/colin-spark/Projects/dsv4-specialize/tp1-${MASK_NAME:-mask}-k${MASK_K}"
+        source: "/home/colin-spark/Projects/dsv4-specialize/data/tp1-${MASK_NAME:-mask}-k${MASK_K}"
         target: /models/tp1
         read_only: true
       - type: bind

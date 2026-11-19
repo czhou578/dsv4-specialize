@@ -20,13 +20,13 @@ if [ $rc51 = 0 ] && gates_pass botmask5-k160; then
   run_point botmask4 160 full
 else
   log "§5.2: top-k 5 does not pass (boot rc $rc51): bot K 144 at top-k 6, replay only"
-  if [ ! -d $S/tp1-botmask-k144 ]; then
-    log "build $S/tp1-botmask-k144"
-    (cd $S && $PY tools/mask_checkpoint.py --keep 144 --rank $R/expert_rank_bot.json --out $S/tp1-botmask-k144) >> "$LOG" 2>&1 \
-      && python3 $SERVER/image-patch/verify_tp1_manifest.py $S/tp1-botmask-k144 --skip-checksums >> "$LOG" 2>&1 \
+  if [ ! -d $S/data/tp1-botmask-k144 ]; then
+    log "build $S/data/tp1-botmask-k144"
+    (cd $S && $PY tools/mask_checkpoint.py --keep 144 --rank $R/expert_rank_bot.json --out $S/data/tp1-botmask-k144) >> "$LOG" 2>&1 \
+      && python3 $SERVER/image-patch/verify_tp1_manifest.py $S/data/tp1-botmask-k144 --skip-checksums >> "$LOG" 2>&1 \
       || { log "ERROR: the K 144 build failed"; }
   fi
-  [ -d $S/tp1-botmask-k144 ] && run_point botmask 144 replay
+  [ -d $S/data/tp1-botmask-k144 ] && run_point botmask 144 replay
 fi
 # §5.3 optional: top-k 5 on K 216, replay only, if the replay can start before BOOT_BY (a boot takes up to 15 min).
 if [ $rc51 = 1 ]; then

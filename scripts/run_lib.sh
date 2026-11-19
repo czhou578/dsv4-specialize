@@ -185,7 +185,7 @@ point() {  # $1 MASK_NAME, $2 MASK_K, $3 full|replay
   local label=$1-k$2 rc
   export MASK_NAME=$1 MASK_K=$2
   [ "$(now)" -ge $BOOT_BY_S ] && { log "$label: after $BOOT_BY, not booted"; return 2; }
-  [ -f $S/tp1-$label/rank-sliced-tp1-manifest.json ] || { log "ERROR: no folder $S/tp1-$label; point skipped"; return 2; }
+  [ -f $S/data/tp1-$label/rank-sliced-tp1-manifest.json ] || { log "ERROR: no folder $S/data/tp1-$label; point skipped"; return 2; }
   stop_main || return 9
   boot $label; rc=$?
   [ $rc != 0 ] && return $rc

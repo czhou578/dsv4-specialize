@@ -30,7 +30,7 @@ done_n() { ls /home/colin-spark/.hermes-e2e/$1/runs/*/done.json 2>/dev/null | wc
 
 log "review window: wait for the live runs and $START_AFTER (boot by $BOOT_BY; restore at $RESTORE_AT; runs $LABELS)"
 for need in $S/compose/compose-perlayer.yml $S/image-patch/perlayer/exl3.py $S/image-patch/perlayer/deepseek_v4_model.py \
-  $S/tp1-$MASK_NAME-k$MASK_K/rank-sliced-tp1-manifest.json $S/serve-tune/prefill_probe.py; do
+  $S/data/tp1-$MASK_NAME-k$MASK_K/rank-sliced-tp1-manifest.json $S/serve-tune/prefill_probe.py; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done
 until grep -q "live runs done" "$LIVE_LOG" 2>/dev/null && [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do

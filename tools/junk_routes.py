@@ -57,7 +57,7 @@ LAYERS, TOP_K = 43, 6
 # (about 4 tokens) failed the smoke of 2026-11-16 22:11 for that reason. This prompt has more than 100 tokens.
 SMOKE_PROMPT = " ".join(["Say OK."] * 40)
 K160 = Path.home() / "Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1-k160t5/PRUNE.json"
-MD = S / "tp1-prunemd5-k149/PRUNE.json"
+MD = S / "data/tp1-prunemd5-k149/PRUNE.json"
 BOT = S / "results/capture-rank.jsonl"
 COLD_MD = S / "results/cold-md.json"
 OUT_DIR = S / "results/junk-capture"

@@ -39,9 +39,9 @@ page. `overnight_guard.sh` also shows on the page, with its waits until `GUARD_A
 
 The live folder `data/tp1-k160t5` came from these steps. The rank file is `results/expert_rank_bot.json` (in git).
 
-1. Build the bot-rank mask: `python tools/mask_checkpoint.py --keep 160 --rank <rank file> --out tp1-botmask-k160`.
-2. Build the top-k copy: `python tools/topk_checkpoint.py --source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`.
-3. Build the pruned folder: `SRC=tp1-botmask5-k160 OUT=tp1-prune5-k160 ./scripts/prune_run.sh`. It takes about 11 minutes
+1. Build the bot-rank mask: `python tools/mask_checkpoint.py --keep 160 --rank <rank file> --out data/tp1-botmask-k160`.
+2. Build the top-k copy: `python tools/topk_checkpoint.py --source data/tp1-botmask-k160 --top-k 5 --out data/tp1-botmask5-k160`.
+3. Build the pruned folder: `SRC=data/tp1-botmask5-k160 OUT=data/tp1-prune5-k160 ./scripts/prune_run.sh`. It takes about 11 minutes
    and writes about 73 GB.
 
 Steps 1 and 2 take about a minute each and write about 12 GB each.
@@ -64,7 +64,7 @@ CAUTION: The next step stops the bot's model server. The bot gives no answers un
 4. Stop the live server: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml stop`.
 5. Boot the test: `MASK_K=192 docker compose -f compose/compose-mask.yml up -d`.
    - For the `PLAN_MODEL_SPECIALIZE.md` §5.2 check, boot
-     `CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d` instead.
+     `CAPTURE_DIR=$PWD/data/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d` instead.
    - Wait for `/health`, then run `python tools/check_routed.py --keep 192`. It must print PASS.
    - Model Runner V2 rejects the capture flag, so `compose-mask.yml` cannot do this check.
 6. Score the test from the bot repo's eval worktree:

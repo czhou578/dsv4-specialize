@@ -84,7 +84,7 @@ run() {  # tpoint with the rules of run_lib.sh: two failed boots in a row, or a 
 }
 
 log "tune night start (points $POINTS; boot by $BOOT_BY; speed by $SPEED_BY; restore at $RESTORE_AT)"
-for need in $S/serve-tune/compose-tune.yml $S/serve-tune/prefill_probe.py $S/tp1-prune5b-k160/rank-sliced-tp1-manifest.json; do
+for need in $S/serve-tune/compose-tune.yml $S/serve-tune/prefill_probe.py $S/data/tp1-prune5b-k160/rank-sliced-tp1-manifest.json; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done
