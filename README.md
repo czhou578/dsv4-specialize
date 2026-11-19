@@ -368,6 +368,7 @@ The repo root holds only the documents. The files are in these folders:
 | [image-patch/](image-patch/) | The patches of the server image, their build scripts and `serve-v1.sh` |
 | [qwen_mtp_patch/](qwen_mtp_patch/sitecustomize.py) | The `sitecustomize` hook of the Qwen server |
 | [serve-tune/](serve-tune/README.md) | The serving settings, with their own plan, tools, data and write-up |
+| [agent-eval/](agent-eval/) | The agent capacity test: the agent loop, the sandbox, the checks and the 40 tasks (`plans/PLAN_AGENT_CAPACITY.md`), with its own tests |
 | [tests/](tests/) | The tests |
 | [plans/](plans/README.md) | The plans |
 
@@ -481,6 +482,9 @@ PYTHONPATH=tools python -m unittest discover -s tests   # without pytest: the un
 ```
 
 `tests/conftest.py` puts `tools/` on the import path for pytest. `PYTHONPATH=tools` does that for unittest.
+
+The tests of [agent-eval/](agent-eval/) are in that folder: `python -m pytest agent-eval`. The sandbox tests need the
+Docker image `agent-eval-sandbox:1`; without it they are skipped.
 
 - `test_mask_checkpoint.py`, `test_topk_checkpoint.py` and `test_prune_experts.py` run each weight tool on a small
   synthetic checkpoint. They need only numpy.
