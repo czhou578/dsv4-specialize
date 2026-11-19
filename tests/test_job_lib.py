@@ -9,7 +9,7 @@ import time
 import unittest
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent   # the repo root
 JOB = shutil.which("job") or str(Path.home() / "Projects" / "machine-dash" / "bin" / "job")
 
 

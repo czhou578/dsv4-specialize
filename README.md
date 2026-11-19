@@ -236,12 +236,12 @@ fits, and nothing changed on the live server. The patch, the heal and the script
 - The patch: [image-patch/layer_skip.py](image-patch/layer_skip.py) (the skip set, the probe sums, the skip file),
   [image-patch/layer-skip.diff](image-patch/layer-skip.diff), [image-patch/build_skip.sh](image-patch/build_skip.sh),
   [compose-skip.yml](compose/compose-skip.yml) and [compose-skip-v1.yml](compose/compose-skip-v1.yml). Tests:
-  [test_layer_skip.py](test_layer_skip.py) and [test_layer_skip_gpu.py](test_layer_skip_gpu.py), run by
-  [test_layer_skip.sh](test_layer_skip.sh) in the server image.
+  [test_layer_skip.py](tests/test_layer_skip.py) and [test_layer_skip_gpu.py](tests/test_layer_skip_gpu.py), run by
+  [test_layer_skip.sh](tests/test_layer_skip.sh) in the server image.
 - The client: [layer_screen.py](layer_screen.py) (the data pick, the BI pass, the screen, the greedy rounds, the
-  report, the heal fit), with [test_layer_screen.py](test_layer_screen.py).
+  report, the heal fit), with [test_layer_screen.py](tests/test_layer_screen.py).
 - Run scripts: [skip_probe.sh](skip_probe.sh) and [skip_replay.sh](skip_replay.sh), with their dry run
-  [test_skip_scripts.py](test_skip_scripts.py). The summary is [PRUNE.md](PRUNE.md) §7.
+  [test_skip_scripts.py](tests/test_skip_scripts.py). The summary is [PRUNE.md](PRUNE.md) §7.
 
 ### 8. Fit a second model beside DeepSeek (2026-11-13): Qwen 27B does not fit
 
@@ -255,7 +255,7 @@ chose Qwen3.6-35B-A3B (99 tok/s with its draft) for its balance of reasoning and
 
 - Plan: [PLAN_SECOND_MODEL_FIT.md](plans/PLAN_SECOND_MODEL_FIT.md).
 - Run script: [qwen_fit.sh](qwen_fit.sh), with its client [qwen_fit.py](qwen_fit.py) and the dry run
-  [test_qwen_fit.py](test_qwen_fit.py).
+  [test_qwen_fit.py](tests/test_qwen_fit.py).
 
 ### 9. Prune Qwen3.6-35B-A3B and run it beside DeepSeek (2026-11-13 to 11-14): live
 
@@ -456,11 +456,14 @@ they are.
 
 ## Tests
 
-Run the unit tests from the repo root:
+The tests are in [tests/](tests/). Run them from the repo root:
 
 ```bash
-python -m unittest
+python -m pytest tests                              # all tests
+PYTHONPATH=. python -m unittest discover -s tests   # without pytest: the unittest classes only
 ```
+
+`tests/conftest.py` puts the repo root on the import path for pytest. `PYTHONPATH=.` does that for unittest.
 
 - `test_mask_checkpoint.py`, `test_topk_checkpoint.py` and `test_prune_experts.py` run each weight tool on a small
   synthetic checkpoint. They need only numpy.
@@ -470,18 +473,18 @@ python -m unittest
   the eval worktree of the bot repo.
 - `test_serve_tune.py` runs the tests of [serve-tune/](serve-tune/README.md). unittest cannot import a folder name
   with a hyphen, so this file adds the folder to the path.
-- `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM. `./test_moe_drop.sh` runs it in
+- `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM. `tests/test_moe_drop.sh` runs it in
   the server image.
 - `test_loader_patch.py` (the loader patch, `plans/PLAN_LOADER_PATCH.md` §5.2) also needs vLLM. Build
-  `image-patch/perlayer/` first with `image-patch/build_perlayer.sh`, then `./test_loader_patch.sh` runs it in the
+  `image-patch/perlayer/` first with `image-patch/build_perlayer.sh`, then `tests/test_loader_patch.sh` runs it in the
   server image.
 - `test_review_report.py` tests the rules of `review_report.py` (the sign-test line, the controls, the weak
   prompts, the skills and the run times) on synthetic rows.
 - `test_job_lib.py` runs small scripts with `job_lib.sh` and `run_lib.sh` under a fake tmux, with the `job` command of
   `~/Projects/machine-dash` and a temporary jobs folder. Without that command it is skipped.
 - The `test_qwen_*.py` files, `test_pair_scripts.py` and `test_cap_switch.py` test the Qwen tools on small
-  synthetic data, and the window scripts as dry runs. Some of them are pytest tests, so run them with
-  `python -m pytest`. `test_qwen_prune.py` and `test_qwen_draft_quant.py` need torch (the vLLM 0.33 venv).
+  synthetic data, and the window scripts as dry runs. Some of them are pytest tests. `test_qwen_prune.py` and
+  `test_qwen_draft_quant.py` need torch (the vLLM 0.33 venv).
 - `./loader_kernel_check.sh` runs the GPU check of §5.3 (`loader_kernel_check.py`): the real experts of one layer of
   the K 160 prune and of the MD prune, through the patched loader. It uses about 3 GiB of GPU memory beside the live
   server, so run it only when the bot is idle.

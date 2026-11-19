@@ -173,7 +173,7 @@ the owner's go, never from 05:00 to 10:00 on weekdays, and never beside another 
 
     tmux new -d -s tune "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/serve-tune/tune_night.sh"
 
-**Tests.** `python -m unittest` in the repo root runs the tests of this folder (through `../test_serve_tune.py`).
+**Tests.** `python -m pytest tests` in the repo root runs the tests of this folder (through `../tests/test_serve_tune.py`).
 `./test_fp8_head.sh` runs the GPU test of the FP8 head in the server image.
 
 ## Data

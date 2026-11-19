@@ -9,7 +9,7 @@ import time
 import unittest
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent   # the repo root
 STUB = r'''
 R=$STUB_DIR OUT=$STUB_DIR/out
 stop_main() { log "STUB stop_main"; }

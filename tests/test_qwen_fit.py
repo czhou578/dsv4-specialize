@@ -13,7 +13,7 @@ from unittest import mock
 
 import qwen_fit
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent   # the repo root
 STUB = r'''
 R=$STUB_DIR
 stop_main() { log "STUB stop_main"; }
@@ -76,7 +76,8 @@ class WindowTest(unittest.TestCase):
             (d / name).write_text(text)
             (d / name).chmod(0o755)
         t = lambda m: time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() + 60 * m))
-        full = {**os.environ, "QWEN_STUB": str(d / "stub.sh"), "STUB_DIR": str(d), "LOG": str(d / "window.log"),
+        clean = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}   # a test compares the server's PYTHONPATH
+        full = {**clean, "QWEN_STUB": str(d / "stub.sh"), "STUB_DIR": str(d), "LOG": str(d / "window.log"),
                 "START_AFTER": t(-1), "BOOT_BY": t(boot_by), "SPEED_BY": t(boot_by), "RESTORE_AT": t(240), **env}
         proc = subprocess.run(["bash", str(HERE / "qwen_fit.sh")], env=full, capture_output=True, text=True, timeout=120)
         return proc.returncode, (d / "window.log").read_text(), d

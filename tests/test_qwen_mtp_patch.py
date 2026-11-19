@@ -5,7 +5,7 @@ import sys
 import types
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location("qwen_mtp_patch", Path(__file__).parent / "qwen_mtp_patch/sitecustomize.py")
+spec = importlib.util.spec_from_file_location("qwen_mtp_patch", Path(__file__).parent.parent / "qwen_mtp_patch/sitecustomize.py")
 mp = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mp)
 sys.meta_path[:] = [f for f in sys.meta_path if not isinstance(f, mp._Finder)]   # no hook on the real vLLM in tests

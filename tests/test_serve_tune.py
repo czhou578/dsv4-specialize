@@ -6,7 +6,7 @@ test (serve-tune/test_fp8_head.py) needs a GPU: serve-tune/test_fp8_head.sh runs
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "serve-tune"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "serve-tune"))
 from test_alloc_k import AllocTest  # noqa: E402,F401
 from test_prefill_probe import ProbeTest  # noqa: E402,F401
 from test_suffix_match import SuffixMatchTest  # noqa: E402,F401

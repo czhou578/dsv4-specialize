@@ -14,7 +14,7 @@ from unittest import mock
 
 import colinfer_floor as cf
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent   # the repo root
 SNAP = {"before_mb": 118000, "fall": 30 * cf.GB, "allocated": 26 * cf.GB, "reserved": 27 * cf.GB, "anon": 2 * cf.GB,
         "file": cf.GB // 2, "gpu": 28 * cf.GB}
 # The fake Python logs its arguments; the report runs on the real Python.

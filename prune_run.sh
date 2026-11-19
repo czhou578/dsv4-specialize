@@ -14,7 +14,7 @@ docker run --rm --pull=never --network none --memory 8g --name prune-build \
   -e HOME="$HOME" -e PYTHONDONTWRITEBYTECODE=1 -w "$HERE" \
   -v "$SERVER:$SERVER:ro" -v "$HERE:$HERE" \
   --entrypoint bash "$IMAGE" -c "
-    python3 -m unittest -q test_prune_experts &&
+    PYTHONPATH=. python3 -m unittest discover -q -s tests -p test_prune_experts.py &&
     python3 prune_experts.py --source $SRC --out $OUT --verify /opt/recipe/scripts/verify_tp1_manifest.py
     rc=\$?; [ -e $OUT ] && chown -hR $OWNER $OUT; exit \$rc"
 echo "$(date '+%F %T') build done: exit $?"

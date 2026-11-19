@@ -14,7 +14,7 @@ except ImportError:   # python -m unittest in the venv: the server image has pyt
 
 torch = pytest.importorskip("torch")
 np = pytest.importorskip("numpy")
-sys.path.insert(0, str(Path(__file__).resolve().parent / "image-patch"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "image-patch"))
 import layer_skip as ls  # noqa: E402
 
 H, HC = 64, 4

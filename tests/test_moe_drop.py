@@ -14,7 +14,7 @@ except ImportError:   # python -m unittest in the venv: the image of ./test_moe_
 torch = pytest.importorskip("torch")
 import torch.nn.functional as F  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "image-patch"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "image-patch"))
 import moe_drop as md  # noqa: E402
 
 E, K, M, SCALE = 216, 6, 256, 1.5
