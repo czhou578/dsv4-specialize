@@ -1,0 +1,13 @@
+{
+ "id": "L7",
+ "family": "L",
+ "trap": true,
+ "data": [
+  "repo"
+ ],
+ "prompt": "The repository is in /work/repo. repo/pair_watch.sh also stops Qwen when the swap-free memory falls below a swap floor. Find the variable of that swap floor and its default value in MB, with the line.",
+ "trap_probe": [
+  "SWAP_?FLOOR",
+  "swap[- ]free.{0,30}(below|floor)"
+ ]
+}

@@ -1,0 +1,30 @@
+{
+ "id": "L5",
+ "family": "L",
+ "trap": false,
+ "data": [
+  "repo"
+ ],
+ "prompt": "The repository is in /work/repo. How many routed experts per layer does repo/capture.py assume by default? Name the constant and give its line, and name one function that uses the constant as the default of an argument.",
+ "key": [
+  "EXPERTS",
+  "\\b216\\b",
+  "(:|line )43\\b",
+  "\\b(count|capture_one|run)\\b"
+ ],
+ "reference": {
+  "answer": "EXPERTS = 216 at repo/capture.py:43; count() uses experts=EXPERTS as a default.",
+  "evidence": [
+   {
+    "source": "repo/capture.py",
+    "quote": "EXPERTS = 216",
+    "line": 43
+   },
+   {
+    "source": "repo/capture.py",
+    "quote": "def count(routed, start=0, experts=EXPERTS):",
+    "line": 105
+   }
+  ]
+ }
+}

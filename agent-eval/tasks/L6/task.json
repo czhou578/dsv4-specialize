@@ -1,0 +1,31 @@
+{
+ "id": "L6",
+ "family": "L",
+ "trap": false,
+ "data": [
+  "repo"
+ ],
+ "prompt": "The repository is in /work/repo. repo/qwen_facts.py grades each answer with one letter. Which constant maps the letters to grades? Give the three letters with their grades, and the grade of a reply whose letter is none of them.",
+ "key": [
+  "GRADES",
+  "A\\W+CORRECT",
+  "B\\W+INCORRECT",
+  "C\\W+NOT_ATTEMPTED",
+  "UNGRADED"
+ ],
+ "reference": {
+  "answer": "GRADES maps A: CORRECT, B: INCORRECT, C: NOT_ATTEMPTED; any other letter gives UNGRADED.",
+  "evidence": [
+   {
+    "source": "repo/qwen_facts.py",
+    "quote": "GRADES = {\"A\": \"CORRECT\", \"B\": \"INCORRECT\", \"C\": \"NOT_ATTEMPTED\"}",
+    "line": 31
+   },
+   {
+    "source": "repo/qwen_facts.py",
+    "quote": "\"ABC\"), \"UNGRADED\")",
+    "line": 131
+   }
+  ]
+ }
+}

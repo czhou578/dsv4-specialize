@@ -1,0 +1,25 @@
+{
+ "id": "L4",
+ "family": "L",
+ "trap": false,
+ "data": [
+  "repo"
+ ],
+ "prompt": "The repository is in /work/repo. What is the default value of NEED_MB in repo/pair_run.sh? Its comment adds three amounts to get that value: give the three amounts.",
+ "key": [
+  "28600",
+  "25\\.42",
+  "\\b2 ?Gi?B",
+  "0\\.5"
+ ],
+ "reference": {
+  "answer": "NEED_MB defaults to 28600: the peak of d2 (25.42 GiB) + the floor of the watch (2 GiB) + 0.5 GiB.",
+  "evidence": [
+   {
+    "source": "repo/pair_run.sh",
+    "quote": "NEED_MB=${NEED_MB:-28600}   # the peak of d2 (25.42 GiB) + the floor of the watch (2 GiB) + 0.5 GiB",
+    "line": 30
+   }
+  ]
+ }
+}
