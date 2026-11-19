@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 SRC=${SRC:-tp1-botmask5-k160}
 OUT=${OUT:-tp1-prune5-k160}
-IMAGE=$(sed -n 's/^ *image: //p' compose-mask.yml)
+IMAGE=$(sed -n 's/^ *image: //p' compose/compose-mask.yml)
 SERVER=$HOME/Projects/DeepSeek-v4-Flash-One-DGX-Spark
 HERE=$PWD
 OWNER="$(id -u):$(id -g)"

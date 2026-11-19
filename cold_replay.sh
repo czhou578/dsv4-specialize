@@ -21,7 +21,7 @@
 #   tmux new -d -s cold "POINTS='r0 s20 s15 r0-2 s20-2 s15-2' START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/cold_replay.sh"
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/cold-replay.log}
 RESTORE_TAG=cold
-TEST_COMPOSE="-f compose-mask.yml -f serve-tune/compose-tune.yml"
+TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml"
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 POINTS=${POINTS:-r0 m1 d1 md}

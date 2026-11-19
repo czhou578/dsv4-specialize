@@ -15,7 +15,7 @@
 D=$(cd "$(dirname "$0")" && pwd)
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/junk-capture.log}
 RESTORE_TAG=junkcap
-TEST_COMPOSE="-f compose-capture.yml -f compose-capture-junk.yml"
+TEST_COMPOSE="-f compose/compose-capture.yml -f compose/compose-capture-junk.yml"
 TEST_PROJECT=dsv4-capture
 MASK=dsv4-capture-deepseek-v4-flash-capture-1
 export SPEED_BY=${SPEED_BY:-${BOOT_BY:-}}
@@ -131,7 +131,7 @@ case $CLIENT in
   rank) NEEDS="$DATA/sessions.jsonl $DATA/tools.json $S/capture.py";;
   *) log "ERROR: unknown CLIENT $CLIENT (junk or rank)"; exit 1;;
 esac
-for need in $NEEDS $S/compose-capture.yml $S/compose-capture-junk.yml; do
+for need in $NEEDS $S/compose/compose-capture.yml $S/compose/compose-capture-junk.yml; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ] || [ "$(now)" -ge $BOOT_BY_S ]; do sleep 30; done

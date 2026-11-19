@@ -83,7 +83,7 @@ The negative results are part of the record. Each one has its plan in [plans/](p
 ## How it works
 
 1. **Capture.** A patched server records the experts that the model picks for each token of the bot's own traffic:
-   34 calibration segments, 1.75 M tokens ([capture.py](capture.py), [compose-capture.yml](compose-capture.yml),
+   34 calibration segments, 1.75 M tokens ([capture.py](capture.py), [compose-capture.yml](compose/compose-capture.yml),
    [image-patch/](image-patch/)).
 2. **Rank.** `capture.py --rank` orders the experts of each layer by their use. The rank of the live model is
    [results/expert_rank_bot.json](results/expert_rank_bot.json).
@@ -122,7 +122,7 @@ flowchart LR
 [topk_checkpoint.py](topk_checkpoint.py) and [prune_experts.py](prune_experts.py). Read them first.
 
 **Shared by all stages:** [run_lib.sh](run_lib.sh) (the safety rules of every run script),
-[compose-mask.yml](compose-mask.yml) (the base of every test boot), [speed_result.py](speed_result.py) (the speed
+[compose-mask.yml](compose/compose-mask.yml) (the base of every test boot), [speed_result.py](speed_result.py) (the speed
 result of a test point) and [overnight_guard.sh](overnight_guard.sh) (it restores the live server at night if the
 server is down).
 
@@ -139,8 +139,8 @@ the bot rank followed on 2026-11-07.
   [PLAN_PHYSICAL_PRUNE.md](plans/PLAN_PHYSICAL_PRUNE.md). The summary is [PRUNE.md](PRUNE.md) §1–§5.
 - Tools: [capture.py](capture.py), [mask_checkpoint.py](mask_checkpoint.py), [topk_checkpoint.py](topk_checkpoint.py),
   [prune_experts.py](prune_experts.py), [prune_run.sh](prune_run.sh) and [check_routed.py](check_routed.py).
-- Test boots: [compose-capture.yml](compose-capture.yml), [serve-v1.sh](serve-v1.sh) and
-  [compose-mem073.yml](compose-mem073.yml).
+- Test boots: [compose-capture.yml](compose/compose-capture.yml), [serve-v1.sh](image-patch/serve-v1.sh) and
+  [compose-mem073.yml](compose/compose-mem073.yml).
 - Run scripts: [topk_run.sh](topk_run.sh), [prune_boot.sh](prune_boot.sh), [mem_boot.sh](mem_boot.sh) and
   [draft_test.sh](draft_test.sh).
 - Result: [results/expert_rank_bot.json](results/expert_rank_bot.json), the expert rank of the live model.
@@ -167,7 +167,7 @@ judge found no gain. So nothing changed on the live server.
 - Plan: [PLAN_FEWER_EXPERTS.md](plans/PLAN_FEWER_EXPERTS.md). The summary is [PRUNE.md](PRUNE.md) §6.
 - Tools: the router patch in [image-patch/](image-patch/) (`moe_drop.py`, `router-drop.diff` and `build_router.sh`),
   [profile_report.py](profile_report.py) and [fewer_report.py](fewer_report.py).
-- Test boot: [compose-drop.yml](compose-drop.yml).
+- Test boot: [compose-drop.yml](compose/compose-drop.yml).
 - Run scripts: [fewer_night.sh](fewer_night.sh) and [fewer_stepf.sh](fewer_stepf.sh).
 
 ### 4. Tune the serving settings (2026-11-10): the KV pin is live
@@ -214,7 +214,7 @@ model of the router plan.
 - Plan: [PLAN_LOADER_PATCH.md](plans/PLAN_LOADER_PATCH.md).
 - Tools: [prune_experts.py](prune_experts.py) (§5.1 of the plan), and the patch (§5.2):
   [image-patch/per-layer-experts.diff](image-patch/per-layer-experts.diff),
-  [image-patch/build_perlayer.sh](image-patch/build_perlayer.sh) and [compose-perlayer.yml](compose-perlayer.yml).
+  [image-patch/build_perlayer.sh](image-patch/build_perlayer.sh) and [compose-perlayer.yml](compose/compose-perlayer.yml).
 - Checks: [loader_kernel_check.py](loader_kernel_check.py). Run script: [loader_window.sh](loader_window.sh).
 - The deploy review: [PLAN_MD_REVIEW.md](plans/PLAN_MD_REVIEW.md). Run scripts: [review_live.sh](review_live.sh)
   and [review_window.sh](review_window.sh), with the safety net [review_finish.sh](review_finish.sh). Report:
@@ -235,7 +235,7 @@ fits, and nothing changed on the live server. The patch, the heal and the script
 - Plan: [PLAN_FEWER_LAYERS.md](plans/PLAN_FEWER_LAYERS.md).
 - The patch: [image-patch/layer_skip.py](image-patch/layer_skip.py) (the skip set, the probe sums, the skip file),
   [image-patch/layer-skip.diff](image-patch/layer-skip.diff), [image-patch/build_skip.sh](image-patch/build_skip.sh),
-  [compose-skip.yml](compose-skip.yml) and [compose-skip-v1.yml](compose-skip-v1.yml). Tests:
+  [compose-skip.yml](compose/compose-skip.yml) and [compose-skip-v1.yml](compose/compose-skip-v1.yml). Tests:
   [test_layer_skip.py](test_layer_skip.py) and [test_layer_skip_gpu.py](test_layer_skip_gpu.py), run by
   [test_layer_skip.sh](test_layer_skip.sh) in the server image.
 - The client: [layer_screen.py](layer_screen.py) (the data pick, the BI pass, the screen, the greedy rounds, the
@@ -394,12 +394,12 @@ moved here from the bot repo's `model_eval/` on 2026-11-08.
 
 | File | Use |
 |---|---|
-| [compose-mask.yml](compose-mask.yml) | Boots `tp1-${MASK_NAME}-k${MASK_K}`. `DRAFT_DIR` mounts another DSpark draft; `MASK_EXTRA_ARGS` adds vLLM flags |
-| [compose-mem073.yml](compose-mem073.yml) | Override for `compose-mask.yml`: `GPU_MEMORY_UTILIZATION` 0.73 and 128k context (`PLAN_MODEL_ROUTER.md` §3) |
-| [compose-drop.yml](compose-drop.yml) | Override for `compose-mask.yml`: the router patch with its rule (`MOE_DROP`, `MOE_NORM`, `MOE_LAYERS`) and an 8 GiB KV cache (`plans/PLAN_FEWER_EXPERTS.md` §6) |
-| [compose-perlayer.yml](compose-perlayer.yml) | Override for `compose-mask.yml`: the loader patch, so a folder with a different expert count in each layer loads (`plans/PLAN_LOADER_PATCH.md` §4). A uniform folder loads as in the stock image. Build the two files first with `image-patch/build_perlayer.sh` |
-| [compose-capture.yml](compose-capture.yml) | The expert capture: the stock model with Model Runner V1, no DSpark, `--enable-return-routed-experts` and the weights patch. `ROUTING_PROFILE=1` adds the routing profile; `CAPTURE_UTIL` and `CAPTURE_EXTRA_ARGS` change the boot check and add vLLM flags |
-| [serve-v1.sh](serve-v1.sh) | Runs the server's serve script with Model Runner V1 (for `compose-capture.yml` only) |
+| [compose-mask.yml](compose/compose-mask.yml) | Boots `tp1-${MASK_NAME}-k${MASK_K}`. `DRAFT_DIR` mounts another DSpark draft; `MASK_EXTRA_ARGS` adds vLLM flags |
+| [compose-mem073.yml](compose/compose-mem073.yml) | Override for `compose-mask.yml`: `GPU_MEMORY_UTILIZATION` 0.73 and 128k context (`PLAN_MODEL_ROUTER.md` §3) |
+| [compose-drop.yml](compose/compose-drop.yml) | Override for `compose-mask.yml`: the router patch with its rule (`MOE_DROP`, `MOE_NORM`, `MOE_LAYERS`) and an 8 GiB KV cache (`plans/PLAN_FEWER_EXPERTS.md` §6) |
+| [compose-perlayer.yml](compose/compose-perlayer.yml) | Override for `compose-mask.yml`: the loader patch, so a folder with a different expert count in each layer loads (`plans/PLAN_LOADER_PATCH.md` §4). A uniform folder loads as in the stock image. Build the two files first with `image-patch/build_perlayer.sh` |
+| [compose-capture.yml](compose/compose-capture.yml) | The expert capture: the stock model with Model Runner V1, no DSpark, `--enable-return-routed-experts` and the weights patch. `ROUTING_PROFILE=1` adds the routing profile; `CAPTURE_UTIL` and `CAPTURE_EXTRA_ARGS` change the boot check and add vLLM flags |
+| [serve-v1.sh](image-patch/serve-v1.sh) | Runs the server's serve script with Model Runner V1 (for `compose-capture.yml` only) |
 | [image-patch/](image-patch/) | The weights patch (`PLAN_BETTER_RANK.md` §4.1): the patched `base_router.py` and `routed_experts_capturer.py`, and `capture-weights.diff`, the change against the image. `patch -R -p1` with the diff gives back the original files. The router patch (`PLAN_FEWER_EXPERTS.md` §6): `moe_drop.py` (the drop rule and the gain anchor) and `router-drop.diff`; `build_router.sh` applies the diff to the image's router file (not in git). The loader patch (`plans/PLAN_LOADER_PATCH.md` §4): `per-layer-experts.diff` changes the image's `exl3.py` and DeepSeek V4 `model.py`; `build_perlayer.sh` applies it and writes `image-patch/perlayer/` (not in git) |
 
 **Run scripts.** Each script stops the live server, runs its test boots and restores the live server. Read the

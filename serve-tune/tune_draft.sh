@@ -11,7 +11,7 @@
 # POINTS (default "d0:k64:5 w1:k96:5 w2:k96:6 w3:k128:5 w4:k128:6") lists the points as name:draft:depth.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/tune-draft.log}
 RESTORE_TAG=draft-wide
-TEST_COMPOSE="-f compose-mask.yml -f serve-tune/compose-tune.yml"
+TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml"
 source "$(cd "$(dirname "$0")/.." && pwd)/run_lib.sh"   # run_lib.sh is in the repo root
 
 POINTS=${POINTS:-d0:k64:5 w1:k96:5 w2:k96:6 w3:k128:5 w4:k128:6}

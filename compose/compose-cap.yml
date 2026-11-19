@@ -1,6 +1,6 @@
 # The context length of a test boot (plans/PLAN_CODE226_DEPLOY.md §5). compose-mask.yml fixes 256000; CAP_LEN sets
 # another one. With the KV pin of serve-tune/compose-tune.yml (TUNE_KV_BYTES), it gives the settings of a context cap.
-#   docker compose -f compose-mask.yml -f serve-tune/compose-tune.yml -f compose-perlayer.yml -f compose-cap.yml ...
+#   docker compose -f compose/compose-mask.yml -f serve-tune/compose-tune.yml -f compose/compose-perlayer.yml -f compose/compose-cap.yml ...
 services:
   deepseek-v4-flash-mask:
     environment:

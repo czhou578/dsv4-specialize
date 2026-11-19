@@ -15,7 +15,7 @@
 D=$(cd "$(dirname "$0")" && pwd)
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/review-code226.log}
 RESTORE_TAG=review
-TEST_COMPOSE="-f compose-mask.yml -f serve-tune/compose-tune.yml -f compose-perlayer.yml -f compose-cap.yml"
+TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml -f compose/compose-perlayer.yml -f compose/compose-cap.yml"
 source "$D/run_lib.sh"
 
 POINTS=${POINTS:-md code226}
@@ -133,7 +133,7 @@ PYEOF
 [ -n "${REVIEW_STUB:-}" ] && source "$REVIEW_STUB"   # the dry run of test_review_code226.py: stub servers and clients
 
 log "review window start (points $POINTS; boot by $BOOT_BY; speed by $SPEED_BY; restore at $RESTORE_AT)"
-for need in $S/compose-cap.yml $S/compose-perlayer.yml $S/image-patch/perlayer/exl3.py \
+for need in $S/compose/compose-cap.yml $S/compose/compose-perlayer.yml $S/image-patch/perlayer/exl3.py \
   $S/image-patch/perlayer/deepseek_v4_model.py $S/serve-tune/prefill_probe.py $R/baseline-k216.jsonl; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done

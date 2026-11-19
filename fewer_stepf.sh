@@ -17,7 +17,7 @@
 # defaults to the live draft. RESTORE_AT ends the run (a rerun skips the done prompts). JUDGE=0 skips the judge.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/fewer-stepf.log}
 RESTORE_TAG=stepf
-TEST_COMPOSE="-f compose-mask.yml -f compose-drop.yml"
+TEST_COMPOSE="-f compose/compose-mask.yml -f compose/compose-drop.yml"
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 POINT=${POINT:?set POINT, e.g. fewer-c6}

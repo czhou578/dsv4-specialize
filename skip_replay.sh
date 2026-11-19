@@ -18,7 +18,7 @@
 #     ~/Projects/dsv4-specialize/skip_replay.sh"
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/skip-replay.log}
 RESTORE_TAG=skip-replay
-TEST_COMPOSE="-f compose-mask.yml -f serve-tune/compose-tune.yml -f compose-perlayer.yml -f compose-skip.yml"
+TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml -f compose/compose-perlayer.yml -f compose/compose-skip.yml"
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 POINTS=${POINTS:-s0 s1 s1h}
@@ -98,7 +98,7 @@ spoint() {  # $1 point; 0 done, 1 boot failed, 2 skipped, 9 safety failure
 }
 
 log "replay window start (points $POINTS; boot by $BOOT_BY; restore at $RESTORE_AT)"
-for need in $S/image-patch/skip/deepseek_v4_model.py $S/compose-skip.yml $S/serve-tune/prefill_probe.py \
+for need in $S/image-patch/skip/deepseek_v4_model.py $S/compose/compose-skip.yml $S/serve-tune/prefill_probe.py \
   $R/baseline-k216.jsonl $S/tp1-$MASK_NAME-k$MASK_K/rank-sliced-tp1-manifest.json; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done

@@ -4,7 +4,7 @@
 # A uniform folder loads as in the stock image.
 # Build the two files first: image-patch/build_perlayer.sh (else Docker mounts an empty folder and the boot fails).
 #   MASK_NAME=prunemd5 MASK_K=149 TUNE_LABEL=lp-p1 \
-#     docker compose -f compose-mask.yml -f serve-tune/compose-tune.yml -f compose-perlayer.yml up -d
+#     docker compose -f compose/compose-mask.yml -f serve-tune/compose-tune.yml -f compose/compose-perlayer.yml up -d
 services:
   deepseek-v4-flash-mask:
     volumes:

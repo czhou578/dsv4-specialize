@@ -10,7 +10,7 @@
 #   at RESTORE_AT, when the restore starts. Any other failure: the safe action (restore).
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/mem-boot.log}
 RESTORE_TAG=mem
-TEST_COMPOSE="-f compose-mask.yml -f compose-mem073.yml"
+TEST_COMPOSE="-f compose/compose-mask.yml -f compose/compose-mem073.yml"
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 log "memory boot start (boot by $BOOT_BY; speed by $SPEED_BY; restore at $RESTORE_AT)"

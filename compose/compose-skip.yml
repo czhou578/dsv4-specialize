@@ -10,7 +10,7 @@
 #   prefix cache goes off only with the vLLM flag). The client writes ./skip-out/skip.json; the patch writes
 #   ./skip-out/layer_probe.npz and layer_gram.npz. Make ./skip-out first (mkdir), else Docker makes it for root.
 #   MASK_NAME=prunemd5 MASK_K=149 TUNE_LABEL=skip-s1 TUNE_KV_BYTES=7784628224 LAYER_SKIP=L17 docker compose \
-#     -f compose-mask.yml -f serve-tune/compose-tune.yml -f compose-perlayer.yml -f compose-skip.yml up -d
+#     -f compose/compose-mask.yml -f serve-tune/compose-tune.yml -f compose/compose-perlayer.yml -f compose/compose-skip.yml up -d
 services:
   deepseek-v4-flash-mask:
     environment:
@@ -21,7 +21,7 @@ services:
       VLLM_DISABLE_COMPILE_CACHE: "1"
       MODE: "${SKIP_MODE:-dspark}"
     volumes:
-      - ./skip-out:/skip
+      - /home/colin-spark/Projects/dsv4-specialize/skip-out:/skip
       - type: bind
         source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/skip/deepseek_v4_model.py"
         target: /opt/vllm/vllm/models/deepseek_v4/nvidia/model.py

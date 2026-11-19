@@ -155,7 +155,7 @@ them: the probe and its test first, then the compose file and the run script.
 `~/Projects/dsv4-specialize`, so the window can start only after the files are in that folder.
 
 **Gate.** All unit tests pass (`python -m unittest`). `bash -n tune_night.sh` passes.
-`docker compose -f compose-mask.yml -f compose-tune.yml config` resolves.
+`docker compose -f compose/compose-mask.yml -f compose-tune.yml config` resolves.
 
 **Result (2026-11-10).** The gate passes. Two more checks passed:
 

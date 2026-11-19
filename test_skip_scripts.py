@@ -68,7 +68,7 @@ class ProbeScriptTest(unittest.TestCase):
     def test_the_v1_boot_after_a_failed_v2_boot(self):
         rc, log, _ = self.run_script(STUB_BOOT_FAIL="skip-probe")
         self.assertIn("one boot with Model Runner V1", log)
-        self.assertIn("compose-skip.yml -f compose-skip-v1.yml", log.split("STUB boot skip-probe-v1")[1].splitlines()[0])
+        self.assertIn("compose-skip.yml -f compose/compose-skip-v1.yml", log.split("STUB boot skip-probe-v1")[1].splitlines()[0])
         self.assertIn("STUB client", log)
 
     def test_two_failed_boots_restore_with_no_client(self):
