@@ -1,0 +1,131 @@
+[
+ {
+  "url": "https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Mixture_of_experts"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Attention_Is_All_You_Need"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Large_language_model"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/GPT-3"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/BERT_(language_model)"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Llama_(language_model)"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Mistral_AI"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/DeepSeek"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Nvidia"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Hopper_(microarchitecture)"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Ampere_(microarchitecture)"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Blackwell_(microarchitecture)"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Volta_(microarchitecture)"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/CUDA"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/ROCm"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Tensor_Processing_Unit"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Cerebras"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Rust_(programming_language)"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/LLVM"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Clang"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Chris_Lattner"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Mozilla"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Global_interpreter_lock"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/CPython"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/PyPy"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/PyTorch"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/TensorFlow"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Hugging_Face"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Quantization_(signal_processing)"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Bfloat16_floating-point_format"
+ },
+ {
+  "url": "https://en.wikipedia.org/wiki/Half-precision_floating-point_format"
+ },
+ {
+  "url": "https://peps.python.org/pep-0703/"
+ },
+ {
+  "url": "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"
+ },
+ {
+  "url": "https://blog.vllm.ai/2023/06/20/vllm.html"
+ },
+ {
+  "url": "https://docs.python.org/3/glossary.html"
+ },
+ {
+  "url": "https://doc.rust-lang.org/book/ch16-01-threads.html"
+ },
+ {
+  "url": "https://www.cerebras.ai/press-release/cerebras-announces-third-generation-wafer-scale-engine",
+  "title": "Cerebras Systems Unveils the Wafer Scale Engine 3 (WSE-3)",
+  "text": "Cerebras Systems today announced the Wafer Scale Engine 3 (WSE-3), its third-generation wafer-scale AI processor and the basis of the CS-3 system. The press release lists the on-chip SRAM capacity, the memory bandwidth and the fabric bandwidth of the WSE-3.",
+  "status": 404
+ },
+ {
+  "url": "https://docs.python.org/3.13/howto/free-threading-python.html",
+  "title": "Python support for free threading - Python 3.13 documentation",
+  "text": "Starting with the 3.13 release, CPython has support for a build of Python called free threading where the global interpreter lock (GIL) is disabled.",
+  "status": 404
+ },
+ {
+  "url": "https://www.nvidia.com/en-us/data-center/dgx-a100/",
+  "title": "NVIDIA DGX A100: The Universal System for AI Infrastructure",
+  "text": "NVIDIA DGX A100 is the universal system for all AI workloads, offering compute density, performance, and flexibility in an AI system with eight A100 GPUs.",
+  "status": 404
+ }
+]

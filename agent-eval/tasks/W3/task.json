@@ -1,0 +1,24 @@
+{
+ "id": "W3",
+ "family": "W",
+ "trap": false,
+ "prompt": "Python 3.13 introduced an experimental free-threaded build of CPython (no global interpreter lock) as part of a PEP. That PEP reports the execution overhead of the build on pyperformance. What is the overhead on AMD Zen 3 for programs with one thread, and for programs with multiple threads? Name the PEP number and give both percentages. Use only the search and fetch tools: the answer must come from the pages that you fetch, not from memory. In the report, give the answer, and as evidence the URL of each page that you use with an exact quote from it.",
+ "key": [
+  "\\b703\\b",
+  "\\b5\\s?%|\\b5 percent",
+  "\\b7\\s?%|\\b7 percent"
+ ],
+ "reference": {
+  "answer": "PEP 703. On AMD Zen 3 the execution overhead on pyperformance 1.0.6 is 5% with one thread and 7% with multiple threads.",
+  "evidence": [
+   {
+    "source": "https://en.wikipedia.org/wiki/Global_interpreter_lock",
+    "quote": "In Python 3.13, an experimental \"free-threaded\" build of CPython was introduced as part of PEP 703"
+   },
+   {
+    "source": "https://peps.python.org/pep-0703/",
+    "quote": "Execution Overhead on pyperformance 1.0.6\n\nIntel Skylake\nAMD Zen 3\n\nOne thread\n6%\n5%\n\nMultiple threads\n8%\n7%"
+   }
+  ]
+ }
+}

@@ -1,0 +1,23 @@
+{
+ "id": "W2",
+ "family": "W",
+ "trap": false,
+ "prompt": "The LLVM project started in 2000 at a university, under the direction of two people. One of them later created the Swift programming language. At which university did that person earn his Bachelor of Science degree, and in what year did he graduate? Use only the search and fetch tools: the answer must come from the pages that you fetch, not from memory. In the report, give the answer, and as evidence the URL of each page that you use with an exact quote from it.",
+ "key": [
+  "Portland",
+  "\\b2000\\b"
+ ],
+ "reference": {
+  "answer": "Chris Lattner (who created Swift) earned his Bachelor of Science degree in computer science at the University of Portland, graduating in 2000.",
+  "evidence": [
+   {
+    "source": "https://en.wikipedia.org/wiki/LLVM",
+    "quote": "The LLVM project started in 2000 at the University of Illinois Urbana–Champaign, under the direction of Vikram Adve and Chris Lattner."
+   },
+   {
+    "source": "https://en.wikipedia.org/wiki/Chris_Lattner",
+    "quote": "Lattner studied computer science at the University of Portland, graduating with a Bachelor of Science degree in 2000."
+   }
+  ]
+ }
+}
