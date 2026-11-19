@@ -48,7 +48,7 @@ port 8890 one after the other, and restores the live server. Three windows ran b
 | Step 2: changes to the output | 16:04–19:46 | H1, N1, N2, N3, H0 | `tune_replay.sh` |
 | Step 3: wider drafts | 19:46–22:40 | D0, W1–W4 | `tune_draft.sh` |
 
-`../run_lib.sh` gives every window the same safety rules: one model in memory, a memory floor before each boot,
+`../scripts/run_lib.sh` gives every window the same safety rules: one model in memory, a memory floor before each boot,
 deadlines, a memory watch that stops a client below 1 GiB, and the restore. After each window, port 8888 answered.
 
 **Speed.** The bot decode test sends recorded bot requests and measures the decode rate. Each point has 5 runs; its

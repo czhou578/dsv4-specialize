@@ -11,7 +11,7 @@
 # RESTORE_AT stops the runs; a rerun skips the done prompts.
 # CAUTION: this stops the bot's model server for about 7.5 h. Start it only with the user's go, pause the Hermes cron
 # jobs first, and start the overnight guard with GUARD_AT after RESTORE_AT:
-#   tmux new -d -s window "START_AFTER=... BOOT_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/review_window.sh"
+#   tmux new -d -s window "START_AFTER=... BOOT_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/scripts/review_window.sh"
 # Build image-patch/perlayer/ first (image-patch/build_perlayer.sh), or the boot fails.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/review-window.log}
 RESTORE_TAG=review

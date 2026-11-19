@@ -23,7 +23,7 @@
 #      qnd     as qn, while the bot decode test runs on DeepSeek; compare DeepSeek with dspeed and both
 # Each result line also gives the lowest swap-free memory, from the log of tmux pair-swap (results/pair-swap.log).
 # CAUTION: out of memory, the Spark can do a hard reset. The watch stops Qwen below 2 GiB. Start this only with the
-# user's go:   tmux new -d -s pair "TAG=nocap ~/Projects/dsv4-specialize/pair_run.sh"
+# user's go:   tmux new -d -s pair "TAG=nocap ~/Projects/dsv4-specialize/scripts/pair_run.sh"
 set -u
 S=${PAIR_S:-/home/colin-spark/Projects/dsv4-specialize}   # PAIR_S: a test folder (test_pair_scripts.py)
 R=$S/results W=/home/colin-spark/Projects/stock-research-model-eval

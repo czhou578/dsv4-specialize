@@ -50,7 +50,7 @@ class ProbeScriptTest(unittest.TestCase):
         t = lambda m: time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() + 60 * m))
         full = {**os.environ, "SKIP_STUB": str(d / "stub.sh"), "STUB_DIR": str(d), "LOG": str(d / "window.log"),
                 "START_AFTER": t(-1), "BOOT_BY": t(60), "SPEED_BY": t(60), "RESTORE_AT": t(240), **env}
-        proc = subprocess.run(["bash", str(HERE / "skip_probe.sh")], env=full, capture_output=True, text=True,
+        proc = subprocess.run(["bash", str(HERE / "scripts/skip_probe.sh")], env=full, capture_output=True, text=True,
                               timeout=120)
         self.addCleanup(self.tmp.cleanup)
         return proc.returncode, (d / "window.log").read_text(), d
@@ -150,7 +150,7 @@ class ReplayScriptTest(unittest.TestCase):
         full = {**os.environ, "SKIP_STUB": str(d / "stub.sh"), "STUB_DIR": str(d), "LOG": str(d / "window.log"),
                 "START_AFTER": t(-1), "BOOT_BY": t(600), "SPEED_BY": t(600), "RESTORE_AT": t(900),
                 "S1_SET": "F24", "HEAL_FILE": str(d / "heal.npz"), "STUB_F_s0": str(self.LIVE), **env}
-        proc = subprocess.run(["bash", str(HERE / "skip_replay.sh")], env=full, capture_output=True, text=True,
+        proc = subprocess.run(["bash", str(HERE / "scripts/skip_replay.sh")], env=full, capture_output=True, text=True,
                               timeout=120)
         return proc.returncode, (d / "window.log").read_text(), d
 

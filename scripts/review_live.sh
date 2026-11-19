@@ -3,7 +3,7 @@
 # no downtime), once for each label of LABELS, then the check of each run. The runs are clients of the live server:
 # a bot message waits behind the current request. A memory watch stops a run below 1 GiB available; a rerun skips
 # the done prompts. The last log line is "live runs done", which review_window.sh waits for.
-#   tmux new -d -s live "LABELS='live-1 live-2' ~/Projects/dsv4-specialize/review_live.sh"
+#   tmux new -d -s live "LABELS='live-1 live-2' ~/Projects/dsv4-specialize/scripts/review_live.sh"
 set -u
 S=/home/colin-spark/Projects/dsv4-specialize
 W=/home/colin-spark/Projects/stock-research-model-eval

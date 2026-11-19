@@ -71,8 +71,8 @@ The owner chose K 208 on 2026-11-14. Two more changes then gave more margin with
 
 ## 5. Both servers at once (§8.1 to §8.3)
 
-[pair_run.sh](pair_run.sh) boots Qwen beside the running DeepSeek, with no stop of DeepSeek, and runs load tests.
-[pair_watch.sh](pair_watch.sh) checks the memory every second. Below 2 GiB available, it stops Qwen, and never
+[pair_run.sh](scripts/pair_run.sh) boots Qwen beside the running DeepSeek, with no stop of DeepSeek, and runs load tests.
+[pair_watch.sh](scripts/pair_watch.sh) checks the memory every second. Below 2 GiB available, it stops Qwen, and never
 DeepSeek.
 
 | Test (text only, 2026-11-14) | Lowest available | Result |
@@ -87,7 +87,7 @@ DeepSeek.
   because of the swap, and the watch is the guard against a hard reset.
 - **The two models share the memory bandwidth.** Each model alone keeps its speed. When both decode at once, each runs
   at about half speed. A router that sends one request at a time keeps the full speed.
-- **The DeepSeek context cap is not used.** [cap_switch.sh](cap_switch.sh) cuts the DeepSeek context to 160k for
+- **The DeepSeek context cap is not used.** [cap_switch.sh](scripts/cap_switch.sh) cuts the DeepSeek context to 160k for
   about 0.35 GiB. That is too small a gain for the loss of the 256k context.
 
 ## 6. Vision (§8.4 to §8.9)

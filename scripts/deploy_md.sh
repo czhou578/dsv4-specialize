@@ -6,13 +6,13 @@
 #              threshold 0.8, with a backup of config.yaml (a rollback puts the backup back by hand).
 # The env can set EXPECT_GIB (the weights of the boot check) after the review window measures them.
 # The modes:
-#   ./deploy_md.sh prepare        §6: the files in the server folder, with the live server up (no downtime)
-#   ./deploy_md.sh readings TAG   §5 and §8: the /metrics counters and the bot decode test (5 runs) on port 8888
-#   ./deploy_md.sh check [LOG]    the checks of §7 step 4 on a boot log (default: the log of the new container)
-#   ./deploy_md.sh switch         §7: about 4 min of downtime. Only the user starts it, with a `!` command:
-#     tmux new -d -s deploy "DEPLOY=code226t5 ~/Projects/dsv4-specialize/deploy_md.sh switch"
-#   ./deploy_md.sh vars           print the values of the profile
-#   ./deploy_md.sh hermes-cap     the Hermes change of the cap alone (NO_RESTART=1: no restart of hermes-gateway)
+#   ./scripts/deploy_md.sh prepare        §6: the files in the server folder, with the live server up (no downtime)
+#   ./scripts/deploy_md.sh readings TAG   §5 and §8: the /metrics counters and the bot decode test (5 runs) on port 8888
+#   ./scripts/deploy_md.sh check [LOG]    the checks of §7 step 4 on a boot log (default: the log of the new container)
+#   ./scripts/deploy_md.sh switch         §7: about 4 min of downtime. Only the user starts it, with a `!` command:
+#     tmux new -d -s deploy "DEPLOY=code226t5 ~/Projects/dsv4-specialize/scripts/deploy_md.sh switch"
+#   ./scripts/deploy_md.sh vars           print the values of the profile
+#   ./scripts/deploy_md.sh hermes-cap     the Hermes change of the cap alone (NO_RESTART=1: no restart of hermes-gateway)
 # DRY_RUN=1 with switch runs every check of the files and of the live server, then the checks of §7 step 4 on the
 # boot log of the review window, and ends before any server action.
 # The switch waits until the bot is idle (up to 30 min) and refuses to start in the cron window. If the new server
@@ -35,7 +35,7 @@ export MAIN_COMPOSE=${MAIN_COMPOSE:-/home/colin-spark/Projects/DeepSeek-v4-Flash
 export MAIN_CONTAINER=${MAIN_CONTAINER:-deepseek-v4-flash-$OLD_NAME-deepseek-v4-flash-1}
 # run_lib.sh needs the deadlines of a test window; the functions that this script calls do not use them
 export LOG=${LOG:-$S/logs/deploy-$NEW_NAME.log} RESTORE_TAG=deploy START_AFTER=now BOOT_BY=now SPEED_BY=now RESTORE_AT=now
-source "$S/run_lib.sh"   # SERVER, W, PY, R, MAIN, MAIN_COMPOSE, log, busy, stop_main, wait_mem, restore, ...
+source "$S/scripts/run_lib.sh"   # SERVER, W, PY, R, MAIN, MAIN_COMPOSE, log, busy, stop_main, wait_mem, restore, ...
 
 NEW=$SERVER/compose-$NEW_NAME.yml
 NEW_PROJECT=deepseek-v4-flash-$NEW_NAME
@@ -176,7 +176,7 @@ rollback() {
 switch() {
   local t0 ok=0 boot_log=$R/boot-deploy-$NEW_NAME.log
   log "deploy $NEW_NAME: stop $MAIN_COMPOSE, then start $NEW (DRY_RUN=${DRY_RUN:-0})"
-  check_files || fail "the files are not in place: run ./deploy_md.sh prepare"
+  check_files || fail "the files are not in place: run ./scripts/deploy_md.sh prepare"
   new_running && fail "$NEW_CONTAINER runs already"
   main_running && healthy || fail "the live server is not up and healthy: no deploy"
   [ "$(servers | wc -l)" = 1 ] || fail "another server container runs: $(servers | tr '\n' ' ')"
@@ -189,7 +189,7 @@ switch() {
   GUARD_AT=$(date -d 'now + 90 minutes' '+%F %T')
   tmux kill-session -t deploy-guard 2> /dev/null
   tmux new -d -s deploy-guard "GUARD_AT='$GUARD_AT' RECHECK_AT='$GUARD_AT' STOP_PROJECTS='dsv4-mask $NEW_PROJECT' \
-MAIN_COMPOSE='$MAIN_COMPOSE' MAIN_CONTAINER='$MAIN' LOG=$S/logs/deploy-guard.log $S/overnight_guard.sh"
+MAIN_COMPOSE='$MAIN_COMPOSE' MAIN_CONTAINER='$MAIN' LOG=$S/logs/deploy-guard.log $S/scripts/overnight_guard.sh"
   log "the deploy-guard restores $MAIN_COMPOSE if port 8888 is down at $GUARD_AT"
   curl -s --max-time 30 $LIVE/metrics > "$R/metrics-deploy-old-final.txt"
   if ! stop_main; then
@@ -211,8 +211,8 @@ MAIN_COMPOSE='$MAIN_COMPOSE' MAIN_CONTAINER='$MAIN' LOG=$S/logs/deploy-guard.log
   [ $ok = 1 ] || { log "ERROR: $NEW_NAME is not healthy after $(( $(now) - t0 )) s"; rollback; exit 1; }
   log "$NEW_NAME healthy after $(( $(now) - t0 )) s"
   checks "$boot_log" || { rollback; exit 1; }
-  hermes_cap || log "ERROR: Hermes keeps its old values; set them by hand (./deploy_md.sh hermes-cap)"
-  log "DEPLOY DONE: the live server is $NEW. Next: DEPLOY=${DEPLOY:-md149t5} ./deploy_md.sh readings after"
+  hermes_cap || log "ERROR: Hermes keeps its old values; set them by hand (./scripts/deploy_md.sh hermes-cap)"
+  log "DEPLOY DONE: the live server is $NEW. Next: DEPLOY=${DEPLOY:-md149t5} ./scripts/deploy_md.sh readings after"
 }
 
 case "${1:-}" in

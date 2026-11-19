@@ -79,7 +79,7 @@ class WindowTest(unittest.TestCase):
         clean = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}   # a test compares the server's PYTHONPATH
         full = {**clean, "QWEN_STUB": str(d / "stub.sh"), "STUB_DIR": str(d), "LOG": str(d / "window.log"),
                 "START_AFTER": t(-1), "BOOT_BY": t(boot_by), "SPEED_BY": t(boot_by), "RESTORE_AT": t(240), **env}
-        proc = subprocess.run(["bash", str(HERE / "qwen_fit.sh")], env=full, capture_output=True, text=True, timeout=120)
+        proc = subprocess.run(["bash", str(HERE / "scripts/qwen_fit.sh")], env=full, capture_output=True, text=True, timeout=120)
         return proc.returncode, (d / "window.log").read_text(), d
 
     def test_a_normal_window(self):
@@ -230,7 +230,7 @@ class WindowTest(unittest.TestCase):
         self.assertIn("STUB restore", log)
 
     def test_the_process_check_matches_a_server_only(self):
-        pat = subprocess.run(["bash", "-c", f"source <(grep '^QPAT=' {HERE / 'qwen_fit.sh'}); echo \"$QPAT\""],
+        pat = subprocess.run(["bash", "-c", f"source <(grep '^QPAT=' {HERE / 'scripts/qwen_fit.sh'}); echo \"$QPAT\""],
                              capture_output=True, text=True).stdout.strip()
         import re
         real = "/home/u/venvs/vllm033/bin/python3 /home/u/venvs/vllm033/bin/vllm serve nvidia/Qwen3.8-27B-NVFP4 --port 8889"

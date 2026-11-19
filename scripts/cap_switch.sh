@@ -17,7 +17,7 @@
 # The rollback by hand:  cd ~/Projects/DeepSeek-v4-Flash-One-DGX-Spark && docker compose -f compose-md149t5.yml up -d
 #   then copy ~/.hermes/config.yaml.bak.<date>_cap160 back to ~/.hermes/config.yaml and restart hermes-gateway.
 # CAUTION: this restarts the bot's model server. Start it only with the user's go:
-#   tmux new -d -s cap ~/Projects/dsv4-specialize/cap_switch.sh
+#   tmux new -d -s cap ~/Projects/dsv4-specialize/scripts/cap_switch.sh
 set -u
 S=/home/colin-spark/Projects/dsv4-specialize SERVER=${SERVER:-/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark}
 LOG=${LOG:-$S/logs/cap-switch.log} PIDFILE=${PIDFILE:-$S/results/pair-qwen.pid}

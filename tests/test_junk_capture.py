@@ -50,7 +50,7 @@ class WindowTest(unittest.TestCase):
                 "SUMS": str(d / "sums.npz"), "CRON_OK": "1", "START_AFTER": t(minutes[0]),
                 "BOOT_BY": t(minutes[1]), "RESTORE_AT": t(minutes[2]),
                 **{k: v.replace("{d}", str(d)) for k, v in env.items()}}
-        proc = subprocess.run(["bash", str(HERE / "junk_capture.sh")], env=full, capture_output=True, text=True,
+        proc = subprocess.run(["bash", str(HERE / "scripts/junk_capture.sh")], env=full, capture_output=True, text=True,
                               timeout=120)
         return proc.returncode, (d / "w.log").read_text()
 

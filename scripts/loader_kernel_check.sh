@@ -4,7 +4,7 @@
 # CAUTION: the check uses about 6 GiB of GPU memory beside the live server. Run it only when the bot is idle and no
 # test window runs. The script stops before the load if less than 12 GiB is available.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."   # the repo root
 IMAGE=ghcr.io/0xsero/deepseek-v4-flash-0731-spark-sparkinfer@sha256:2e077489a83a0360952828051fe7f7a32c1801e5ce8436d85f7267583d614ff4
 SERVER=/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark
 SI=/opt/sparkinfer/sparkinfer/moe

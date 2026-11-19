@@ -10,7 +10,7 @@
 # from it): move the old file away, or set RESUME=1 to resume on purpose.
 # CAUTION: this stops the bot's model server for about 3 h. Start it only with the user's go, pause the Hermes cron
 # jobs first, and do not start it during another test:
-#   tmux new -d -s probe "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/skip_probe.sh"
+#   tmux new -d -s probe "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/scripts/skip_probe.sh"
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/skip-probe.log}
 RESTORE_TAG=skip-probe
 TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml -f compose/compose-perlayer.yml -f compose/compose-skip.yml"

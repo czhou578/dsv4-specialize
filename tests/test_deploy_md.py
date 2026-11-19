@@ -38,7 +38,7 @@ class DeployTest(unittest.TestCase):
     def run_mode(self, mode, **env):
         full = {**{k: v for k, v in os.environ.items() if k != "TMUX"}, "JOB_WRAP": "0",
                 "LOG": str(self.d / "deploy.log"), **env}
-        p = subprocess.run(["bash", str(HERE / "deploy_md.sh"), mode], env=full, capture_output=True, text=True,
+        p = subprocess.run(["bash", str(HERE / "scripts/deploy_md.sh"), mode], env=full, capture_output=True, text=True,
                            timeout=60)
         return p.returncode, p.stdout + p.stderr
 

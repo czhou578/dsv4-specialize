@@ -5,7 +5,7 @@
 #   tp1-botmask5-k144 the count rank of the same capture (expert_rank_count.json), K 144, top-k 5: the control
 # No downtime: the build reads data/tp1 and writes about 16 GB per point. Run it when no speed test runs.
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."   # the repo root
 PY=/home/colin-spark/.hermes/stock-research/.venv/bin/python
 R=/home/colin-spark/Projects/dsv4-specialize/results
 VERIFY=/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark/image-patch/verify_tp1_manifest.py

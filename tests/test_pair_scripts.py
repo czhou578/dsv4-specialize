@@ -24,7 +24,7 @@ def watch(tmp, avail, pid, qv):
     (tmp / "pid").write_text(str(pid))
     env = {**os.environ, "WATCH_ONCE": "1", "AVAIL_CMD": f"echo {avail}", "PIDFILE": str(tmp / "pid"), "QV": str(qv),
            "LOG": str(tmp / "watch.log"), "MEM": str(tmp / "mem.log")}
-    subprocess.run(["bash", str(HERE / "pair_watch.sh")], env=env, check=True, capture_output=True)
+    subprocess.run(["bash", str(HERE / "scripts/pair_watch.sh")], env=env, check=True, capture_output=True)
     time.sleep(0.3)
 
 
@@ -71,7 +71,7 @@ def pair(tmp, watch_on, keep="0", env=None):
         (tmp / "s" / d / "config.json").write_text("{}")
     env = {**os.environ, "PAIR_STUB": str(tmp / "stub.sh"), "STUB_DIR": str(tmp), "TAG": "test", "KEEP": keep, "PAIR_S": str(tmp / "s"),
            "LOG": str(tmp / "pair.log"), "MEM": str(tmp / "mem.log"), "PIDFILE": str(tmp / "q.pid"), "SWAPLOG": str(tmp / "swap.log"), **(env or {})}
-    proc = subprocess.run(["bash", str(HERE / "pair_run.sh")], env=env, capture_output=True, text=True, timeout=120)
+    proc = subprocess.run(["bash", str(HERE / "scripts/pair_run.sh")], env=env, capture_output=True, text=True, timeout=120)
     return proc.returncode, (tmp / "pair.log").read_text()
 
 

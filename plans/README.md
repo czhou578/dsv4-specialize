@@ -33,9 +33,14 @@ The plans give paths as they were in the bot's repo. Read them as follows:
 - `PLAN_MODEL_SPECIALIZE.md` (the method), `PLAN_E2E_RUNNER.md` (the full runs), `PLAN_MODEL_ROUTER.md`,
   `MODEL_SWAP.md` and `MODEL_PRUNE.md` stay in the bot's repo.
 - `model_eval/` stays in the bot's repo, except three files: `model_eval/capture.py`, `rank_data.py` and
-  `rank_report.py` are now `capture.py`, `rank_data.py` and `rank_report.py` in this repo.
+  `rank_report.py` are now `capture.py`, `rank_data.py` and `rank_report.py` in `tools/` of this repo.
 - `model_eval/results/` is now `results/` in this repo. The bot's folder keeps the full-run rows of the stock model
   (`e2e/`) and a copy of the stock baselines (`baseline-k216*`, `speed-*-k216*`).
 - `model_eval/data/` (the recorded bot sessions, with `rank/`) stays in the bot's eval worktree and out of git.
 - The step scripts of `~/.hermes-e2e/` and their logs are now in `history/hermes-e2e/`. The logs of the run scripts
   are in `logs/`.
+- On 2026-11-18 the files of the repo root moved into folders: the Python tools to `tools/`, the run scripts to
+  `scripts/`, the compose files to `compose/`, the tests to `tests/` and `serve-v1.sh` to `image-patch/`. The plans
+  keep the old paths, so read `capture.py` as `tools/capture.py`, `run_lib.sh` as `scripts/run_lib.sh` and
+  `compose-mask.yml` as `compose/compose-mask.yml`. The tag `root-layout-2026-11-18` is the last commit with the old
+  layout.

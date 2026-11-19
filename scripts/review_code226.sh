@@ -11,7 +11,7 @@
 # Built from loader_window.sh and the window rules of run_lib.sh (two failed boots in a row: restore).
 # CAUTION: this stops both model servers for about 2 h. Start it only with the user's go, in tmux:
 #   tmux new -d -s review "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... \
-#     ~/Projects/dsv4-specialize/review_code226.sh"
+#     ~/Projects/dsv4-specialize/scripts/review_code226.sh"
 D=$(cd "$(dirname "$0")" && pwd)
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/review-code226.log}
 RESTORE_TAG=review
@@ -80,7 +80,7 @@ start_qwen() {
   sleep 300
   local i
   for i in $(seq 1 30); do [ "$(avail_mb)" -ge "${NEED_MB:-28600}" ] && break; sleep 30; done
-  (cd $S && TAG=review SEQS=$QWEN_SEQS KV_BYTES=$QWEN_KV_BYTES TESTS=idle KEEP=1 ./pair_run.sh) >> "$LOG" 2>&1
+  (cd $S && TAG=review SEQS=$QWEN_SEQS KV_BYTES=$QWEN_KV_BYTES TESTS=idle KEEP=1 ./scripts/pair_run.sh) >> "$LOG" 2>&1
   qwen_up && log "Qwen up again" || log "ERROR: Qwen did not start; see logs/pair-review.log"
 }
 cron_clash() {  # $1 $2: epochs; true when [$1, $2] overlaps 05:00-10:00 of a weekday

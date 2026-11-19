@@ -12,7 +12,7 @@
 # 05:00-10:00 on weekdays while the cron jobs are active: daily-followups writes into the run folders then
 # (PLAN_E2E_RUNNER.md §15.9). The overnight guard restores the live server at 04:15: stop it or move it first.
 #   tmux new -d -s stepf "POINT=fewer-c6 MASK_NAME=prune5 MOE_DROP=none MOE_NORM=anchor:6 REPLAY=1 SPEED=1 \
-#     START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/fewer_stepf.sh"
+#     START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/scripts/fewer_stepf.sh"
 # MASK_NAME/MASK_K pick the folder tp1-NAME-kK (default botmask, 160; prune5 is the live folder). DRAFT_DIR
 # defaults to the live draft. RESTORE_AT ends the run (a rerun skips the done prompts). JUDGE=0 skips the judge.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/fewer-stepf.log}

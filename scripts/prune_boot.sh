@@ -2,7 +2,7 @@
 # The test boot of PLAN_PHYSICAL_PRUNE.md §6: tp1-prune5-k160 on port 8890 with the current draft, the replay
 # set (same routing as tp1-botmask5-k160), the speed tests, then the restore of the main server.
 # CAUTION: this stops the bot's model server. Start it only with the user's go, in its own tmux session:
-#   tmux new -d -s prune-boot ~/Projects/dsv4-specialize/prune_boot.sh
+#   tmux new -d -s prune-boot ~/Projects/dsv4-specialize/scripts/prune_boot.sh
 # The safety rules and the shared functions are in run_lib.sh (PLAN_OVERNIGHT_MASK_GRID.md §2).
 # - a boot that is not healthy in 15 min: down, record, go on; two failed boots in a row: restore;
 # - free memory every 30 s during each client run; below 1 GiB, stop the client;

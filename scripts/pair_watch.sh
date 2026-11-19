@@ -5,7 +5,7 @@
 # never DeepSeek: it kills only the process group in PIDFILE, and only when the command line of that process is the
 # vLLM 0.33 venv with --port 8889 (DeepSeek also shows on the host as a vLLM process, on port 8888). It keeps watching
 # after a stop. Start it in its own tmux session before Qwen, and leave it on while Qwen runs:
-#   tmux new -d -s pair-watch ~/Projects/dsv4-specialize/pair_watch.sh
+#   tmux new -d -s pair-watch ~/Projects/dsv4-specialize/scripts/pair_watch.sh
 # WATCH_ONCE=1 runs one check and exits (the tests). AVAIL_CMD replaces the memory reading (the tests).
 set -u
 S=/home/colin-spark/Projects/dsv4-specialize
