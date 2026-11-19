@@ -40,7 +40,7 @@ def overlap(order_a, order_b, k):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--results", type=Path, default=Path(__file__).resolve().parent / "results")
+    parser.add_argument("--results", type=Path, default=Path(__file__).resolve().parent.parent / "results")
     args = parser.parse_args(argv)
     ranks = {o: json.loads((args.results / f"expert_rank_{o}.json").read_text())
              for o in ("count", "weight", "skill_max", "skill_floor") if (args.results / f"expert_rank_{o}.json").exists()}

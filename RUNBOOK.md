@@ -39,8 +39,8 @@ page. `overnight_guard.sh` also shows on the page, with its waits until `GUARD_A
 
 The live folder `data/tp1-k160t5` came from these steps. The rank file is `results/expert_rank_bot.json` (in git).
 
-1. Build the bot-rank mask: `python mask_checkpoint.py --keep 160 --rank <rank file> --out tp1-botmask-k160`.
-2. Build the top-k copy: `python topk_checkpoint.py --source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`.
+1. Build the bot-rank mask: `python tools/mask_checkpoint.py --keep 160 --rank <rank file> --out tp1-botmask-k160`.
+2. Build the top-k copy: `python tools/topk_checkpoint.py --source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`.
 3. Build the pruned folder: `SRC=tp1-botmask5-k160 OUT=tp1-prune5-k160 ./prune_run.sh`. It takes about 11 minutes
    and writes about 73 GB.
 
@@ -48,8 +48,8 @@ Steps 1 and 2 take about a minute each and write about 12 GB each.
 
 ## One mask test by hand
 
-1. Print the plan: `python mask_checkpoint.py --keep 192 --dry-run`.
-2. Build the folder: `python mask_checkpoint.py --keep 192`. It writes about 12.3 GB. Do not build while a speed
+1. Print the plan: `python tools/mask_checkpoint.py --keep 192 --dry-run`.
+2. Build the folder: `python tools/mask_checkpoint.py --keep 192`. It writes about 12.3 GB. Do not build while a speed
    test runs, because the writes slow the decode.
 3. Copy the kernel cache once (done 2026-11-02). Some files are `root:600`, so a root container from the server image
    copies them. Use the image of `compose-mask.yml` as `IMAGE`:
@@ -65,7 +65,7 @@ CAUTION: The next step stops the bot's model server. The bot gives no answers un
 5. Boot the test: `MASK_K=192 docker compose -f compose/compose-mask.yml up -d`.
    - For the `PLAN_MODEL_SPECIALIZE.md` §5.2 check, boot
      `CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d` instead.
-   - Wait for `/health`, then run `python check_routed.py --keep 192`. It must print PASS.
+   - Wait for `/health`, then run `python tools/check_routed.py --keep 192`. It must print PASS.
    - Model Runner V2 rejects the capture flag, so `compose-mask.yml` cannot do this check.
 6. Score the test from the bot repo's eval worktree:
    `python -m model_eval.replay --base-url http://127.0.0.1:8890 --out ~/Projects/dsv4-specialize/results/mask-k192.jsonl`.
@@ -84,8 +84,8 @@ CAUTION: The capture boot stops the bot's model server, like a mask test.
    V1 and no DSpark, so the decode is slower than on the live server. The patch writes the sums of the counts and
    the router weights to `capture-out/routing_sums.npz` after each step.
 3. From this repo, capture and rank:
-   `python capture.py --out results/capture-rank.jsonl --data ~/Projects/stock-research-model-eval/model_eval/data/rank --sources discord,subagent,e2e,cron --sums capture-out/routing_sums.npz`,
-   then `python capture.py --rank results/capture-rank.jsonl results/expert_rank_weight.json --order weight`.
+   `python tools/capture.py --out results/capture-rank.jsonl --data ~/Projects/stock-research-model-eval/model_eval/data/rank --sources discord,subagent,e2e,cron --sums capture-out/routing_sums.npz`,
+   then `python tools/capture.py --rank results/capture-rank.jsonl results/expert_rank_weight.json --order weight`.
    The orders are `count`, `weight`, `skill_max` and `skill_floor`.
 4. Stop the capture: `docker compose -f compose/compose-capture.yml down`. Start the live server:
    `docker compose -f compose-k160t5.yml start` in its folder.

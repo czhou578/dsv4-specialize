@@ -46,7 +46,7 @@ import numpy as np
 
 from capture import EXPERTS, count, decode, post, read_sums, sums_delta
 
-S = Path(__file__).resolve().parent
+S = Path(__file__).resolve().parent.parent
 PROMPTS = S / "results/junk-bisect/prompts.json"
 PILOT = S / "results/agent-eval/pilot"
 AGENT_EVAL = Path.home() / "Projects/dsv4-specialize-agent-eval/agent-eval"

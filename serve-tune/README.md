@@ -160,7 +160,7 @@ The suffix study (`suffix_match.py`) read 66 recorded sessions: 675,623 output t
 | `compose-tune.yml` | Override of `../compose-mask.yml`: the draft depth and graph sizes, the FP8 draft head, the KV pin, the prefill chunk |
 | `compose-head.yml` | Override on top of the two: the FP8 head of the target (`FP8_TARGET_HEAD=1`) |
 | `image-patch/` | `fp8_target_head.py` and `head-fp8.diff`; `build_head.sh` builds the patched `deepseek_v4_model.py` (not in git) |
-| `alloc_k.py` | The K of each layer for a target mean K (rule `global` or `even`), for `../mask_checkpoint.py --keep-per-layer` |
+| `alloc_k.py` | The K of each layer for a target mean K (rule `global` or `even`), for `../tools/mask_checkpoint.py --keep-per-layer` |
 | `suffix_match.py` | The suffix-match study; run it in the server image, which has `tokenizers` |
 | `tune_night.sh` | The Step 1 window (T0, T3, T4) |
 | `tune_replay.sh` | The Step 2 window (H1, N1–N3, H0) |

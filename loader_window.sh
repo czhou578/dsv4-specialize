@@ -77,7 +77,7 @@ restore
 
 for p in $POINTS; do
   log "lp-$p boot: $(grep -oE 'Model loading took [0-9.]+ GiB' $R/boot-lp-$p.log | head -1); ${FREE_MB[$p]:-?} MB available"
-  log "lp-$p speed: $($PY $S/speed_result.py --results $R lp-$p 2>&1 | tail -1 | cut -c1-300)"
+  log "lp-$p speed: $($PY $S/tools/speed_result.py --results $R lp-$p 2>&1 | tail -1 | cut -c1-300)"
 done
 [ -n "${FREE_MB[p0]:-}" ] && [ -n "${FREE_MB[p1]:-}" ] && log "P1 frees $(( (FREE_MB[p1] - FREE_MB[p0]) / 1024 )) GiB more than P0 (the gate: 4)"
 for l in lp-p1-a lp-p1-b; do

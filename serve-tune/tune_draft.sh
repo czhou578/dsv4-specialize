@@ -21,7 +21,7 @@ BOOT_MIN_GIB=110                   # vLLM's boot check at util 0.90 needs 109.5 
 FAILS=0
 draft() { [ $1 = k64 ] && echo $SERVER/data/dspark-draft-k64-bot || echo $S/dspark-draft-$1-bot; }
 rate() { $PY -c 'import json,sys; print(json.loads(sys.argv[1])["bot"]["rate"])' \
-  "$($PY $S/speed_result.py --results $R $1)" 2>/dev/null || echo 0; }
+  "$($PY $S/tools/speed_result.py --results $R $1)" 2>/dev/null || echo 0; }
 
 dpoint() {  # $1 name, $2 draft, $3 depth; returns 0 done, 1 boot failed, 2 skipped, 9 safety failure
   local label=tune-$1 s=$(( $3 + 1 )) f=$R/boot-tune-$1.log rc ok=0

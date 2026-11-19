@@ -30,7 +30,7 @@ client() {  # the greedy rounds of §7; the client ends 15 min before RESTORE_AT
   local left=$(( RESTORE_S - $(now) - 600 ))
   [ $left -le 600 ] && { log "no time for the client"; return 1; }
   memwatch_start skip-probe
-  (cd $S && timeout $left $PY $S/layer_screen.py --greedy --base-url $URL --skip-dir $OUT --sets $R/skip-sets.json \
+  (cd $S && timeout $left $PY $S/tools/layer_screen.py --greedy --base-url $URL --skip-dir $OUT --sets $R/skip-sets.json \
     --log $PLOG --deadline $(( RESTORE_S - 900 )) >> $R/skip-probe-client.log 2>&1)
   local rc=$?
   memwatch_stop
@@ -45,7 +45,7 @@ for need in $S/image-patch/skip/deepseek_v4_model.py $S/image-patch/layer_skip.p
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done
 if [ -e $PLOG ] && [ "${RESUME:-0}" != 1 ]; then log "ERROR: $PLOG exists; move it away or set RESUME=1"; exit 1; fi
-[ -s $R/skip-sets.json ] || $PY $S/layer_screen.py --pick --sets $R/skip-sets.json >> "$LOG" 2>&1 || { log "ERROR: --pick"; exit 1; }
+[ -s $R/skip-sets.json ] || $PY $S/tools/layer_screen.py --pick --sets $R/skip-sets.json >> "$LOG" 2>&1 || { log "ERROR: --pick"; exit 1; }
 mkdir -p $OUT && rm -f $OUT/skip.json $OUT/layer_probe.npz $OUT/layer_gram.npz
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done
 [ "$(now)" -ge $BOOT_BY_S ] && { log "after $BOOT_BY: no boot"; exit 1; }
@@ -71,7 +71,7 @@ fi
 log "client exit $rc: $(wc -l < $PLOG 2>/dev/null) rows; $(tail -2 $R/skip-probe-client.log | tr '\n' ' ' | cut -c1-300)"
 down || log "ERROR: a test container is left"
 restore
-$PY $S/layer_screen.py --report --log $PLOG > $R/skip-probe-report.md 2>&1
+$PY $S/tools/layer_screen.py --report --log $PLOG > $R/skip-probe-report.md 2>&1
 sed -n '/^## The decision/,$p' $R/skip-probe-report.md | sed -n 's/^- //p' | while read -r line; do log "decision: $line"; done
 sed -n 's/^- \(R2*:\)/\1/p' $R/skip-probe-report.md | while read -r line; do log "$line"; done
 log "probe window done"

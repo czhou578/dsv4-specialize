@@ -9,7 +9,7 @@ The choice for point C5 (the gate of §5): a threshold rule with a mean of 4.5 e
 union below ``lowest:1``; of those, the one closest to 4.4 (to 0.01; a tie goes to the smaller window union). No such
 rule: the gate fails and C5 is skipped.
 
-    python profile_report.py results/capture-profile-k160.jsonl results/profile-k160
+    python tools/profile_report.py results/capture-profile-k160.jsonl results/profile-k160
 """
 
 import argparse

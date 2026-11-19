@@ -34,7 +34,7 @@ from pathlib import Path
 import numpy as np
 
 BASE = Path.home() / "Projects/DeepSeek-v4-Flash-One-DGX-Spark/data/tp1"
-OUT_ROOT = Path(__file__).resolve().parent
+OUT_ROOT = Path(__file__).resolve().parent.parent
 HASH_LAYERS = 3
 MASK_BIAS = -1e4
 MANDATORY_PER_CATEGORY = 32

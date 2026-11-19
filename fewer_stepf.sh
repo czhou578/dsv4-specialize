@@ -43,7 +43,7 @@ E2E=1
 if [ "${REPLAY:-0}" = 1 ]; then
   replay $POINT
   verdict=$($PY -c "
-import sys; sys.path.insert(0, '$S'); import fewer_report as f
+import sys; sys.path.insert(0, '$S/tools'); import fewer_report as f
 p = f.point('$POINT'); print('pass' if f.passes(p) and p['nll_pct'] < $MAX_NLL else 'fail', round(p['nll_pct'], 2) if p else None)")
   log "$POINT replay gate (NLL below +$MAX_NLL%): $verdict"
   [ "${verdict%% *}" = pass ] || E2E=0

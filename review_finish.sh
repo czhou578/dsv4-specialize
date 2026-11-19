@@ -65,6 +65,6 @@ fi
 for l in $NEW; do judge $l $LIVE $l; done
 judge control-${LIVE// /-} $LIVE
 [ "$(echo $NEW | wc -w)" -ge 2 ] && judge control-${NEW// /-} $NEW
-$PY $S/review_report.py --live $LIVE --new $NEW > $R/review-report.txt 2>&1
+$PY $S/tools/review_report.py --live $LIVE --new $NEW > $R/review-report.txt 2>&1
 while read -r line; do log "$line"; done < $R/review-report.txt
 log "review finished: the report is in $R/review-report.txt, the blind page is $R/review-md.html"

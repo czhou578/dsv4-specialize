@@ -57,7 +57,7 @@ check_server() {  # true when the server runs data/tp1 with the settings of comp
 smoke_test() {  # one short raw prompt: routing rows of 43 x 6 ids, and the sums file moves
   local out rc
   job_phase "smoke"
-  out=$(cd $S && $PY $S/junk_routes.py smoke --base-url $URL --sums "$SUMS" 2>&1); rc=$?
+  out=$(cd $S && $PY $S/tools/junk_routes.py smoke --base-url $URL --sums "$SUMS" 2>&1); rc=$?
   log "$(tail -1 <<< "$out")"
   return $rc
 }
@@ -69,13 +69,13 @@ client() {  # the capture, stopped at RESTORE_AT
   memwatch_start junk-capture
   if [ "$CLIENT" = rank ]; then
     log "capture.py of $DATA ($SOURCES, calibration split; $left s left)"
-    (cd $S && timeout $left $PY $S/capture.py --base-url $URL --out $OUT/capture-code.jsonl --data $DATA \
+    (cd $S && timeout $left $PY $S/tools/capture.py --base-url $URL --out $OUT/capture-code.jsonl --data $DATA \
       --sources $SOURCES --sums "$SUMS" > $OUT/capture-code.log 2>&1); rc=$?
     log "capture exit $rc: $(cat $OUT/capture-code.jsonl 2>/dev/null | grep -c .) rows, $(cat $OUT/capture-code.jsonl \
       2>/dev/null | grep -c '"error"') errors; $(tail -1 $OUT/capture-code.log)"
   else
     log "capture of the probe prompts ($ROUNDS rounds) and the pilot transcripts ($left s left)"
-    (cd $S && timeout $left $PY $S/junk_routes.py capture --base-url $URL --out $OUT/capture.jsonl --sums "$SUMS" \
+    (cd $S && timeout $left $PY $S/tools/junk_routes.py capture --base-url $URL --out $OUT/capture.jsonl --sums "$SUMS" \
       --prompts $PROMPTS --rounds $ROUNDS --pilot $PILOT > $OUT/capture.log 2>&1); rc=$?
     log "capture exit $rc: $(tail -1 $OUT/capture.log)"
   fi
@@ -127,8 +127,8 @@ cron_clash() {  # $1 $2: epochs; true when [$1, $2] overlaps 05:00-10:00 of a we
 
 log "junk capture: $ROUNDS rounds; start after $START_AFTER; boot by $BOOT_BY; restore at $RESTORE_AT"
 case $CLIENT in
-  junk) NEEDS="$PROMPTS $PILOT $S/junk_routes.py";;
-  rank) NEEDS="$DATA/sessions.jsonl $DATA/tools.json $S/capture.py";;
+  junk) NEEDS="$PROMPTS $PILOT $S/tools/junk_routes.py";;
+  rank) NEEDS="$DATA/sessions.jsonl $DATA/tools.json $S/tools/capture.py";;
   *) log "ERROR: unknown CLIENT $CLIENT (junk or rank)"; exit 1;;
 esac
 for need in $NEEDS $S/compose/compose-capture.yml $S/compose/compose-capture-junk.yml; do

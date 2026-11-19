@@ -144,7 +144,7 @@ speed() {  # $1: label; BOT_RUNS sets the runs of the bot decode test (default 3
     (cd $W && $PY -c "import json; from model_eval.speed import counters; print(json.dumps(counters('$URL')))" > $R/speed-code-$label-counters-after.json)
   fi
   memwatch_stop
-  log "$label speed: $($PY $S/speed_result.py --results $R $label)"
+  log "$label speed: $($PY $S/tools/speed_result.py --results $R $label)"
 }
 
 restore() {  # §6 = PLAN_OVERNIGHT_MASK_GRID.md §5

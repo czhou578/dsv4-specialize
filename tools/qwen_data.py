@@ -222,7 +222,7 @@ def stats(sessions):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parent / "qwen-data")
+    ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parent.parent / "qwen-data")
     ap.add_argument("--transcripts", type=Path, default=HOME / ".claude/projects")
     ap.add_argument("--repo", action="append", type=Path, default=[], help="a repository on disk; give it once per repository")
     ap.add_argument("--held-out", action="append", default=[], help="a project or repository name that is held out whole")

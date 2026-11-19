@@ -3,7 +3,7 @@
 It reads the judge rows of the eval repo (``model_eval/results/e2e/judge-*.jsonl``) and the run folders of
 ``~/.hermes-e2e``. Run it with the bot's venv after review_window.sh, or again at any time:
 
-  python review_report.py --live live-1 live-2 --new md-1 md-2
+  python tools/review_report.py --live live-1 live-2 --new md-1 md-2
 
 Rule 1 (the judge test): the new model fails if its losses against the live runs reach the one-sided sign-test line
 (p < 0.05, ties out). Rule 2 (the controls): a control of one model against itself must not reach the line in either

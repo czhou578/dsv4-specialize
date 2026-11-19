@@ -32,7 +32,7 @@ HEAD_OK=0 FAILS=0
 on() { [[ " $POINTS " == *" $1 "* ]]; }
 faster() { awk -v a="$1" -v b="$2" -v n="${3:-0}" 'BEGIN {exit !(b > 0 && a > b * (1 + n))}'; }   # a beats b by n
 rate() { $PY -c 'import json,sys; print(json.loads(sys.argv[1])["bot"]["rate"])' \
-  "$($PY $S/speed_result.py --results $R $1)" 2>/dev/null || echo 0; }
+  "$($PY $S/tools/speed_result.py --results $R $1)" 2>/dev/null || echo 0; }
 
 probe() {  # $1 label, $2 kind (probe|smoke), the rest: prefill_probe.py arguments; logs the summary line
   local label=$1 kind=$2 left=$(( RESTORE_S - $(now) )) rc n; shift 2

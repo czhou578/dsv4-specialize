@@ -56,11 +56,11 @@ capture_profile() {  # 0 done, 1 boot failed, 9 safety failure
       memwatch_start $label
       left=$(( RESTORE_S - $(now) )); [ $left -gt 3000 ] && left=3000   # at most 50 min: C needs the night
       log "capture of the rank data ($left s)"
-      (cd $W && timeout $left $PY $S/capture.py --base-url $URL --out $R/$label.jsonl --data $W/model_eval/data/rank \
+      (cd $W && timeout $left $PY $S/tools/capture.py --base-url $URL --out $R/$label.jsonl --data $W/model_eval/data/rank \
         --sources discord,subagent,e2e,cron --sums "$sums" > $R/$label.log 2>&1)
       log "capture exit $?: $(wc -l < $R/$label.jsonl) rows, $(grep -c '"error"' $R/$label.jsonl) errors"
       memwatch_stop
-      $PY $S/profile_report.py $R/$label.jsonl $R/profile-k160 2>&1 | tail -1 | tee -a "$LOG"
+      $PY $S/tools/profile_report.py $R/$label.jsonl $R/profile-k160 2>&1 | tail -1 | tee -a "$LOG"
     else
       log "ERROR: the profile did not move after the smoke request; no capture"
       docker logs $MASK 2>&1 | grep -iE "moe_drop|profile|Traceback" | tail -5 | tee -a "$LOG"
@@ -111,7 +111,7 @@ if on C; then
     if [ $p = c5 ]; then
       thr=$($PY -c "import json; print(json.load(open('$R/profile-k160.json'))['c5'] or '')" 2>/dev/null)
       [ -z "$thr" ] && { log "fewer-c5: no threshold from Phase A (the gate of §5): skipped"; continue; }
-      DROP[c5]=$thr; NORM[c5]=$($PY $S/fewer_report.py --c5-norm)
+      DROP[c5]=$thr; NORM[c5]=$($PY $S/tools/fewer_report.py --c5-norm)
       echo "${DROP[c5]} ${NORM[c5]}" > $R/fewer-c5.rule
     fi
     cpoint $p; rc=$?
@@ -122,12 +122,12 @@ if on C; then
       9) log "safety failure: the safe action, restore"; restore; exit 1;;
     esac
   done
-  $PY $S/fewer_report.py > $R/fewer-phase-c.md 2>&1
+  $PY $S/tools/fewer_report.py > $R/fewer-phase-c.md 2>&1
   log "Phase C table: results/fewer-phase-c.md; decision: $(tail -1 $R/fewer-phase-c.md)"
 fi
 
 best=none
-on D && best=$($PY $S/fewer_report.py --decide)
+on D && best=$($PY $S/tools/fewer_report.py --decide)
 if [ "$best" != none ] && [ "$(now)" -lt $SPEED_BY_S ]; then
   p=${best#fewer-}
   [ $p = c5 ] && read -r DROP[c5] NORM[c5] < $R/fewer-c5.rule

@@ -15,4 +15,4 @@ docker run --rm --pull=never --network none --gpus all --ipc host --name loader-
   -v "$PWD/image-patch/perlayer/exl3.py:/opt/vllm/vllm/model_executor/layers/quantization/exl3.py:ro" \
   -v "$SERVER/image-patch/sparkinfer/moe/fused_moe/_impl.py:$SI/fused_moe/_impl.py:ro" \
   -v "$SERVER/image-patch/sparkinfer/moe/_shared/kernels/tiny_decode.py:$SI/_shared/kernels/tiny_decode.py:ro" \
-  "$IMAGE" loader_kernel_check.py --uniform tp1-prune5-k160 --perlayer tp1-prunemd5-k149 "$@"
+  "$IMAGE" tools/loader_kernel_check.py --uniform tp1-prune5-k160 --perlayer tp1-prunemd5-k149 "$@"
