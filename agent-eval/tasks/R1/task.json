@@ -1,0 +1,23 @@
+{
+ "id": "R1",
+ "family": "R",
+ "trap": false,
+ "data": [
+  "papers/moe_eviction.txt"
+ ],
+ "prompt": "The paper is in /work/papers/moe_eviction.txt. In the table of quality and serving cost on the L40S, which cache policy decodes fastest (highest tok/s), not counting the baseline with all 64 experts cached? Give its name, its tok/s and its ΔNLL. Give the answer and, as evidence, an exact quote from the paper.",
+ "key": [
+  "static",
+  "\\b44(\\.0)?\\b",
+  "0\\.110?\\b"
+ ],
+ "reference": {
+  "answer": "Static (64-token profile) is the fastest policy apart from the all-64-experts baseline: 44.0 tok/s, ΔNLL +0.110.",
+  "evidence": [
+   {
+    "source": "papers/moe_eviction.txt",
+    "quote": "Static (64-token profile)\n+0.110\n44.0\n3.4"
+   }
+  ]
+ }
+}

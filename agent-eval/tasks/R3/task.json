@@ -1,0 +1,31 @@
+{
+ "id": "R3",
+ "family": "R",
+ "trap": false,
+ "data": [
+  "papers/moe_prune_merge.txt"
+ ],
+ "prompt": "The paper is in /work/papers/moe_prune_merge.txt. For the Nemotron base model, which compressed model (method and share of experts removed) has the largest loss on the brand names task, and how large is the loss in percentage points? Give the answer and, as evidence, an exact quote from the paper.",
+ "key": [
+  "REAP",
+  "50\\s*(%|percent)",
+  "21\\.1"
+ ],
+ "reference": {
+  "answer": "REAP at 50% of experts removed: brand names change by -21.1 pp from the base score 49.8.",
+  "evidence": [
+   {
+    "source": "papers/moe_prune_merge.txt",
+    "quote": "Nemotron\n\nWebsite cues\n96.0"
+   },
+   {
+    "source": "papers/moe_prune_merge.txt",
+    "quote": "Brand names\n49.8\n- 4.0\n- 21.1\n- 10.0\n- 15.6"
+   },
+   {
+    "source": "papers/moe_prune_merge.txt",
+    "quote": "Base\nREAP 25%\nREAP 50%\nREAM 25%\nREAM 50%"
+   }
+  ]
+ }
+}

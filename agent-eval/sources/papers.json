@@ -1,0 +1,6 @@
+{
+ "moe_eviction": {"url": "https://arxiv.org/html/2611.15842v1", "title": "Fewer Expert Transfers Without Changing Routing: Expert Eviction for MoE Offloading"},
+ "moe_prune_merge": {"url": "https://arxiv.org/html/2611.12240v1", "title": "Prune, Don't Merge: Expert Compression of Mixture-of-Experts LLMs on Multilingual Production Tasks"},
+ "real_loss": {"url": "https://arxiv.org/html/2611.14399v1", "title": "REAL Loss: Optimizing Real Expected Acceptance Length for Speculative Decoding"},
+ "mli_indexer": {"url": "https://arxiv.org/html/2611.03768v1", "title": "Multi-layer Indexer: Overlapping Selection and Attention in DeepSeek Sparse Attention"}
+}

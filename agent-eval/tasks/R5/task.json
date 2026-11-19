@@ -1,0 +1,26 @@
+{
+ "id": "R5",
+ "family": "R",
+ "trap": false,
+ "data": [
+  "papers/real_loss.txt"
+ ],
+ "prompt": "The paper is in /work/papers/real_loss.txt. At serving temperature T=0.5, which method has the highest probabilistic acceptance length, and what is its value? Give the answer and, as evidence, an exact quote from the paper.",
+ "key": [
+  "static\\s*LK",
+  "5\\.002"
+ ],
+ "reference": {
+  "answer": "static LK has the highest probabilistic acceptance length at T=0.5: 5.002 (REAL: 4.993).",
+  "evidence": [
+   {
+    "source": "papers/real_loss.txt",
+    "quote": "static LK surpasses it at T=0.5"
+   },
+   {
+    "source": "papers/real_loss.txt",
+    "quote": "static LK\n4.740\n4.925\n5.002"
+   }
+  ]
+ }
+}
