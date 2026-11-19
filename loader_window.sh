@@ -15,7 +15,7 @@
 #     ~/Projects/dsv4-specialize/loader_window.sh"
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/loader-window.log}
 RESTORE_TAG=loader
-TEST_COMPOSE="-f compose-mask.yml -f serve-tune/compose-tune.yml -f compose-perlayer.yml"
+TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml -f compose/compose-perlayer.yml"
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 POINTS=${POINTS:-p0 p1}
@@ -59,7 +59,7 @@ lpoint() {  # $1 point; returns 0 done, 1 boot failed, 2 skipped, 9 safety failu
 }
 
 log "loader window start (points $POINTS; boot by $BOOT_BY; speed by $SPEED_BY; restore at $RESTORE_AT)"
-for need in $S/compose-perlayer.yml $S/image-patch/perlayer/exl3.py $S/image-patch/perlayer/deepseek_v4_model.py \
+for need in $S/compose/compose-perlayer.yml $S/image-patch/perlayer/exl3.py $S/image-patch/perlayer/deepseek_v4_model.py \
   $S/serve-tune/prefill_probe.py $R/baseline-k216.jsonl $R/cold-md.jsonl $R/cold-w1/cold-md.jsonl; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done

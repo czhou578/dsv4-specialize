@@ -13,7 +13,7 @@
 #   tmux new -d -s probe "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/skip_probe.sh"
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/skip-probe.log}
 RESTORE_TAG=skip-probe
-TEST_COMPOSE="-f compose-mask.yml -f serve-tune/compose-tune.yml -f compose-perlayer.yml -f compose-skip.yml"
+TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml -f compose/compose-perlayer.yml -f compose/compose-skip.yml"
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 export MASK_NAME=prunemd5 MASK_K=149 TUNE_LABEL=skip-probe TUNE_KV_BYTES=7784628224
@@ -40,8 +40,8 @@ client() {  # the greedy rounds of §7; the client ends 15 min before RESTORE_AT
 OUT=${OUT:-$S/skip-out} PLOG=$R/skip-probe.jsonl
 
 log "probe window start (boot by $BOOT_BY; restore at $RESTORE_AT)"
-for need in $S/image-patch/skip/deepseek_v4_model.py $S/image-patch/layer_skip.py $S/compose-skip.yml \
-  $S/compose-skip-v1.yml $S/compose-perlayer.yml $S/tp1-$MASK_NAME-k$MASK_K/rank-sliced-tp1-manifest.json; do
+for need in $S/image-patch/skip/deepseek_v4_model.py $S/image-patch/layer_skip.py $S/compose/compose-skip.yml \
+  $S/compose/compose-skip-v1.yml $S/compose/compose-perlayer.yml $S/tp1-$MASK_NAME-k$MASK_K/rank-sliced-tp1-manifest.json; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done
 if [ -e $PLOG ] && [ "${RESUME:-0}" != 1 ]; then log "ERROR: $PLOG exists; move it away or set RESUME=1"; exit 1; fi
@@ -55,7 +55,7 @@ label=skip-probe
 boot $label; rc=$?
 if [ $rc = 1 ]; then
   log "the Model Runner V2 boot failed: one boot with Model Runner V1"
-  TEST_COMPOSE="$TEST_COMPOSE -f compose-skip-v1.yml" label=skip-probe-v1
+  TEST_COMPOSE="$TEST_COMPOSE -f compose/compose-skip-v1.yml" label=skip-probe-v1
   boot $label; rc=$?
 fi
 [ $rc != 0 ] && { log "no probe boot (rc $rc): restore"; restore; exit 1; }

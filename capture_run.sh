@@ -11,7 +11,7 @@
 #   at RESTORE_AT, when the restore starts. Any other failure: the safe action (restore).
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/capture-run.log}
 RESTORE_TAG=capture
-TEST_COMPOSE="-f compose-capture.yml"
+TEST_COMPOSE="-f compose/compose-capture.yml"
 TEST_PROJECT=dsv4-capture
 MASK=dsv4-capture-deepseek-v4-flash-capture-1
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"

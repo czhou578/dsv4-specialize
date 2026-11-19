@@ -9,6 +9,6 @@ services:
         target: /opt/vllm/serve-ds4-flash.orig.sh
         read_only: true
       - type: bind
-        source: "/home/colin-spark/Projects/dsv4-specialize/serve-v1.sh"
+        source: "/home/colin-spark/Projects/dsv4-specialize/image-patch/serve-v1.sh"
         target: /opt/vllm/serve-ds4-flash.sh
         read_only: true

@@ -13,7 +13,7 @@
 #   on the live server, which must end by LIVE_BY.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/fewer-night.log}
 RESTORE_TAG=fewer
-TEST_COMPOSE="-f compose-mask.yml -f compose-drop.yml"
+TEST_COMPOSE="-f compose/compose-mask.yml -f compose/compose-drop.yml"
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 PHASES=${PHASES:-A C D}
@@ -33,7 +33,7 @@ until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done
 
 phase_a() {  # the capture boot with the routing profile, on the capture compose; a safety failure restores here
   local keep="$TEST_COMPOSE" keep_p="$TEST_PROJECT" keep_m="$MASK" rc
-  TEST_COMPOSE="-f compose-capture.yml"; TEST_PROJECT=dsv4-capture; MASK=dsv4-capture-deepseek-v4-flash-capture-1
+  TEST_COMPOSE="-f compose/compose-capture.yml"; TEST_PROJECT=dsv4-capture; MASK=dsv4-capture-deepseek-v4-flash-capture-1
   export CAPTURE_DIR=$S/tp1-botmask-k160 ROUTING_PROFILE=1 CAPTURE_UTIL=0.90
   export CAPTURE_EXTRA_ARGS="--kv-cache-memory-bytes 8589934592"
   capture_profile; rc=$?

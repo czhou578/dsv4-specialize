@@ -62,15 +62,15 @@ Steps 1 and 2 take about a minute each and write about 12 GB each.
 CAUTION: The next step stops the bot's model server. The bot gives no answers until step 8.
 
 4. Stop the live server: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml stop`.
-5. Boot the test: `MASK_K=192 docker compose -f compose-mask.yml up -d`.
+5. Boot the test: `MASK_K=192 docker compose -f compose/compose-mask.yml up -d`.
    - For the `PLAN_MODEL_SPECIALIZE.md` §5.2 check, boot
-     `CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose-capture.yml up -d` instead.
+     `CAPTURE_DIR=$PWD/tp1-mask-k192 docker compose -f compose/compose-capture.yml up -d` instead.
    - Wait for `/health`, then run `python check_routed.py --keep 192`. It must print PASS.
    - Model Runner V2 rejects the capture flag, so `compose-mask.yml` cannot do this check.
 6. Score the test from the bot repo's eval worktree:
    `python -m model_eval.replay --base-url http://127.0.0.1:8890 --out ~/Projects/dsv4-specialize/results/mask-k192.jsonl`.
    Then compare it with `results/baseline-k216.jsonl` (`--compare`).
-7. Stop the test: `MASK_K=192 docker compose -f compose-mask.yml down`.
+7. Stop the test: `MASK_K=192 docker compose -f compose/compose-mask.yml down`.
 8. Start the live server again: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml start`.
 
 ## Expert capture
@@ -80,12 +80,12 @@ CAUTION: The next step stops the bot's model server. The bot gives no answers un
 CAUTION: The capture boot stops the bot's model server, like a mask test.
 
 1. Stop the live server: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml stop`.
-2. Boot the capture: `docker compose -f compose-capture.yml up -d`. It serves the stock `data/tp1` with Model Runner
+2. Boot the capture: `docker compose -f compose/compose-capture.yml up -d`. It serves the stock `data/tp1` with Model Runner
    V1 and no DSpark, so the decode is slower than on the live server. The patch writes the sums of the counts and
    the router weights to `capture-out/routing_sums.npz` after each step.
 3. From this repo, capture and rank:
    `python capture.py --out results/capture-rank.jsonl --data ~/Projects/stock-research-model-eval/model_eval/data/rank --sources discord,subagent,e2e,cron --sums capture-out/routing_sums.npz`,
    then `python capture.py --rank results/capture-rank.jsonl results/expert_rank_weight.json --order weight`.
    The orders are `count`, `weight`, `skill_max` and `skill_floor`.
-4. Stop the capture: `docker compose -f compose-capture.yml down`. Start the live server:
+4. Stop the capture: `docker compose -f compose/compose-capture.yml down`. Start the live server:
    `docker compose -f compose-k160t5.yml start` in its folder.

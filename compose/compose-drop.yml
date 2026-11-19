@@ -5,7 +5,7 @@
 #   sets vLLM's boot check (free memory >= value x 121.7 GiB); 0.93 failed that check on 2026-11-07.
 # Build the router file first: image-patch/build_router.sh (else Docker mounts an empty folder and the boot fails).
 #   MASK_NAME=botmask MASK_K=160 MOE_LABEL=fewer-c2 MOE_DROP=lowest:1 MOE_NORM=anchor:6 \
-#     docker compose -f compose-mask.yml -f compose-drop.yml up -d
+#     docker compose -f compose/compose-mask.yml -f compose/compose-drop.yml up -d
 services:
   deepseek-v4-flash-mask:
     environment:

@@ -15,7 +15,7 @@
 # code226 at the 160k cap since 2026-11-17 23:46; MD before). Change the defaults here and in overnight_guard.sh when the
 # live server changes.
 set -u
-TEST_COMPOSE=${TEST_COMPOSE:--f compose-mask.yml}   # the compose files of the test server (word-split on purpose)
+TEST_COMPOSE=${TEST_COMPOSE:--f compose/compose-mask.yml}   # the compose files of the test server (word-split on purpose)
 TEST_PROJECT=${TEST_PROJECT:-dsv4-mask}             # the compose project name of the test server
 RESTORE_TAG=${RESTORE_TAG:?set RESTORE_TAG}          # names the main-restore-<tag>-<try>.log files
 START_AFTER=${START_AFTER:?set START_AFTER, e.g. "2026-11-07 22:30"}

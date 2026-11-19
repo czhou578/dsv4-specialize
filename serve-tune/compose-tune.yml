@@ -5,8 +5,8 @@
 # - The KV cache is pinned, as on the live server. GPU_MEMORY_UTILIZATION then only sets vLLM's boot check.
 # - MAX_NUM_BATCHED_TOKENS stays at 8224 (compose-mask.yml): it also sizes the locked MLA workspace (server README).
 #   MASK_NAME=prune5b MASK_K=160 DRAFT_DIR=.../data/dspark-draft-k64-bot TUNE_LABEL=tune-t1 TUNE_DEPTH=3 \
-#     TUNE_GRAPH_SIZES=4,8,16 TUNE_GRAPH_MAX=16 docker compose -f compose-mask.yml -f serve-tune/compose-tune.yml up -d
-# Run docker compose in the repo root: compose-mask.yml is there, and the first file sets the project folder.
+#     TUNE_GRAPH_SIZES=4,8,16 TUNE_GRAPH_MAX=16 docker compose -f compose/compose-mask.yml -f serve-tune/compose-tune.yml up -d
+# Run docker compose in the repo root: the -f paths are relative to it. The mounts of compose/ are absolute paths.
 services:
   deepseek-v4-flash-mask:
     environment:

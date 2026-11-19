@@ -15,7 +15,7 @@
 # Build image-patch/perlayer/ first (image-patch/build_perlayer.sh), or the boot fails.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/review-window.log}
 RESTORE_TAG=review
-TEST_COMPOSE="-f compose-mask.yml -f serve-tune/compose-tune.yml -f compose-perlayer.yml"
+TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml -f compose/compose-perlayer.yml"
 SPEED_BY=${SPEED_BY:-${RESTORE_AT:-}}   # run_lib.sh needs it; this window runs no speed test
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
@@ -29,7 +29,7 @@ SEED=${SEED:-13}
 done_n() { ls /home/colin-spark/.hermes-e2e/$1/runs/*/done.json 2>/dev/null | wc -l; }
 
 log "review window: wait for the live runs and $START_AFTER (boot by $BOOT_BY; restore at $RESTORE_AT; runs $LABELS)"
-for need in $S/compose-perlayer.yml $S/image-patch/perlayer/exl3.py $S/image-patch/perlayer/deepseek_v4_model.py \
+for need in $S/compose/compose-perlayer.yml $S/image-patch/perlayer/exl3.py $S/image-patch/perlayer/deepseek_v4_model.py \
   $S/tp1-$MASK_NAME-k$MASK_K/rank-sliced-tp1-manifest.json $S/serve-tune/prefill_probe.py; do
   [ -e $need ] || { log "ERROR: no $need"; exit 1; }
 done
