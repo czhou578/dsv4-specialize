@@ -132,6 +132,21 @@ def test_padding(env):
     assert len(ae.padding(5000)) == 10   # the one file, four times, then the end
 
 
+def test_point_resumes(env, monkeypatch):
+    use(monkeypatch, [reply(REPORT)] * 4)
+    (env / "mem.log").write_text("100 5000 7000\n200 6000 6500\n300 4000 6000\nbad line\n")
+    assert ae.lowest_memory(150, 250) == {"lowest_available_mb": 6000, "lowest_swap_free_mb": 6500}
+    assert ae.lowest_memory(400, 500) == {"lowest_available_mb": None, "lowest_swap_free_mb": None}
+    out = ae.point("P", {"stub": 2}, 2, 0, ["L1", "L2"])
+    rows = [json.loads(x) for x in (out / "rows.jsonl").read_text().splitlines()]
+    assert sorted((r["task"], r["seed"], r["result"]) for r in rows) == [
+        ("L1", 0, "pass"), ("L1", 1, "pass"), ("L2", 0, "hallucination"), ("L2", 1, "hallucination")]
+    meta = json.loads((out / "point.json").read_text())
+    assert meta["mix"] == {"stub": 2} and meta["start"] <= meta["end"] and "lowest_available_mb" in meta
+    ae.point("P", {"stub": 2}, 2, 0, ["L1", "L2"])   # every run has a row: no request
+    assert len((out / "rows.jsonl").read_text().splitlines()) == 4
+
+
 @needs_image
 def test_hidden_check(env, monkeypatch):
     d = env / "tasks" / "L1"

@@ -1,11 +1,14 @@
-"""The agent loop of the capacity measurement (plans/PLAN_AGENT_CAPACITY.md §5).
+"""The agent loop and the point runner of the capacity measurement (plans/PLAN_AGENT_CAPACITY.md §5 and §7).
 
 One run: one task, one model, one seed, one context size. The loop calls /v1/chat/completions of the model server
 directly, with the sampling defaults of the server, and stops at the report call, 25 turns, the time limit, three
 turns with no tool call, or a full context. Then it grades the run (the hidden tests, the key) and computes the
-events and the result (checks.py).
+events and the result (checks.py). A point runs a list of tasks and seeds with N workers per model, and it skips
+the runs that already have a row, so that it can continue after a stop.
 
   python3 agent_eval.py run --task L1 --model qwen --keep
+  python3 agent_eval.py point --name Q4 --mix qwen=4 --seeds 3 --ctx 0
+  python3 agent_eval.py point --name M5 --mix qwen=4,deepseek=1 --seeds 1
 """
 
 import argparse
@@ -13,10 +16,12 @@ import hashlib
 import json
 import os
 import shutil
+import threading
 import time
 import urllib.error
 import urllib.request
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import checks
@@ -184,6 +189,45 @@ def run_task(task: dict, model: str, seed: int, ctx: int, run_dir: Path, pages: 
             "completion_tokens": sum(u.get("completion_tokens", 0) for u in usage), "error": tr["error"]}
 
 
+def lowest_memory(t0: float, t1: float) -> dict:
+    """The lowest available MB and swap-free MB of the memory watch log (epoch, available, swap-free) in [t0, t1]."""
+    avail, swap = [], []
+    if MEM.exists():
+        for line in MEM.read_text().splitlines():
+            f = line.split()
+            if len(f) >= 3 and f[0].isdigit() and t0 <= int(f[0]) <= t1:
+                avail.append(int(f[1]))
+                swap.append(int(f[2]))
+    return {"lowest_available_mb": min(avail, default=None), "lowest_swap_free_mb": min(swap, default=None)}
+
+
+def point(name: str, mix: dict[str, int], seeds: int, ctx: int, task_ids: list[str], keep=False) -> Path:
+    out = OUT / name
+    out.mkdir(parents=True, exist_ok=True)
+    rows_file, lock, pages = out / "rows.jsonl", threading.Lock(), tools.Pages(DATA / "web/pages.jsonl")
+    done = set()
+    if rows_file.exists():
+        done = {(r["model"], r["task"], r["seed"]) for r in map(json.loads, rows_file.read_text().splitlines())}
+    t0 = time.time()
+
+    def one(model, tid, seed):
+        row = run_task(load_task(tid), model, seed, ctx, out / f"{model}-{tid}-s{seed}", pages, keep)
+        with lock, rows_file.open("a") as f:
+            f.write(json.dumps(row) + "\n")
+        print(f"{time.strftime('%H:%M:%S')} {name} {model} {tid} s{seed}: {row['result']} ({row['stop']}, "
+              f"{row['turns']} turns, {row['seconds']} s)", flush=True)
+
+    pools = {m: ThreadPoolExecutor(n) for m, n in mix.items()}
+    futs = [pools[m].submit(one, m, t, s) for s in range(seeds) for t in task_ids for m in mix
+            if (m, t, s) not in done]
+    for f in futs:
+        f.result()
+    meta = {"name": name, "mix": mix, "seeds": seeds, "ctx": ctx, "tasks": task_ids, "start": t0, "end": time.time()}
+    meta.update(lowest_memory(int(t0), int(meta["end"])))
+    (out / "point.json").write_text(json.dumps(meta, indent=1))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -193,10 +237,24 @@ def main():
     r.add_argument("--seed", type=int, default=0)
     r.add_argument("--ctx", type=int, default=0, help="padding in prompt tokens")
     r.add_argument("--keep", action="store_true", help="keep the workspace")
+    p = sub.add_parser("point", help="a point: all runs with N workers per model")
+    p.add_argument("--name", required=True)
+    p.add_argument("--mix", required=True, help="model=workers, comma-separated, e.g. qwen=4,deepseek=1")
+    p.add_argument("--seeds", type=int, default=1)
+    p.add_argument("--ctx", type=int, default=0)
+    p.add_argument("--tasks", default="", help="task ids, comma-separated (default: all)")
+    p.add_argument("--families", default="", help="families, comma-separated (default: all)")
+    p.add_argument("--keep", action="store_true")
     a = ap.parse_args()
-    row = run_task(load_task(a.task), a.model, a.seed, a.ctx, OUT / "manual" / f"{a.model}-{a.task}-s{a.seed}",
-                   tools.Pages(DATA / "web/pages.jsonl"), a.keep)
-    print(json.dumps(row, indent=1))
+    if a.cmd == "run":
+        row = run_task(load_task(a.task), a.model, a.seed, a.ctx, OUT / "manual" / f"{a.model}-{a.task}-s{a.seed}",
+                       tools.Pages(DATA / "web/pages.jsonl"), a.keep)
+        print(json.dumps(row, indent=1))
+    else:
+        mix = {m: int(n) for m, n in (x.split("=") for x in a.mix.split(","))}
+        ids = a.tasks.split(",") if a.tasks else all_tasks(a.families)
+        print(point(a.name, mix, a.seeds, a.ctx, ids, a.keep))
+
 
 if __name__ == "__main__":
     main()
