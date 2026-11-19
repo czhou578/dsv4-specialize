@@ -93,7 +93,7 @@ prepare() {
     log "the kernel cache is in place: $CACHE"
   else
     # root owns some cache files (mode 600), so a container copies them
-    mkdir "$CACHE" && docker run --rm --network none --entrypoint cp -v "$S/cache:/src:ro" -v "$CACHE:/dst" "$IMAGE" \
+    mkdir "$CACHE" && docker run --rm --network none --entrypoint cp -v "$S/data/cache:/src:ro" -v "$CACHE:/dst" "$IMAGE" \
       -a /src/. /dst/ >> "$LOG" 2>&1 || fail "the copy of the kernel cache failed"
     log "copied the kernel cache to $CACHE ($(du -sh "$CACHE" 2>/dev/null | cut -f1))"
   fi

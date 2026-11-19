@@ -370,6 +370,7 @@ The repo root holds only the documents. The files are in these folders:
 | [serve-tune/](serve-tune/README.md) | The serving settings, with their own plan, tools, data and write-up |
 | [agent-eval/](agent-eval/) | The agent capacity test: the agent loop, the sandbox, the checks and the 40 tasks (`plans/PLAN_AGENT_CAPACITY.md`), with its own tests |
 | [tests/](tests/) | The tests |
+| `data/` | Not in git: the checkpoints, the Qwen data, the kernel cache copy, the capture and probe output, the history |
 | [plans/](plans/README.md) | The plans |
 
 The files moved into these folders on 2026-11-18. The plans keep the old paths: each tool, script, compose file and
@@ -465,10 +466,10 @@ measure a different inference engine for a later project, and are not part of th
 | [pair_watch.sh](scripts/pair_watch.sh) | The memory watch: below 2 GiB available it stops the Qwen server, and never DeepSeek |
 | [cap_switch.sh](scripts/cap_switch.sh) | The DeepSeek context cap of 160k (§8.3). Written and tested, not used |
 
-**Not in git.** The Qwen data and checkpoints (`qwen-data/`, `qwen-k*/`, `qwen-draft-*/`), the test checkpoints
-(`tp1-*`), the kernel cache copy (`cache/`), the capture output
-(`capture-out/`), the wide drafts (`dspark-draft-*/`), the result files (`results/`, except
-`results/expert_rank_bot.json`), the logs (`logs/`) and `history/hermes-e2e/`: the step scripts of the full runs and
+**Not in git.** The Qwen data (`data/qwen-data/`) and checkpoints (`qwen-k*/`, `qwen-draft-*/`), the test checkpoints
+(`tp1-*`), the kernel cache copy (`data/cache/`), the capture output (`data/capture-out/`), the probe output
+(`data/skip-out/`), the wide drafts (`dspark-draft-*/`), the result files (`results/`, except
+`results/expert_rank_bot.json`), the logs (`logs/`) and `data/history/hermes-e2e/`: the step scripts of the full runs and
 their logs, moved from `~/.hermes-e2e/` on 2026-11-08. The step scripts keep their old paths, so they do not run as
 they are.
 

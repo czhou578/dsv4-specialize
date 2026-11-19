@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run loader_kernel_check.py in the server image on the GPU (plans/PLAN_LOADER_PATCH.md §5.3): the patched exl3.py
-# and the SparkInfer files of the live server are mounted, with this repo's ./cache, which the test boots also use.
+# and the SparkInfer files of the live server are mounted, with this repo's data/cache, which the test boots also use.
 # CAUTION: the check uses about 6 GiB of GPU memory beside the live server. Run it only when the bot is idle and no
 # test window runs. The script stops before the load if less than 12 GiB is available.
 set -euo pipefail
@@ -10,7 +10,7 @@ SERVER=/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark
 SI=/opt/sparkinfer/sparkinfer/moe
 docker run --rm --pull=never --network none --gpus all --ipc host --name loader-kernel-check --entrypoint python \
   -w "$PWD" \
-  -v "$PWD:$PWD:ro" -v "$SERVER:$SERVER:ro" -v "$PWD/cache:/cache" -e XDG_CACHE_HOME=/cache \
+  -v "$PWD:$PWD:ro" -v "$SERVER:$SERVER:ro" -v "$PWD/data/cache:/cache" -e XDG_CACHE_HOME=/cache \
   -e TVM_FFI_CACHE_DIR=/cache/jit/tvm-ffi -e TRITON_CACHE_DIR=/cache/triton -e PYTHONDONTWRITEBYTECODE=1 \
   -v "$PWD/image-patch/perlayer/exl3.py:/opt/vllm/vllm/model_executor/layers/quantization/exl3.py:ro" \
   -v "$SERVER/image-patch/sparkinfer/moe/fused_moe/_impl.py:$SI/fused_moe/_impl.py:ro" \

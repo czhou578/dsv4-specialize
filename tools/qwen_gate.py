@@ -1,6 +1,6 @@
 """The replay gate of the Qwen prune (plans/PLAN_QWEN_PRUNE.md §4, G1 and G2).
 
-- ``--record``: the full model writes one turn for each of N held-out targets of ``qwen-data`` (the context is the
+- ``--record``: the full model writes one turn for each of N held-out targets of ``data/qwen-data`` (the context is the
   segment up to the target), at the sampling settings of the fast route with a fixed seed. The turns are the recorded
   set. ``--seed-offset`` gives a new sample of the same turns (the side-by-side test of ``qwen_facts.py``).
 - ``--score``: a model scores the recorded turns. One request sends the context and the recorded turn as the last
@@ -162,7 +162,7 @@ def main(argv=None):
     here = Path(__file__).resolve().parent.parent
     ap.add_argument("--base-url", default="http://127.0.0.1:8889")
     ap.add_argument("--model", default="second-model-fit")
-    ap.add_argument("--data", type=Path, default=here / "qwen-data")
+    ap.add_argument("--data", type=Path, default=here / "data/qwen-data")
     ap.add_argument("--recorded", type=Path, default=here / "results/qwen-recorded.jsonl")
     ap.add_argument("--out", type=Path, help="the score file of --score")
     ap.add_argument("--n", type=int, default=60, help="the turns of --record")

@@ -401,7 +401,7 @@ def main(argv=None):
     here = Path(__file__).resolve().parent.parent
     ap.add_argument("--base-url", default="http://127.0.0.1:8890")
     ap.add_argument("--model", help="served model name (default: the server's first model)")
-    ap.add_argument("--skip-dir", type=Path, default=here / "skip-out")
+    ap.add_argument("--skip-dir", type=Path, default=here / "data/skip-out")
     ap.add_argument("--sets", type=Path, default=here / "results/skip-sets.json")
     ap.add_argument("--log", type=Path, default=here / "results/skip-probe.jsonl")
     ap.add_argument("--deadline", type=float, default=float("inf"), help="--greedy ends before this Unix time")

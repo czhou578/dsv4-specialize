@@ -43,7 +43,7 @@ phase_a() {  # the capture boot with the routing profile, on the capture compose
 }
 
 capture_profile() {  # 0 done, 1 boot failed, 9 safety failure
-  local label=capture-profile-k160 sums=$S/capture-out/routing_sums.npz rc left
+  local label=capture-profile-k160 sums=$S/data/capture-out/routing_sums.npz rc left
   rm -f "$sums" "$sums.tmp.npz"
   stop_main || return 9
   boot $label; rc=$?

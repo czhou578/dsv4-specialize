@@ -8,7 +8,7 @@
 # The q and n points use a prefill budget of 2,048 tokens and the default loader (the fastsafetensors loader of the
 # f points has a large peak at the load). Download a model first: the boots run with HF_HUB_OFFLINE=1.
 # The windows of plans/PLAN_QWEN_PRUNE.md, all with Qwen3.6-35B-A3B at a context of 128,000 tokens:
-#   c1          §6 the capture: the full model with --enable-return-routed-experts. The capture of qwen-data with 256
+#   c1          §6 the capture: the full model with --enable-return-routed-experts. The capture of data/qwen-data with 256
 #               generated tokens per segment (capture.py), the recorded set (qwen_gate.py --record), the tool-call
 #               suite of model-benchmarks, the bot decode test
 #   c2          the full model with the MTP draft and the capture flag: a short capture (does it cover the draft
@@ -183,8 +183,8 @@ qboot() {  # $1 point: launch; if the KV pin is too small, one more launch with 
   qstop; log "ERROR: qwen-$p did not boot with the larger pin"; return 1
 }
 tests() {  # $1 point: the tests of TESTS, in order
-  local p=$1 t left o=$R/qwen-fit-$1 gate="$PY $S/tools/qwen_gate.py --base-url $QURL --model $QNAME --data $S/qwen-data --recorded $R/qwen-recorded.jsonl"
-  local cap="$PY $S/tools/capture.py --base-url $QURL --model $QNAME --data $S/qwen-data --sources claude,discord,repo --experts 256"
+  local p=$1 t left o=$R/qwen-fit-$1 gate="$PY $S/tools/qwen_gate.py --base-url $QURL --model $QNAME --data $S/data/qwen-data --recorded $R/qwen-recorded.jsonl"
+  local cap="$PY $S/tools/capture.py --base-url $QURL --model $QNAME --data $S/data/qwen-data --sources claude,discord,repo --experts 256"
   for t in ${TESTS[$p]:-smoke long speed}; do
     left=$(( RESTORE_S - $(now) - 300 ))
     case $t in
@@ -198,7 +198,7 @@ tests() {  # $1 point: the tests of TESTS, in order
         log "qwen-$p decode rate from the rows: $($PY $S/tools/qwen_fit.py --rate $o-speed.jsonl 2>&1 | tail -1)";;
       facts) timeout $(( left < ${FACTS_S:-1200} ? left : ${FACTS_S:-1200} )) $PY $S/tools/qwen_facts.py --base-url $QURL --model $QNAME --answer --out $o-facts.jsonl > $o-facts.log 2>&1
         log "qwen-$p facts: exit $?; $(tail -1 $o-facts.log | cut -c1-200)";;
-      pairs) timeout $left $PY $S/tools/qwen_gate.py --base-url $QURL --model $QNAME --data $S/qwen-data --recorded $o-pairs.jsonl \
+      pairs) timeout $left $PY $S/tools/qwen_gate.py --base-url $QURL --model $QNAME --data $S/data/qwen-data --recorded $o-pairs.jsonl \
           --record --seed-offset 1 > $o-pairs.log 2>&1
         log "qwen-$p new sample of the recorded turns: exit $?; $(tail -1 $o-pairs.log | cut -c1-200)";;
       images) timeout $(( left < 720 ? left : 720 )) $PY $S/tools/qwen_vision.py --base-url $QURL --model $QNAME --answer \

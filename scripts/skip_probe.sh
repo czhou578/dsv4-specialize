@@ -37,7 +37,7 @@ client() {  # the greedy rounds of §7; the client ends 15 min before RESTORE_AT
   return $rc
 }
 [ -n "${SKIP_STUB:-}" ] && source "$SKIP_STUB"   # the dry run of test_skip_scripts.py: stub boots and clients
-OUT=${OUT:-$S/skip-out} PLOG=$R/skip-probe.jsonl
+OUT=${OUT:-$S/data/skip-out} PLOG=$R/skip-probe.jsonl
 
 log "probe window start (boot by $BOOT_BY; restore at $RESTORE_AT)"
 for need in $S/image-patch/skip/deepseek_v4_model.py $S/image-patch/layer_skip.py $S/compose/compose-skip.yml \

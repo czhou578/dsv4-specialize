@@ -56,7 +56,7 @@ Steps 1 and 2 take about a minute each and write about 12 GB each.
 
    ```bash
    mkdir cache && docker run --rm --pull=never --network none --entrypoint cp \
-     -v ../DeepSeek-v4-Flash-One-DGX-Spark/cache:/src:ro -v ./cache:/dst IMAGE -a /src/. /dst/
+     -v ../DeepSeek-v4-Flash-One-DGX-Spark/cache:/src:ro -v ./data/cache:/dst IMAGE -a /src/. /dst/
    ```
 
 CAUTION: The next step stops the bot's model server. The bot gives no answers until step 8.
@@ -82,9 +82,9 @@ CAUTION: The capture boot stops the bot's model server, like a mask test.
 1. Stop the live server: `docker compose -f ../DeepSeek-v4-Flash-One-DGX-Spark/compose-k160t5.yml stop`.
 2. Boot the capture: `docker compose -f compose/compose-capture.yml up -d`. It serves the stock `data/tp1` with Model Runner
    V1 and no DSpark, so the decode is slower than on the live server. The patch writes the sums of the counts and
-   the router weights to `capture-out/routing_sums.npz` after each step.
+   the router weights to `data/capture-out/routing_sums.npz` after each step.
 3. From this repo, capture and rank:
-   `python tools/capture.py --out results/capture-rank.jsonl --data ~/Projects/stock-research-model-eval/model_eval/data/rank --sources discord,subagent,e2e,cron --sums capture-out/routing_sums.npz`,
+   `python tools/capture.py --out results/capture-rank.jsonl --data ~/Projects/stock-research-model-eval/model_eval/data/rank --sources discord,subagent,e2e,cron --sums data/capture-out/routing_sums.npz`,
    then `python tools/capture.py --rank results/capture-rank.jsonl results/expert_rank_weight.json --order weight`.
    The orders are `count`, `weight`, `skill_max` and `skill_floor`.
 4. Stop the capture: `docker compose -f compose/compose-capture.yml down`. Start the live server:

@@ -16,7 +16,7 @@ TEST_PROJECT=dsv4-capture
 MASK=dsv4-capture-deepseek-v4-flash-capture-1
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
-SUMS=$S/capture-out/routing_sums.npz
+SUMS=$S/data/capture-out/routing_sums.npz
 RANKDATA=$W/model_eval/data/rank
 log "capture run start (boot by $BOOT_BY; restore at $RESTORE_AT)"
 until [ "$(now)" -ge "$(date -d "$START_AFTER" +%s)" ]; do sleep 30; done

@@ -5,7 +5,7 @@
 # The safety rules and the shared functions are in run_lib.sh. Set the four deadlines in the environment.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/topk-run.log}
 RESTORE_TAG=topk
-SPEEDF=/home/colin-spark/Projects/dsv4-specialize/history/hermes-e2e/stepf-speed.log   # stepf-speed.sh (history) wrote it
+SPEEDF=/home/colin-spark/Projects/dsv4-specialize/data/history/hermes-e2e/stepf-speed.log   # stepf-speed.sh (history) wrote it
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"
 
 log "top-k run start (start after $START_AFTER; boot by $BOOT_BY; speed by $SPEED_BY; restore at $RESTORE_AT)"

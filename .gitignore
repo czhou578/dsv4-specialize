@@ -1,3 +1,6 @@
+# the data folder: checkpoints, the Qwen data (it can hold secrets), the kernel cache copy, the capture and probe
+# output, the history. Nothing in it is in git. The rules below it also match the old places in the repo root.
+/data/
 # weight folders (12-73 GB each): built by mask_checkpoint.py, topk_checkpoint.py, prune_experts.py
 tp1-*/
 tp1-*
