@@ -23,6 +23,7 @@ change, so the section numbers that the scripts cite are still correct.
 | `PLAN_CODE226_DEPLOY.md` | The deploy of code226 (MD plus 226 coding experts, +1.99 GiB) with levers A (Qwen KV pin 133k) and B (DeepSeek cap 160k, Hermes context_length): the tools, the review window, the prepare step, the switch and the after readings (2026-11-17: plan written; levers A and B chosen; tools in progress) |
 | `PLAN_FEWER_EXPERTS.md` | Fewer experts per token: a top-k 6 runtime with a drop rule and an anchored gain (2026-11-09 to 2026-11-10: no faster point; the anchored top-5 is a little better on the replay only; no deploy) |
 | `PLAN_HEAD_VOCAB.md` | A smaller vocabulary for the head: a token set for the draft only (no output change), or for the target and the draft (2026-11-11: plan written; nothing built) |
+| `PLAN_AGENT_CAPACITY.md` | How many local agents can run in parallel with no visible hallucination: a set of 40 tool tasks, four events that a script detects, and points at different stream counts and context sizes on Qwen and DeepSeek (2026-11-15: plan written; nothing built) |
 | `../serve-tune/PLAN_SERVE_TUNE.md` | A faster decode and less memory from the serving settings: draft depth, KV pin, prefill chunk, FP8 head. It moved to `serve-tune/` with its tools, results and write-up (2026-11-10: done; the KV pin of 7.25 GiB is live; the 128-expert draft passes but is skipped for now; the 24-hour metrics and the KV tier study are blocked) |
 
 The plans are working notes. They speak to the owner as "you", and each status line records the state on its date.
