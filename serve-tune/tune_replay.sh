@@ -14,9 +14,9 @@
 # POINTS (default "h1 n1 n2 n3 h0") selects the points; N3_RULE (klg5 or kle5) sets the rule of N3.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/tune-replay.log}
 RESTORE_TAG=replay
-TUNE="-f compose-mask.yml -f serve-tune/compose-tune.yml"
+TUNE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml"
 TEST_COMPOSE=$TUNE
-source "$(cd "$(dirname "$0")/.." && pwd)/run_lib.sh"   # run_lib.sh is in the repo root
+source "$(cd "$(dirname "$0")/../scripts" && pwd)/run_lib.sh"
 
 POINTS=${POINTS:-h1 n1 n2 n3 h0}
 export MASK_NAME=prune5b MASK_K=160 TUNE_LABEL=tune-h0   # compose-tune.yml needs TUNE_LABEL, also for a down

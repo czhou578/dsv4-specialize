@@ -48,7 +48,7 @@ port 8890 one after the other, and restores the live server. Three windows ran b
 | Step 2: changes to the output | 16:04–19:46 | H1, N1, N2, N3, H0 | `tune_replay.sh` |
 | Step 3: wider drafts | 19:46–22:40 | D0, W1–W4 | `tune_draft.sh` |
 
-`../run_lib.sh` gives every window the same safety rules: one model in memory, a memory floor before each boot,
+`../scripts/run_lib.sh` gives every window the same safety rules: one model in memory, a memory floor before each boot,
 deadlines, a memory watch that stops a client below 1 GiB, and the restore. After each window, port 8888 answered.
 
 **Speed.** The bot decode test sends recorded bot requests and measures the decode rate. Each point has 5 runs; its
@@ -160,7 +160,7 @@ The suffix study (`suffix_match.py`) read 66 recorded sessions: 675,623 output t
 | `compose-tune.yml` | Override of `../compose-mask.yml`: the draft depth and graph sizes, the FP8 draft head, the KV pin, the prefill chunk |
 | `compose-head.yml` | Override on top of the two: the FP8 head of the target (`FP8_TARGET_HEAD=1`) |
 | `image-patch/` | `fp8_target_head.py` and `head-fp8.diff`; `build_head.sh` builds the patched `deepseek_v4_model.py` (not in git) |
-| `alloc_k.py` | The K of each layer for a target mean K (rule `global` or `even`), for `../mask_checkpoint.py --keep-per-layer` |
+| `alloc_k.py` | The K of each layer for a target mean K (rule `global` or `even`), for `../tools/mask_checkpoint.py --keep-per-layer` |
 | `suffix_match.py` | The suffix-match study; run it in the server image, which has `tokenizers` |
 | `tune_night.sh` | The Step 1 window (T0, T3, T4) |
 | `tune_replay.sh` | The Step 2 window (H1, N1–N3, H0) |
@@ -173,7 +173,7 @@ the owner's go, never from 05:00 to 10:00 on weekdays, and never beside another 
 
     tmux new -d -s tune "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/serve-tune/tune_night.sh"
 
-**Tests.** `python -m unittest` in the repo root runs the tests of this folder (through `../test_serve_tune.py`).
+**Tests.** `python -m pytest tests` in the repo root runs the tests of this folder (through `../tests/test_serve_tune.py`).
 `./test_fp8_head.sh` runs the GPU test of the FP8 head in the server image.
 
 ## Data

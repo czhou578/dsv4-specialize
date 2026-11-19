@@ -83,15 +83,15 @@ The negative results are part of the record. Each one has its plan in [plans/](p
 ## How it works
 
 1. **Capture.** A patched server records the experts that the model picks for each token of the bot's own traffic:
-   34 calibration segments, 1.75 M tokens ([capture.py](capture.py), [compose-capture.yml](compose-capture.yml),
+   34 calibration segments, 1.75 M tokens ([capture.py](tools/capture.py), [compose-capture.yml](compose/compose-capture.yml),
    [image-patch/](image-patch/)).
 2. **Rank.** `capture.py --rank` orders the experts of each layer by their use. The rank of the live model is
    [results/expert_rank_bot.json](results/expert_rank_bot.json).
-3. **Mask.** [mask_checkpoint.py](mask_checkpoint.py) builds a copy in which the router never picks a dropped expert
+3. **Mask.** [mask_checkpoint.py](tools/mask_checkpoint.py) builds a copy in which the router never picks a dropped expert
    (see [The mask](#the-mask)). A mask builds in about a minute and does not change the expert weights.
-4. **Top-k.** [topk_checkpoint.py](topk_checkpoint.py) lowers the experts per token from 6 to 5. A smaller K alone
+4. **Top-k.** [topk_checkpoint.py](tools/topk_checkpoint.py) lowers the experts per token from 6 to 5. A smaller K alone
    makes the decode slower, because the draft model gets fewer tokens accepted. Top-k 5 gives the speed back.
-5. **Prune.** [prune_experts.py](prune_experts.py) removes the dropped experts from the files and gives the kept
+5. **Prune.** [prune_experts.py](tools/prune_experts.py) removes the dropped experts from the files and gives the kept
    experts new ids. It removed 28,896 tensors (21.27 GiB) and did no new quantization.
 
 Each test point passes four tests in this order: the replay screen, the speed tests, the full runs and the final
@@ -118,12 +118,12 @@ flowchart LR
     S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9
 ```
 
-**Start here.** The live model comes from the three weight tools of stage 1: [mask_checkpoint.py](mask_checkpoint.py),
-[topk_checkpoint.py](topk_checkpoint.py) and [prune_experts.py](prune_experts.py). Read them first.
+**Start here.** The live model comes from the three weight tools of stage 1: [mask_checkpoint.py](tools/mask_checkpoint.py),
+[topk_checkpoint.py](tools/topk_checkpoint.py) and [prune_experts.py](tools/prune_experts.py). Read them first.
 
-**Shared by all stages:** [run_lib.sh](run_lib.sh) (the safety rules of every run script),
-[compose-mask.yml](compose-mask.yml) (the base of every test boot), [speed_result.py](speed_result.py) (the speed
-result of a test point) and [overnight_guard.sh](overnight_guard.sh) (it restores the live server at night if the
+**Shared by all stages:** [run_lib.sh](scripts/run_lib.sh) (the safety rules of every run script),
+[compose-mask.yml](compose/compose-mask.yml) (the base of every test boot), [speed_result.py](tools/speed_result.py) (the speed
+result of a test point) and [overnight_guard.sh](scripts/overnight_guard.sh) (it restores the live server at night if the
 server is down).
 
 ### 1. Prune the routed experts to K 160 (2026-11-02 to 11-07): live until 2026-11-12
@@ -137,12 +137,12 @@ the bot rank followed on 2026-11-07.
 - Plans: [PLAN_OVERNIGHT_MASK_GRID.md](plans/PLAN_OVERNIGHT_MASK_GRID.md),
   [PLAN_OVERNIGHT_TOPK.md](plans/PLAN_OVERNIGHT_TOPK.md), [PLAN_FINAL_REVIEW.md](plans/PLAN_FINAL_REVIEW.md) and
   [PLAN_PHYSICAL_PRUNE.md](plans/PLAN_PHYSICAL_PRUNE.md). The summary is [PRUNE.md](PRUNE.md) §1–§5.
-- Tools: [capture.py](capture.py), [mask_checkpoint.py](mask_checkpoint.py), [topk_checkpoint.py](topk_checkpoint.py),
-  [prune_experts.py](prune_experts.py), [prune_run.sh](prune_run.sh) and [check_routed.py](check_routed.py).
-- Test boots: [compose-capture.yml](compose-capture.yml), [serve-v1.sh](serve-v1.sh) and
-  [compose-mem073.yml](compose-mem073.yml).
-- Run scripts: [topk_run.sh](topk_run.sh), [prune_boot.sh](prune_boot.sh), [mem_boot.sh](mem_boot.sh) and
-  [draft_test.sh](draft_test.sh).
+- Tools: [capture.py](tools/capture.py), [mask_checkpoint.py](tools/mask_checkpoint.py), [topk_checkpoint.py](tools/topk_checkpoint.py),
+  [prune_experts.py](tools/prune_experts.py), [prune_run.sh](scripts/prune_run.sh) and [check_routed.py](tools/check_routed.py).
+- Test boots: [compose-capture.yml](compose/compose-capture.yml), [serve-v1.sh](image-patch/serve-v1.sh) and
+  [compose-mem073.yml](compose/compose-mem073.yml).
+- Run scripts: [topk_run.sh](scripts/topk_run.sh), [prune_boot.sh](scripts/prune_boot.sh), [mem_boot.sh](scripts/mem_boot.sh) and
+  [draft_test.sh](scripts/draft_test.sh).
 - Result: [results/expert_rank_bot.json](results/expert_rank_bot.json), the expert rank of the live model.
 
 ### 2. Try K 144 with a better rank (2026-11-06 to 11-07): fails
@@ -153,9 +153,9 @@ by their contribution. K 144 failed the NLL gate with every rank (+3.29% to +3.9
 model without a fine-tune.
 
 - Plan: [PLAN_BETTER_RANK.md](plans/PLAN_BETTER_RANK.md).
-- Tools: [rank_data.py](rank_data.py), [rank_report.py](rank_report.py), and the weights patch in
+- Tools: [rank_data.py](tools/rank_data.py), [rank_report.py](tools/rank_report.py), and the weights patch in
   [image-patch/](image-patch/) (`base_router.py`, `routed_experts_capturer.py` and `capture-weights.diff`).
-- Run scripts: [capture_run.sh](capture_run.sh), [rank_masks.sh](rank_masks.sh) and [rank_night.sh](rank_night.sh).
+- Run scripts: [capture_run.sh](scripts/capture_run.sh), [rank_masks.sh](scripts/rank_masks.sh) and [rank_night.sh](scripts/rank_night.sh).
 
 ### 3. Use fewer experts per token (2026-11-09 to 11-10): no deploy
 
@@ -166,9 +166,9 @@ judge found no gain. So nothing changed on the live server.
 
 - Plan: [PLAN_FEWER_EXPERTS.md](plans/PLAN_FEWER_EXPERTS.md). The summary is [PRUNE.md](PRUNE.md) §6.
 - Tools: the router patch in [image-patch/](image-patch/) (`moe_drop.py`, `router-drop.diff` and `build_router.sh`),
-  [profile_report.py](profile_report.py) and [fewer_report.py](fewer_report.py).
-- Test boot: [compose-drop.yml](compose-drop.yml).
-- Run scripts: [fewer_night.sh](fewer_night.sh) and [fewer_stepf.sh](fewer_stepf.sh).
+  [profile_report.py](tools/profile_report.py) and [fewer_report.py](tools/fewer_report.py).
+- Test boot: [compose-drop.yml](compose/compose-drop.yml).
+- Run scripts: [fewer_night.sh](scripts/fewer_night.sh) and [fewer_stepf.sh](scripts/fewer_stepf.sh).
 
 ### 4. Tune the serving settings (2026-11-10): the KV pin is live
 
@@ -191,8 +191,8 @@ too much: +0.82% and +1.49% NLL against the live set, and both fail the baseline
 of the cold cut on this traffic.
 
 - Plans: [PLAN_COLD_EXPERTS.md](plans/PLAN_COLD_EXPERTS.md) and [PLAN_COLD_CUT2.md](plans/PLAN_COLD_CUT2.md).
-- Tools: [cold_sets.py](cold_sets.py) and `mask_checkpoint.py --drop-file`.
-- Run script: [cold_replay.sh](cold_replay.sh).
+- Tools: [cold_sets.py](tools/cold_sets.py) and `mask_checkpoint.py --drop-file`.
+- Run script: [cold_replay.sh](scripts/cold_replay.sh).
 
 ### 6. Prune the cold experts with a loader patch (2026-11-11 to 11-12): live
 
@@ -212,14 +212,14 @@ the K 160 prune: it writes longer answers at the same decode rate. You kept it. 
 model of the router plan.
 
 - Plan: [PLAN_LOADER_PATCH.md](plans/PLAN_LOADER_PATCH.md).
-- Tools: [prune_experts.py](prune_experts.py) (§5.1 of the plan), and the patch (§5.2):
+- Tools: [prune_experts.py](tools/prune_experts.py) (§5.1 of the plan), and the patch (§5.2):
   [image-patch/per-layer-experts.diff](image-patch/per-layer-experts.diff),
-  [image-patch/build_perlayer.sh](image-patch/build_perlayer.sh) and [compose-perlayer.yml](compose-perlayer.yml).
-- Checks: [loader_kernel_check.py](loader_kernel_check.py). Run script: [loader_window.sh](loader_window.sh).
-- The deploy review: [PLAN_MD_REVIEW.md](plans/PLAN_MD_REVIEW.md). Run scripts: [review_live.sh](review_live.sh)
-  and [review_window.sh](review_window.sh), with the safety net [review_finish.sh](review_finish.sh). Report:
-  [review_report.py](review_report.py).
-- The deploy: [PLAN_MD_DEPLOY.md](plans/PLAN_MD_DEPLOY.md). Script: [deploy_md.sh](deploy_md.sh), with the compose file
+  [image-patch/build_perlayer.sh](image-patch/build_perlayer.sh) and [compose-perlayer.yml](compose/compose-perlayer.yml).
+- Checks: [loader_kernel_check.py](tools/loader_kernel_check.py). Run script: [loader_window.sh](scripts/loader_window.sh).
+- The deploy review: [PLAN_MD_REVIEW.md](plans/PLAN_MD_REVIEW.md). Run scripts: [review_live.sh](scripts/review_live.sh)
+  and [review_window.sh](scripts/review_window.sh), with the safety net [review_finish.sh](scripts/review_finish.sh). Report:
+  [review_report.py](tools/review_report.py).
+- The deploy: [PLAN_MD_DEPLOY.md](plans/PLAN_MD_DEPLOY.md). Script: [deploy_md.sh](scripts/deploy_md.sh), with the compose file
   [deploy/compose-md149t5.yml](deploy/compose-md149t5.yml) of the live server.
 
 ### 7. Remove whole layers (2026-11-10 to 11-13): zero layers
@@ -235,13 +235,13 @@ fits, and nothing changed on the live server. The patch, the heal and the script
 - Plan: [PLAN_FEWER_LAYERS.md](plans/PLAN_FEWER_LAYERS.md).
 - The patch: [image-patch/layer_skip.py](image-patch/layer_skip.py) (the skip set, the probe sums, the skip file),
   [image-patch/layer-skip.diff](image-patch/layer-skip.diff), [image-patch/build_skip.sh](image-patch/build_skip.sh),
-  [compose-skip.yml](compose-skip.yml) and [compose-skip-v1.yml](compose-skip-v1.yml). Tests:
-  [test_layer_skip.py](test_layer_skip.py) and [test_layer_skip_gpu.py](test_layer_skip_gpu.py), run by
-  [test_layer_skip.sh](test_layer_skip.sh) in the server image.
-- The client: [layer_screen.py](layer_screen.py) (the data pick, the BI pass, the screen, the greedy rounds, the
-  report, the heal fit), with [test_layer_screen.py](test_layer_screen.py).
-- Run scripts: [skip_probe.sh](skip_probe.sh) and [skip_replay.sh](skip_replay.sh), with their dry run
-  [test_skip_scripts.py](test_skip_scripts.py). The summary is [PRUNE.md](PRUNE.md) §7.
+  [compose-skip.yml](compose/compose-skip.yml) and [compose-skip-v1.yml](compose/compose-skip-v1.yml). Tests:
+  [test_layer_skip.py](tests/test_layer_skip.py) and [test_layer_skip_gpu.py](tests/test_layer_skip_gpu.py), run by
+  [test_layer_skip.sh](tests/test_layer_skip.sh) in the server image.
+- The client: [layer_screen.py](tools/layer_screen.py) (the data pick, the BI pass, the screen, the greedy rounds, the
+  report, the heal fit), with [test_layer_screen.py](tests/test_layer_screen.py).
+- Run scripts: [skip_probe.sh](scripts/skip_probe.sh) and [skip_replay.sh](scripts/skip_replay.sh), with their dry run
+  [test_skip_scripts.py](tests/test_skip_scripts.py). The summary is [PRUNE.md](PRUNE.md) §7.
 
 ### 8. Fit a second model beside DeepSeek (2026-11-13): Qwen 27B does not fit
 
@@ -254,8 +254,8 @@ and the smallest: 74 tok/s in 25.5 GiB with no draft, and 127 tok/s in 28.8 GiB 
 chose Qwen3.6-35B-A3B (99 tok/s with its draft) for its balance of reasoning and speed, and it needed a prune to fit.
 
 - Plan: [PLAN_SECOND_MODEL_FIT.md](plans/PLAN_SECOND_MODEL_FIT.md).
-- Run script: [qwen_fit.sh](qwen_fit.sh), with its client [qwen_fit.py](qwen_fit.py) and the dry run
-  [test_qwen_fit.py](test_qwen_fit.py).
+- Run script: [qwen_fit.sh](scripts/qwen_fit.sh), with its client [qwen_fit.py](tools/qwen_fit.py) and the dry run
+  [test_qwen_fit.py](tests/test_qwen_fit.py).
 
 ### 9. Prune Qwen3.6-35B-A3B and run it beside DeepSeek (2026-11-13 to 11-14): live
 
@@ -274,14 +274,14 @@ questions and costs 2.36 GiB, and it stays on. A 24-hour gate of normal use ends
 
 - The summary: [QWEN.md](QWEN.md). The plan: [PLAN_QWEN_PRUNE.md](plans/PLAN_QWEN_PRUNE.md), §6 (the capture), §7
   (the gates, the facts test and the NVFP4 draft) and §8 (both servers, and vision).
-- Tools: [qwen_data.py](qwen_data.py) (the calibration data), [capture.py](capture.py) (the routing counts),
-  [qwen_prune.py](qwen_prune.py) (the prune), [qwen_gate.py](qwen_gate.py) (the replay gate),
-  [qwen_facts.py](qwen_facts.py) (the facts test and the side-by-side), [qwen_vision.py](qwen_vision.py) (the image
-  test), [qwen_draft_quant.py](qwen_draft_quant.py) (the NVFP4 draft experts) and
+- Tools: [qwen_data.py](tools/qwen_data.py) (the calibration data), [capture.py](tools/capture.py) (the routing counts),
+  [qwen_prune.py](tools/qwen_prune.py) (the prune), [qwen_gate.py](tools/qwen_gate.py) (the replay gate),
+  [qwen_facts.py](tools/qwen_facts.py) (the facts test and the side-by-side), [qwen_vision.py](tools/qwen_vision.py) (the image
+  test), [qwen_draft_quant.py](tools/qwen_draft_quant.py) (the NVFP4 draft experts) and
   [qwen_mtp_patch/sitecustomize.py](qwen_mtp_patch/sitecustomize.py) (in vLLM 0.33, the MTP draft of a pruned Qwen
   keeps its own expert count).
-- Both servers: [pair_run.sh](pair_run.sh) (the boot beside DeepSeek and the load tests) and
-  [pair_watch.sh](pair_watch.sh) (the memory watch). [cap_switch.sh](cap_switch.sh) is the DeepSeek context cap,
+- Both servers: [pair_run.sh](scripts/pair_run.sh) (the boot beside DeepSeek and the load tests) and
+  [pair_watch.sh](scripts/pair_watch.sh) (the memory watch). [cap_switch.sh](scripts/cap_switch.sh) is the DeepSeek context cap,
   written but not used.
 
 ## Documents
@@ -357,6 +357,23 @@ You can reuse these parts:
 
 ## Files
 
+The repo root holds only the documents. The files are in these folders:
+
+| Folder | Content |
+|---|---|
+| [tools/](tools/) | The Python tools: the weight tools, the rank tools, the report tools and the Qwen tools |
+| [scripts/](scripts/) | The run scripts and their libraries (`run_lib.sh`, `job_lib.sh`) |
+| [compose/](compose/) | The compose files of the test boots |
+| [deploy/](deploy/) | The compose files of the live server (`deploy_md.sh prepare` copies them into the server folder) |
+| [image-patch/](image-patch/) | The patches of the server image, their build scripts and `serve-v1.sh` |
+| [qwen_mtp_patch/](qwen_mtp_patch/sitecustomize.py) | The `sitecustomize` hook of the Qwen server |
+| [serve-tune/](serve-tune/README.md) | The serving settings, with their own plan, tools, data and write-up |
+| [tests/](tests/) | The tests |
+| [plans/](plans/README.md) | The plans |
+
+The files moved into these folders on 2026-11-18. The plans keep the old paths: each tool, script, compose file and
+test was in the repo root. The tag `root-layout-2026-11-18` is the last commit with that layout.
+
 The tables below sort the files by type. The [timeline](#timeline-of-the-work) sorts them by stage.
 
 Run the Python files with the stock-research venv: `~/.hermes/stock-research/.venv/bin/python`.
@@ -368,14 +385,14 @@ Run the Python files with the stock-research venv: `~/.hermes/stock-research/.ve
 
 | File | Use |
 |---|---|
-| [mask_checkpoint.py](mask_checkpoint.py) | Builds `tp1-mask-k{K}/`: K of 216 experts per layer stay (`PLAN_MODEL_SPECIALIZE.md` §5.3). With `--rank <rank file>`, the bot rank decides the dropped experts (§6.5); the folder is then `tp1-botmask-k{K}/`. With `--keep-per-layer FILE` (a JSON list from `serve-tune/alloc_k.py`), each layer keeps its own K; `--out` is then needed. With `--drop-file FILE` (from `cold_sets.py`), it drops exactly the listed ids, a mandatory expert too |
-| [cold_sets.py](cold_sets.py) | The drop files of `plans/PLAN_COLD_EXPERTS.md` §4: R0 (the live set as a mask), M1 (cold tool experts), D1 (cold ordinary experts) and MD (both). `--share 0.15 0.2` adds S15 and S20 (`plans/PLAN_COLD_CUT2.md` §2): MD plus every expert below that weight share. `--report R0.jsonl POINT.jsonl` compares a replay with R0 (§5.2) |
-| [topk_checkpoint.py](topk_checkpoint.py) | Builds a top-k copy of a tp1 folder (§8): `--source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`. `--check` runs the self-check only |
-| [prune_experts.py](prune_experts.py) | Builds a physically pruned copy of a mask folder (`PLAN_PHYSICAL_PRUNE.md` §3): the dropped experts leave the files, and the kept experts get the new ids 0 … K−1. A mask with a different K in each layer gives a folder for the loader patch (`plans/PLAN_LOADER_PATCH.md` §4.1). `--check` runs the self-check only |
-| [prune_run.sh](prune_run.sh) | Runs `prune_experts.py` in a root container from the server image, because the 43 expert files of `data/tp1` are `root:600`. The main server stays up |
-| [check_routed.py](check_routed.py) | The `PLAN_MODEL_SPECIALIZE.md` §5.2 check: no dropped expert in the routing of a test boot |
-| [speed_result.py](speed_result.py) | The §4.4 speed result of one test point, from the files in `results/` |
-| [fewer_report.py](fewer_report.py) | The replay table of the points of `plans/PLAN_FEWER_EXPERTS.md` §7 against the baseline, and the decision for Phase D (`--decide`) |
+| [mask_checkpoint.py](tools/mask_checkpoint.py) | Builds `tp1-mask-k{K}/`: K of 216 experts per layer stay (`PLAN_MODEL_SPECIALIZE.md` §5.3). With `--rank <rank file>`, the bot rank decides the dropped experts (§6.5); the folder is then `tp1-botmask-k{K}/`. With `--keep-per-layer FILE` (a JSON list from `serve-tune/alloc_k.py`), each layer keeps its own K; `--out` is then needed. With `--drop-file FILE` (from `cold_sets.py`), it drops exactly the listed ids, a mandatory expert too |
+| [cold_sets.py](tools/cold_sets.py) | The drop files of `plans/PLAN_COLD_EXPERTS.md` §4: R0 (the live set as a mask), M1 (cold tool experts), D1 (cold ordinary experts) and MD (both). `--share 0.15 0.2` adds S15 and S20 (`plans/PLAN_COLD_CUT2.md` §2): MD plus every expert below that weight share. `--report R0.jsonl POINT.jsonl` compares a replay with R0 (§5.2) |
+| [topk_checkpoint.py](tools/topk_checkpoint.py) | Builds a top-k copy of a tp1 folder (§8): `--source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`. `--check` runs the self-check only |
+| [prune_experts.py](tools/prune_experts.py) | Builds a physically pruned copy of a mask folder (`PLAN_PHYSICAL_PRUNE.md` §3): the dropped experts leave the files, and the kept experts get the new ids 0 … K−1. A mask with a different K in each layer gives a folder for the loader patch (`plans/PLAN_LOADER_PATCH.md` §4.1). `--check` runs the self-check only |
+| [prune_run.sh](scripts/prune_run.sh) | Runs `prune_experts.py` in a root container from the server image, because the 43 expert files of `data/tp1` are `root:600`. The main server stays up |
+| [check_routed.py](tools/check_routed.py) | The `PLAN_MODEL_SPECIALIZE.md` §5.2 check: no dropped expert in the routing of a test boot |
+| [speed_result.py](tools/speed_result.py) | The §4.4 speed result of one test point, from the files in `results/` |
+| [fewer_report.py](tools/fewer_report.py) | The replay table of the points of `plans/PLAN_FEWER_EXPERTS.md` §7 against the baseline, and the decision for Phase D (`--decide`) |
 
 **Rank tools.** They need the bot repo's eval worktree, `~/Projects/stock-research-model-eval`: `capture.py` and
 `rank_data.py` import its `model_eval/replay.py`, and the rank data is its `model_eval/data/rank/` (out of git). They
@@ -383,21 +400,23 @@ moved here from the bot repo's `model_eval/` on 2026-11-08.
 
 | File | Use |
 |---|---|
-| [capture.py](capture.py) | The client of the capture boot (`PLAN_MODEL_SPECIALIZE.md` §6.2, `plans/PLAN_BETTER_RANK.md` §4): per segment, the counts of the routed experts and, with `--sums`, the router weights. `--rank` writes `expert_rank_<order>.json` |
-| [rank_data.py](rank_data.py) | Merges the exports into `model_eval/data/rank/sessions.jsonl` and keeps the held-out sessions out (`plans/PLAN_BETTER_RANK.md` §3) |
-| [profile_report.py](profile_report.py) | The routing profile of a capture with `ROUTING_PROFILE=1` (`plans/PLAN_FEWER_EXPERTS.md` §5): the share of the 5th and 6th experts per layer and skill, the experts per token and the window union of each drop rule, and the threshold for point C5 |
-| [rank_report.py](rank_report.py) | Compares the rank files in `results/`: the routing share that each K step removes, and the overlaps (`plans/PLAN_BETTER_RANK.md` §5) |
+| [capture.py](tools/capture.py) | The client of the capture boot (`PLAN_MODEL_SPECIALIZE.md` §6.2, `plans/PLAN_BETTER_RANK.md` §4): per segment, the counts of the routed experts and, with `--sums`, the router weights. `--rank` writes `expert_rank_<order>.json` |
+| [junk_routes.py](tools/junk_routes.py) | The client of the route capture of the junk prompts (`plans/PLAN_JUNK_CAPTURE.md` §4): `smoke` checks the routing array and the sums file; `capture` sends the probe prompts (raw, `--rounds` times) and the last-turn prompt of each pilot transcript, each one cold, and writes per request the counts over the prompt and its last 256 rows, the ids of the probe position and the weight sums |
+| [code_rank.py](tools/code_rank.py) | The rank that counts coding traffic (`plans/PLAN_CODE_RANK.md` §5): orders the experts that MD drops in layers 3-42 by their coding weight share, draws the curve of the dropped bot, pilot, c2 and c3 weight as experts return to MD, and writes the drop files of the candidates code1 (c3 at the K 160 level) and code2 (c2 at 7.5%) |
+| [rank_data.py](tools/rank_data.py) | Merges the exports into `model_eval/data/rank/sessions.jsonl` and keeps the held-out sessions out (`plans/PLAN_BETTER_RANK.md` §3) |
+| [profile_report.py](tools/profile_report.py) | The routing profile of a capture with `ROUTING_PROFILE=1` (`plans/PLAN_FEWER_EXPERTS.md` §5): the share of the 5th and 6th experts per layer and skill, the experts per token and the window union of each drop rule, and the threshold for point C5 |
+| [rank_report.py](tools/rank_report.py) | Compares the rank files in `results/`: the routing share that each K step removes, and the overlaps (`plans/PLAN_BETTER_RANK.md` §5) |
 
 **Test boots.** Each compose file serves on port 8890, so the bot (port 8888) cannot reach a test model.
 
 | File | Use |
 |---|---|
-| [compose-mask.yml](compose-mask.yml) | Boots `tp1-${MASK_NAME}-k${MASK_K}`. `DRAFT_DIR` mounts another DSpark draft; `MASK_EXTRA_ARGS` adds vLLM flags |
-| [compose-mem073.yml](compose-mem073.yml) | Override for `compose-mask.yml`: `GPU_MEMORY_UTILIZATION` 0.73 and 128k context (`PLAN_MODEL_ROUTER.md` §3) |
-| [compose-drop.yml](compose-drop.yml) | Override for `compose-mask.yml`: the router patch with its rule (`MOE_DROP`, `MOE_NORM`, `MOE_LAYERS`) and an 8 GiB KV cache (`plans/PLAN_FEWER_EXPERTS.md` §6) |
-| [compose-perlayer.yml](compose-perlayer.yml) | Override for `compose-mask.yml`: the loader patch, so a folder with a different expert count in each layer loads (`plans/PLAN_LOADER_PATCH.md` §4). A uniform folder loads as in the stock image. Build the two files first with `image-patch/build_perlayer.sh` |
-| [compose-capture.yml](compose-capture.yml) | The expert capture: the stock model with Model Runner V1, no DSpark, `--enable-return-routed-experts` and the weights patch. `ROUTING_PROFILE=1` adds the routing profile; `CAPTURE_UTIL` and `CAPTURE_EXTRA_ARGS` change the boot check and add vLLM flags |
-| [serve-v1.sh](serve-v1.sh) | Runs the server's serve script with Model Runner V1 (for `compose-capture.yml` only) |
+| [compose-mask.yml](compose/compose-mask.yml) | Boots `tp1-${MASK_NAME}-k${MASK_K}`. `DRAFT_DIR` mounts another DSpark draft; `MASK_EXTRA_ARGS` adds vLLM flags |
+| [compose-mem073.yml](compose/compose-mem073.yml) | Override for `compose-mask.yml`: `GPU_MEMORY_UTILIZATION` 0.73 and 128k context (`PLAN_MODEL_ROUTER.md` §3) |
+| [compose-drop.yml](compose/compose-drop.yml) | Override for `compose-mask.yml`: the router patch with its rule (`MOE_DROP`, `MOE_NORM`, `MOE_LAYERS`) and an 8 GiB KV cache (`plans/PLAN_FEWER_EXPERTS.md` §6) |
+| [compose-perlayer.yml](compose/compose-perlayer.yml) | Override for `compose-mask.yml`: the loader patch, so a folder with a different expert count in each layer loads (`plans/PLAN_LOADER_PATCH.md` §4). A uniform folder loads as in the stock image. Build the two files first with `image-patch/build_perlayer.sh` |
+| [compose-capture.yml](compose/compose-capture.yml) | The expert capture: the stock model with Model Runner V1, no DSpark, `--enable-return-routed-experts` and the weights patch. `ROUTING_PROFILE=1` adds the routing profile; `CAPTURE_UTIL` and `CAPTURE_EXTRA_ARGS` change the boot check and add vLLM flags |
+| [serve-v1.sh](image-patch/serve-v1.sh) | Runs the server's serve script with Model Runner V1 (for `compose-capture.yml` only) |
 | [image-patch/](image-patch/) | The weights patch (`PLAN_BETTER_RANK.md` §4.1): the patched `base_router.py` and `routed_experts_capturer.py`, and `capture-weights.diff`, the change against the image. `patch -R -p1` with the diff gives back the original files. The router patch (`PLAN_FEWER_EXPERTS.md` §6): `moe_drop.py` (the drop rule and the gain anchor) and `router-drop.diff`; `build_router.sh` applies the diff to the image's router file (not in git). The loader patch (`plans/PLAN_LOADER_PATCH.md` §4): `per-layer-experts.diff` changes the image's `exl3.py` and DeepSeek V4 `model.py`; `build_perlayer.sh` applies it and writes `image-patch/perlayer/` (not in git) |
 
 **Run scripts.** Each script stops the live server, runs its test boots and restores the live server. Read the
@@ -405,42 +424,45 @@ safety rules in [RUNBOOK.md](RUNBOOK.md) before you start one.
 
 | File | Use |
 |---|---|
-| [run_lib.sh](run_lib.sh) | The shared functions and safety rules of the scripts below. A script sets `LOG`, `RESTORE_TAG` and, if it needs them, `TEST_COMPOSE`, `TEST_PROJECT` and `MASK`, then sources this file. `MAIN_COMPOSE` and `MAIN_CONTAINER` name the live server (default: `compose-md149t5.yml`) |
-| [topk_run.sh](topk_run.sh) | The top-k test night (`PLAN_OVERNIGHT_TOPK.md` §5 and §6) |
-| [prune_boot.sh](prune_boot.sh) | The test boot of the pruned folder: replay, speed tests (`PLAN_PHYSICAL_PRUNE.md` §6) |
-| [mem_boot.sh](mem_boot.sh) | The memory test boot at 0.73 and 128k: boot lines, free memory at idle and under load (`PLAN_MODEL_ROUTER.md` §3) |
-| [draft_test.sh](draft_test.sh) | The pruned model with another DSpark draft (`DRAFT_DIR`): the two decode tests (`PLAN_PHYSICAL_PRUNE.md` §7) |
-| [capture_run.sh](capture_run.sh) | The capture boot (`PLAN_BETTER_RANK.md` §4): a smoke test of the sums file, the capture of `model_eval/data/rank`, the rank files |
-| [rank_masks.sh](rank_masks.sh) | Builds the mask folders of `PLAN_BETTER_RANK.md` §6 from the stock model (`RANK_NEW` picks the rank file). No downtime |
-| [rank_night.sh](rank_night.sh) | Masks on the replay screen (`PLAN_BETTER_RANK.md` §6). `POINTS` lists them as `NAME:K`; the default is the three masks of §6.1 |
-| [fewer_night.sh](fewer_night.sh) | The test night of `plans/PLAN_FEWER_EXPERTS.md`: the routing profile (Phase A), then the replay points C1–C5 and C0 on `tp1-botmask-k160` with `compose-drop.yml` (Phase C), then 5 bot decode runs on the chosen point and 5 on the live server (Phase D). `BOOT_MIN_GIB` makes each boot wait for that much available memory |
-| [fewer_stepf.sh](fewer_stepf.sh) | Step F of `plans/PLAN_FEWER_EXPERTS.md` §9 on one point (`POINT`, `MOE_DROP`, `MOE_NORM`; `MASK_NAME=prune5` boots the live folder): optional replay (`REPLAY=1`) and speed tests (`SPEED=1`, gate `SPEED_MIN`), the 19 held-out prompts end to end, the restore, the checks, the judge and the blind page |
-| [cold_replay.sh](cold_replay.sh) | The replay window of `plans/PLAN_COLD_EXPERTS.md` §7: the masks R0, M1, D1 and MD (`cold_sets.py`), each with the smoke requests, the replay and the comparisons against R0 and the baseline. It stops after R0 if R0 does not match the earlier K 160 mask. The test boots pin the KV at 7.25 GiB. The second window (`plans/PLAN_COLD_CUT2.md` §6) adds S15 and S20, and repeat points with the suffix `-2` (`r0-2`, `s20-2`, `s15-2`): each repeat reads against the R0 of its half, and the end of the window prints the mean of the two replays of each point |
-| [loader_window.sh](loader_window.sh) | The test window of `plans/PLAN_LOADER_PATCH.md` §6: the patched image (`compose-perlayer.yml`) on the K 160 prune (P0: smoke, speed, prefill probe) and on the MD prune (P1: also two replays). After the restore it logs the gates of §6.1: the loaded GiB, the free memory, the speed of P1 against P0, and the mean NLL of P1 against the MD mask |
-| [review_live.sh](review_live.sh) | The base runs of `plans/PLAN_MD_REVIEW.md` §4: the 19 held-out prompts end to end on the live server (no downtime), once for each label of `LABELS`, then the checks |
-| [review_window.sh](review_window.sh) | The test window of `plans/PLAN_MD_REVIEW.md` §5 and §6: after the base runs, the MD prune on the patched image (smoke, then the 19 held-out prompts for each label of `LABELS`), the restore, the checks against the live runs, the blind page, the judge with its controls, and the report (`review_report.py`) |
-| [review_finish.sh](review_finish.sh) | The safety net of `plans/PLAN_MD_REVIEW.md` §6.1: after `review_window.sh` ends, for any reason, and the live server is healthy, it does each step again that is not complete: the checks, the blind page, the judge calls (3 attempts each) and the report |
-| [overnight_guard.sh](overnight_guard.sh) | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-md149t5.yml`) if port 8888 is down. It first stops the containers of `STOP_PROJECTS` (default: the test server). `DRY_RUN=1` logs the actions only |
-| [deploy_md.sh](deploy_md.sh) | The deploy of `plans/PLAN_MD_DEPLOY.md`: `prepare` (the files in the server folder, no downtime), `readings TAG` (the counters and the bot decode test on port 8888), `check [LOG]` (the boot checks) and `switch` (the live server to `compose-md149t5.yml`, with a rollback; only the user starts it; done on 2026-11-12). `DRY_RUN=1 ... switch` ends before any server action |
+| [run_lib.sh](scripts/run_lib.sh) | The shared functions and safety rules of the scripts below. A script sets `LOG`, `RESTORE_TAG` and, if it needs them, `TEST_COMPOSE`, `TEST_PROJECT` and `MASK`, then sources this file. `MAIN_COMPOSE` and `MAIN_CONTAINER` name the live server (default: `compose-md149t5.yml`) |
+| [job_lib.sh](scripts/job_lib.sh) | Shows a script on the machine-dash page (`http://127.0.0.1:8470`). In a tmux session, `run_lib.sh` and `overnight_guard.sh` run under `job run`, and report their waits and phases. See [RUNBOOK.md](RUNBOOK.md) |
+| [topk_run.sh](scripts/topk_run.sh) | The top-k test night (`PLAN_OVERNIGHT_TOPK.md` §5 and §6) |
+| [prune_boot.sh](scripts/prune_boot.sh) | The test boot of the pruned folder: replay, speed tests (`PLAN_PHYSICAL_PRUNE.md` §6) |
+| [mem_boot.sh](scripts/mem_boot.sh) | The memory test boot at 0.73 and 128k: boot lines, free memory at idle and under load (`PLAN_MODEL_ROUTER.md` §3) |
+| [draft_test.sh](scripts/draft_test.sh) | The pruned model with another DSpark draft (`DRAFT_DIR`): the two decode tests (`PLAN_PHYSICAL_PRUNE.md` §7) |
+| [capture_run.sh](scripts/capture_run.sh) | The capture boot (`PLAN_BETTER_RANK.md` §4): a smoke test of the sums file, the capture of `model_eval/data/rank`, the rank files |
+| [junk_capture.sh](scripts/junk_capture.sh) | Window 1 of `plans/PLAN_JUNK_CAPTURE.md` (§5): stops Qwen and DeepSeek, boots the stock model from `compose-capture.yml` and `compose-capture-junk.yml` (KV pin 6.5 GiB, 131072 tokens) under a memory guard, checks the server and the KV size, runs `junk_routes.py smoke` and `capture`, then restores DeepSeek and Qwen |
+| [review_code226.sh](scripts/review_code226.sh) | The review window of `plans/PLAN_CODE226_DEPLOY.md` §5: md at its live settings (one replay, speed) and code226 at the deploy settings (160k context cap with `compose-cap.yml`, two replays, speed, prefill probe), with one boot more at the KV need plus 4%; then the restore, Qwen, and the gates |
+| [rank_masks.sh](scripts/rank_masks.sh) | Builds the mask folders of `PLAN_BETTER_RANK.md` §6 from the stock model (`RANK_NEW` picks the rank file). No downtime |
+| [rank_night.sh](scripts/rank_night.sh) | Masks on the replay screen (`PLAN_BETTER_RANK.md` §6). `POINTS` lists them as `NAME:K`; the default is the three masks of §6.1 |
+| [fewer_night.sh](scripts/fewer_night.sh) | The test night of `plans/PLAN_FEWER_EXPERTS.md`: the routing profile (Phase A), then the replay points C1–C5 and C0 on `tp1-botmask-k160` with `compose-drop.yml` (Phase C), then 5 bot decode runs on the chosen point and 5 on the live server (Phase D). `BOOT_MIN_GIB` makes each boot wait for that much available memory |
+| [fewer_stepf.sh](scripts/fewer_stepf.sh) | Step F of `plans/PLAN_FEWER_EXPERTS.md` §9 on one point (`POINT`, `MOE_DROP`, `MOE_NORM`; `MASK_NAME=prune5` boots the live folder): optional replay (`REPLAY=1`) and speed tests (`SPEED=1`, gate `SPEED_MIN`), the 19 held-out prompts end to end, the restore, the checks, the judge and the blind page |
+| [cold_replay.sh](scripts/cold_replay.sh) | The replay window of `plans/PLAN_COLD_EXPERTS.md` §7: the masks R0, M1, D1 and MD (`cold_sets.py`), each with the smoke requests, the replay and the comparisons against R0 and the baseline. It stops after R0 if R0 does not match the earlier K 160 mask. The test boots pin the KV at 7.25 GiB. The second window (`plans/PLAN_COLD_CUT2.md` §6) adds S15 and S20, and repeat points with the suffix `-2` (`r0-2`, `s20-2`, `s15-2`): each repeat reads against the R0 of its half, and the end of the window prints the mean of the two replays of each point |
+| [loader_window.sh](scripts/loader_window.sh) | The test window of `plans/PLAN_LOADER_PATCH.md` §6: the patched image (`compose-perlayer.yml`) on the K 160 prune (P0: smoke, speed, prefill probe) and on the MD prune (P1: also two replays). After the restore it logs the gates of §6.1: the loaded GiB, the free memory, the speed of P1 against P0, and the mean NLL of P1 against the MD mask |
+| [review_live.sh](scripts/review_live.sh) | The base runs of `plans/PLAN_MD_REVIEW.md` §4: the 19 held-out prompts end to end on the live server (no downtime), once for each label of `LABELS`, then the checks |
+| [review_window.sh](scripts/review_window.sh) | The test window of `plans/PLAN_MD_REVIEW.md` §5 and §6: after the base runs, the MD prune on the patched image (smoke, then the 19 held-out prompts for each label of `LABELS`), the restore, the checks against the live runs, the blind page, the judge with its controls, and the report (`review_report.py`) |
+| [review_finish.sh](scripts/review_finish.sh) | The safety net of `plans/PLAN_MD_REVIEW.md` §6.1: after `review_window.sh` ends, for any reason, and the live server is healthy, it does each step again that is not complete: the checks, the blind page, the judge calls (3 attempts each) and the report |
+| [overnight_guard.sh](scripts/overnight_guard.sh) | At 04:15 and 04:35, restores the live server (`MAIN_COMPOSE`, default `compose-md149t5.yml`) if port 8888 is down. It first stops the containers of `STOP_PROJECTS` (default: the test server). `DRY_RUN=1` logs the actions only |
+| [deploy_md.sh](scripts/deploy_md.sh) | The deploy of `plans/PLAN_MD_DEPLOY.md`: `prepare` (the files in the server folder, no downtime), `readings TAG` (the counters and the bot decode test on port 8888), `check [LOG]` (the boot checks) and `switch` (the live server to `compose-md149t5.yml`, with a rollback; only the user starts it; done on 2026-11-12). `DRY_RUN=1 ... switch` ends before any server action |
 | [deploy/compose-md149t5.yml](deploy/compose-md149t5.yml) | The compose file of the MD prune on the live server: `compose-k160t5.yml` with the MD folder, the loader patch and its own kernel cache. `deploy_md.sh prepare` copies it into the server folder |
 
 **Qwen files.** They run with the vLLM 0.33 venv, beside the live DeepSeek or in a test window
-(`plans/PLAN_QWEN_PRUNE.md`). [colinfer_floor.sh](colinfer_floor.sh) and [colinfer_floor.py](colinfer_floor.py)
+(`plans/PLAN_QWEN_PRUNE.md`). [colinfer_floor.sh](scripts/colinfer_floor.sh) and [colinfer_floor.py](tools/colinfer_floor.py)
 measure a different inference engine for a later project, and are not part of the prune.
 
 | File | Use |
 |---|---|
-| [qwen_data.py](qwen_data.py) | Builds the calibration and held-out data from three local sources (§3). The output can hold secrets, so it stays out of git |
-| [qwen_prune.py](qwen_prune.py) | Builds a copy of a Qwen3.5/3.6 MoE checkpoint with K experts per layer, from a rank file of `capture.py` (§5.2) |
-| [qwen_gate.py](qwen_gate.py) | The replay gate against the full model of the same window (§4: G1 and G2) |
-| [qwen_facts.py](qwen_facts.py) | The facts test on SimpleQA and the blind side-by-side on held-out turns (§7.5) |
-| [qwen_vision.py](qwen_vision.py) | The image test: rendered screenshots, charts, UI screens and diagrams with known answers, graded by DeepSeek (§8.4) |
-| [qwen_draft_quant.py](qwen_draft_quant.py) | Quantizes the 256 experts of the MTP draft to NVFP4, and patches the quant config (§7.7) |
+| [qwen_data.py](tools/qwen_data.py) | Builds the calibration and held-out data from three local sources (§3). The output can hold secrets, so it stays out of git |
+| [qwen_prune.py](tools/qwen_prune.py) | Builds a copy of a Qwen3.5/3.6 MoE checkpoint with K experts per layer, from a rank file of `capture.py` (§5.2) |
+| [qwen_gate.py](tools/qwen_gate.py) | The replay gate against the full model of the same window (§4: G1 and G2) |
+| [qwen_facts.py](tools/qwen_facts.py) | The facts test on SimpleQA and the blind side-by-side on held-out turns (§7.5) |
+| [qwen_vision.py](tools/qwen_vision.py) | The image test: rendered screenshots, charts, UI screens and diagrams with known answers, graded by DeepSeek (§8.4) |
+| [qwen_draft_quant.py](tools/qwen_draft_quant.py) | Quantizes the 256 experts of the MTP draft to NVFP4, and patches the quant config (§7.7) |
 | [qwen_mtp_patch/](qwen_mtp_patch/sitecustomize.py) | A `sitecustomize` hook for vLLM 0.33: the MTP draft keeps 256 experts beside a pruned target (§7.1) |
-| [qwen_fit.sh](qwen_fit.sh) | The test windows of a second model alone: memory, speed, and the image tests (`plans/PLAN_SECOND_MODEL_FIT.md`) |
-| [pair_run.sh](pair_run.sh) | Boots Qwen K 208 beside the running DeepSeek and runs the load tests of §8 (`VISION=1` for vision) |
-| [pair_watch.sh](pair_watch.sh) | The memory watch: below 2 GiB available it stops the Qwen server, and never DeepSeek |
-| [cap_switch.sh](cap_switch.sh) | The DeepSeek context cap of 160k (§8.3). Written and tested, not used |
+| [qwen_fit.sh](scripts/qwen_fit.sh) | The test windows of a second model alone: memory, speed, and the image tests (`plans/PLAN_SECOND_MODEL_FIT.md`) |
+| [pair_run.sh](scripts/pair_run.sh) | Boots Qwen K 208 beside the running DeepSeek and runs the load tests of §8 (`VISION=1` for vision) |
+| [pair_watch.sh](scripts/pair_watch.sh) | The memory watch: below 2 GiB available it stops the Qwen server, and never DeepSeek |
+| [cap_switch.sh](scripts/cap_switch.sh) | The DeepSeek context cap of 160k (§8.3). Written and tested, not used |
 
 **Not in git.** The Qwen data and checkpoints (`qwen-data/`, `qwen-k*/`, `qwen-draft-*/`), the test checkpoints
 (`tp1-*`), the kernel cache copy (`cache/`), the capture output
@@ -451,11 +473,14 @@ they are.
 
 ## Tests
 
-Run the unit tests from the repo root:
+The tests are in [tests/](tests/). Run them from the repo root:
 
 ```bash
-python -m unittest
+python -m pytest tests                              # all tests
+PYTHONPATH=tools python -m unittest discover -s tests   # without pytest: the unittest classes only
 ```
+
+`tests/conftest.py` puts `tools/` on the import path for pytest. `PYTHONPATH=tools` does that for unittest.
 
 - `test_mask_checkpoint.py`, `test_topk_checkpoint.py` and `test_prune_experts.py` run each weight tool on a small
   synthetic checkpoint. They need only numpy.
@@ -465,17 +490,19 @@ python -m unittest
   the eval worktree of the bot repo.
 - `test_serve_tune.py` runs the tests of [serve-tune/](serve-tune/README.md). unittest cannot import a folder name
   with a hyphen, so this file adds the folder to the path.
-- `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM. `./test_moe_drop.sh` runs it in
+- `test_moe_drop.py` (the router patch and the profile hook) needs torch and vLLM. `tests/test_moe_drop.sh` runs it in
   the server image.
 - `test_loader_patch.py` (the loader patch, `plans/PLAN_LOADER_PATCH.md` §5.2) also needs vLLM. Build
-  `image-patch/perlayer/` first with `image-patch/build_perlayer.sh`, then `./test_loader_patch.sh` runs it in the
+  `image-patch/perlayer/` first with `image-patch/build_perlayer.sh`, then `tests/test_loader_patch.sh` runs it in the
   server image.
 - `test_review_report.py` tests the rules of `review_report.py` (the sign-test line, the controls, the weak
   prompts, the skills and the run times) on synthetic rows.
+- `test_job_lib.py` runs small scripts with `job_lib.sh` and `run_lib.sh` under a fake tmux, with the `job` command of
+  `~/Projects/machine-dash` and a temporary jobs folder. Without that command it is skipped.
 - The `test_qwen_*.py` files, `test_pair_scripts.py` and `test_cap_switch.py` test the Qwen tools on small
-  synthetic data, and the window scripts as dry runs. Some of them are pytest tests, so run them with
-  `python -m pytest`. `test_qwen_prune.py` and `test_qwen_draft_quant.py` need torch (the vLLM 0.33 venv).
-- `./loader_kernel_check.sh` runs the GPU check of §5.3 (`loader_kernel_check.py`): the real experts of one layer of
+  synthetic data, and the window scripts as dry runs. Some of them are pytest tests. `test_qwen_prune.py` and
+  `test_qwen_draft_quant.py` need torch (the vLLM 0.33 venv).
+- `./scripts/loader_kernel_check.sh` runs the GPU check of §5.3 (`loader_kernel_check.py`): the real experts of one layer of
   the K 160 prune and of the MD prune, through the patched loader. It uses about 3 GiB of GPU memory beside the live
   server, so run it only when the bot is idle.
 

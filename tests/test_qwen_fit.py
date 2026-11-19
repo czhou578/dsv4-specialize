@@ -1,0 +1,250 @@
+"""qwen_fit.py and the dry run of qwen_fit.sh (plans/PLAN_SECOND_MODEL_FIT.md §4.3): the report arithmetic, the long
+prompt size, and the window script under bash with stub boots and stub clients (QWEN_STUB). No server, no GPU."""
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from pathlib import Path
+from unittest import mock
+
+import qwen_fit
+
+HERE = Path(__file__).resolve().parent.parent   # the repo root
+STUB = r'''
+R=$STUB_DIR
+stop_main() { log "STUB stop_main"; }
+restore() { log "STUB restore"; }
+wait_mem() { :; }
+qrunning() { return 1; }
+qstop() { sample_stop; QPID=; log "STUB qstop"; }
+avail_mb() { echo ${STUB_AVAIL:-118000}; }
+gpu_free() { echo "110.0 of 121.7 GiB"; }
+sample_start() { printf '1 118000\n2 84000\n9999999999 80000\n' > "$1"; }
+sample_stop() { :; }
+N=0
+launch() {
+  N=$((N + 1)); log "STUB launch $1 ${MODEL[$1]##*/} ctx=${CTX[$1]:-256000} pin=$PIN budget=${BUDGET[$1]} draft=${DRAFT[$1]:-none} flags=${FLAGS[$1]} pypath=${PYPATH[$1]:-none}"
+  case " ${STUB_FAIL:-} " in *" $1 "*) echo "RuntimeError: boom" > "$2"; return 1;; esac
+  if [ "${STUB_SMALL_PIN:-}" = "$1" ] && [ "$PIN" = 8933531976 ]; then
+    echo "ValueError: 8.80 GiB KV cache is needed, which is larger than the available KV cache memory (8.32 GiB)" > "$2"; return 1
+  fi
+  printf 'INFO Model loading took 20.1 GiB memory and 7 seconds\nINFO GPU KV cache size: 266,240 tokens\n' > "$2"
+}
+tests() { log "STUB tests $1"; }
+nvidia-smi() { echo "4242, 31000 MiB"; }
+'''
+
+
+class ReportTest(unittest.TestCase):
+    def test_the_overhead_is_the_peak_use_minus_weights_and_pin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "mem.log").write_text("1 118000\n2 76000\n5 86000\n6 84952\n7 90000\n")   # 2: the load peak
+            (d / "speed.jsonl").write_text("".join(json.dumps(x) + "\n" for x in [
+                {"run": 0, "completion_tokens": 1, "decode_tok_s": None}, {"run": 1, "completion_tokens": 101, "decode_tok_s": 10.0},
+                {"run": 1, "completion_tokens": 301, "decode_tok_s": 30.0}]))
+            self.assertEqual(qwen_fit.rate(d / "speed.jsonl"), (20.0, 2))
+            (d / "server.log").write_text("x Model loading took 19.83 GiB memory\ny GPU KV cache size: 266,240 tokens\n")
+            (d / "gpu.txt").write_text("4242, 30500 MiB\n")
+            r = qwen_fit.report(118000, 88000, 8933531976, d / "mem.log", d / "server.log", d / "gpu.txt", healthy_at=5)
+        self.assertAlmostEqual(r["load_peak"], 42000 / 1024, places=2)
+        self.assertEqual((r["weights"], r["kv_pin"], r["kv_tokens"], r["gpu_process_mib"]), (19.83, 8.32, 266240, [30500]))
+        self.assertAlmostEqual(r["used_at_peak"], (118000 - 84952) / 1024, places=2)
+        self.assertAlmostEqual(r["overhead_x"], (118000 - 84952) / 1024 - 19.83 - 8.32, places=2)
+        self.assertAlmostEqual(r["overhead_idle"], 30000 / 1024 - 19.83 - 8.32, places=2)
+
+    def test_the_long_prompt_stays_under_its_token_count(self):
+        def fake(base, path, body, timeout=None):   # 40 tokens per paragraph
+            return {"tokens": [0] * (40 * body["prompt"].count(qwen_fit.PARAGRAPH))}
+        with mock.patch.object(qwen_fit, "post", fake):
+            text = qwen_fit.long_text("http://x", "m", 250000)
+        self.assertEqual(text.count(qwen_fit.PARAGRAPH), (250000 - 200) // 40)
+
+
+class WindowTest(unittest.TestCase):
+    def run_script(self, boot_by=60, stub=STUB, files=None, **env):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        d = Path(tmp.name)
+        (d / "stub.sh").write_text(stub)
+        for name, text in (files or {}).items():
+            (d / name).parent.mkdir(parents=True, exist_ok=True)
+            (d / name).write_text(text)
+            (d / name).chmod(0o755)
+        t = lambda m: time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() + 60 * m))
+        clean = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}   # a test compares the server's PYTHONPATH
+        full = {**clean, "QWEN_STUB": str(d / "stub.sh"), "STUB_DIR": str(d), "LOG": str(d / "window.log"),
+                "START_AFTER": t(-1), "BOOT_BY": t(boot_by), "SPEED_BY": t(boot_by), "RESTORE_AT": t(240), **env}
+        proc = subprocess.run(["bash", str(HERE / "scripts/qwen_fit.sh")], env=full, capture_output=True, text=True, timeout=120)
+        return proc.returncode, (d / "window.log").read_text(), d
+
+    def test_a_normal_window(self):
+        rc, log, d = self.run_script()
+        self.assertEqual(rc, 0, log)
+        self.assertIn("STUB launch f1 Qwen3.8-27B-NVFP4 ctx=256000 pin=8933531976 budget=2048 draft=none", log)
+        self.assertIn("STUB launch f2 Qwen3.8-27B-NVFP4 ctx=256000 pin=8933531976 budget=8192 draft=none", log)
+        self.assertIn('STUB launch f3 Qwen3.8-27B-NVFP4 ctx=256000 pin=8933531976 budget=2048 draft={"method":"mtp","num_speculative_tokens":3}', log)
+        self.assertIn("qwen-f1: overhead X 8.69 GiB at the peak", log)       # (118000 - 80000) / 1024 - 20.1 - 8.32
+        self.assertEqual(json.loads((d / "qwen-fit-f1.json").read_text())["kv_tokens"], 266240)
+        self.assertEqual(log.count("STUB stop_main"), 3)
+        self.assertLess(log.rindex("STUB qstop"), log.index("STUB restore"))
+        self.assertIn("qwen fit window done", log)
+
+    def test_a_small_pin_gets_one_more_boot_with_the_need_plus_4_percent(self):
+        rc, log, _ = self.run_script(STUB_SMALL_PIN="f1", POINTS="f1 f2")
+        self.assertEqual(rc, 0, log)
+        pin = int(8.80 * 1.04 * 2**30)
+        self.assertIn(f"the need is 8.80 GiB: one more boot with {pin} bytes", log)
+        self.assertIn(f"STUB launch f2 Qwen3.8-27B-NVFP4 ctx=256000 pin={pin}", log)   # the later points keep the pin
+        self.assertIn("STUB tests f1", log)
+
+    def test_the_points_of_the_fast_models(self):
+        rc, log, _ = self.run_script(POINTS="q1 n1 q2 n2")
+        self.assertEqual(rc, 0, log)
+        self.assertIn("STUB launch q1 Qwen3.6-35B-A3B-NVFP4-Fast ctx=256000 pin=2800000000 budget=2048 draft=none flags=--attention-backend "
+                      "flashinfer --moe-backend flashinfer_cutlass --reasoning-parser qwen3 --tool-call-parser qwen3_xml "
+                      "--language-model-only", log)
+        self.assertIn('STUB launch q2 Qwen3.6-35B-A3B-NVFP4-Fast ctx=256000 pin=2800000000 budget=2048 draft={"method":"mtp"', log)
+        self.assertIn("STUB launch n1 NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 ctx=256000 pin=820000000 budget=2048 draft=none "
+                      "flags=--moe-backend marlin --mamba-backend flashinfer --reasoning-parser nemotron_v3", log)
+        self.assertIn('draft={"model":"nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark","num_speculative_tokens":3}', log)
+
+    def test_the_points_of_the_prune_windows_run_their_own_tests(self):
+        # the real tests() with a fake Python that logs its arguments; the report and the rate use the real Python
+        fake = "#!/usr/bin/env bash\ncase \" $* \" in *\" --report \"*|*\" --rate \"*) exec %s \"$@\";; esac\n" \
+               "echo \"FAKE $*\" >> $STUB_DIR/calls.log\n" % sys.executable
+        stub = STUB.replace('tests() { log "STUB tests $1"; }\n', "") + \
+            "PY=$STUB_DIR/python QV=$STUB_DIR MB=$STUB_DIR; MODEL[g176]=$STUB_DIR/k176; MODEL[g192]=$STUB_DIR/none\n"
+        rc, log, d = self.run_script(POINTS="c1 c2 c3 g256 g176 g192", stub=stub, files={"python": fake, "vllm": fake, "k176/config.json": "{}"})
+        self.assertEqual(rc, 0, log)
+        calls = (d / "calls.log").read_text()
+        self.assertIn("STUB launch c1 Qwen3.6-35B-A3B-NVFP4-Fast ctx=128000 pin=1574535010 budget=2048 draft=none", log)
+        self.assertIn("--language-model-only --enable-return-routed-experts", log.split("STUB launch c1")[1].splitlines()[0])
+        self.assertIn('STUB launch c3 Qwen3.6-35B-A3B-NVFP4-Fast ctx=128000 pin=1853707884 budget=2048 draft={"method":"ngram"', log)
+        self.assertIn("STUB launch g176 k176 ctx=128000 pin=1965377034", log)
+        self.assertRegex(log.split("STUB launch g176")[1].splitlines()[0], r'draft=\{"method":"mtp","model":"[^"]*snapshots/[^"/]+",')
+        self.assertIn('STUB launch g256 Qwen3.6-35B-A3B-NVFP4-Fast ctx=128000 pin=1965377034 budget=2048 draft={"method":"mtp","num_speculative_tokens":3}', log)
+        self.assertIn("ERROR: no folder", log.split("qwen-g176")[-1])                    # g192 has no folder: skipped
+        self.assertNotIn("STUB launch g192", log)
+        self.assertRegex(calls, r"capture\.py .*--sources claude,discord,repo --experts 256 --generate 256 --out \S+/qwen-capture\.jsonl")
+        self.assertRegex(calls, r"capture\.py .*--limit 24 --out \S+/qwen-capture-draft\.jsonl")
+        self.assertRegex(calls, r"qwen_gate\.py .*--recorded \S+/qwen-recorded\.jsonl --record")
+        self.assertRegex(calls, r"qwen_gate\.py .*--score --out \S+/qwen-fit-g176-score\.jsonl")
+        self.assertRegex(calls, r"-m benchmarks\.tool_calling --base-url http://127\.0\.0\.1:8889/v1 .*--output \S+/qwen-fit-g256-tools\.json")
+        self.assertEqual(calls.count("--long"), 0)                                        # 128k points send no 250k prompt
+        self.assertEqual(calls.count("model_eval.speed"), 5)                              # c1, c2, c3, g256 and g176
+        self.assertIn("qwen-g176: overhead X", log)
+
+    def test_the_patch_points_the_fallback_and_the_noise_check(self):
+        stub = STUB + "MODEL[g208]=$STUB_DIR/k208; MODEL[p208]=$STUB_DIR/k208; MODEL[p192]=$STUB_DIR/k192\n"
+        rc, log, _ = self.run_script(POINTS="g208 p208 p192 r256", stub=stub, files={
+            "k208/config.json": "{}", "k192/config.json": "{}", "qwen-fit-g208-score.jsonl": '{"tokens": 1}\n'})
+        self.assertEqual(rc, 0, log)
+        self.assertRegex(log, r"STUB launch g208 k208 ctx=128000 pin=1965377034 .* pypath=\S+/qwen_mtp_patch\n")
+        self.assertIn("qwen-p208: skipped, g208 has its score", log)
+        self.assertNotIn("STUB launch p208", log)
+        self.assertIn("STUB launch p192 k192 ctx=128000 pin=1574535010 budget=2048 draft=none", log)   # g192 has no score
+        self.assertTrue(log.split("STUB launch p192")[1].splitlines()[0].endswith("pypath=none"))
+        self.assertIn('STUB launch r256 Qwen3.6-35B-A3B-NVFP4-Fast ctx=128000 pin=1965377034 budget=2048 draft={"method":"mtp"', log)
+
+    def test_the_overhead_points_and_k208(self):
+        stub = STUB + "MODEL[k0]=$STUB_DIR/k208; MODEL[k1]=$STUB_DIR/k208\n"
+        rc, log, _ = self.run_script(POINTS="o0 o1 o2 o3 o4 k0 k1", stub=stub, files={"k208/config.json": "{}"})
+        self.assertEqual(rc, 0, log)
+        self.assertIn("available beside the main server:", log)
+        line = lambda p: log.split(f"STUB launch {p} ")[1].splitlines()[0]
+        self.assertTrue(line("o0").startswith('Qwen3.6-35B-A3B-NVFP4-Fast ctx=128000 pin=1965377034 budget=2048 draft={"method":"mtp","num_speculative_tokens":3}'))
+        self.assertIn("budget=512", line("o1"))
+        self.assertTrue(line("o2").endswith("--language-model-only --enforce-eager pypath=none"))
+        self.assertRegex(line("k1"), r'^k208 ctx=128000 pin=1965377034 budget=512 draft=\{"method":"mtp","model":"[^"]*snapshots/.* pypath=\S+/qwen_mtp_patch$')
+        self.assertIn("qwen-o0 processes (name, RSS kB, peak RSS kB, pid): ", log)
+
+    def test_the_nvfp4_draft_point(self):
+        stub = STUB + "MODEL[d1]=$STUB_DIR/k208\n"
+        rc, log, _ = self.run_script(POINTS="d1", stub=stub, files={"k208/config.json": "{}"})
+        self.assertEqual(rc, 0, log)
+        line = log.split("STUB launch d1 ")[1].splitlines()[0]
+        self.assertRegex(line, r'^k208 ctx=128000 pin=1965377034 budget=2048 draft=\{"method":"mtp","model":"\S+/qwen-draft-nvfp4",'
+                               r'"num_speculative_tokens":3,"moe_backend":"marlin"\} .* pypath=\S+/qwen_mtp_patch$')
+
+    def test_the_warm_and_expandable_points_reach_the_server(self):
+        fake = "#!/usr/bin/env bash\necho \"AC=${PYTORCH_CUDA_ALLOC_CONF:-} $*\" >> $STUB_DIR/calls.log\nexit 1\n"
+        stub = STUB[:STUB.index("N=0\n")] + STUB[STUB.index("tests() {"):] + "QURL=http://127.0.0.1:9; QV=$STUB_DIR; MODEL[d2]=$STUB_DIR/k208; MODEL[d3]=$STUB_DIR/k208\n"
+        rc, log, d = self.run_script(POINTS="d2 d3", stub=stub, files={"vllm": fake, "k208/config.json": "{}"})
+        calls = (d / "calls.log").read_text().splitlines()
+        self.assertTrue(calls[0].startswith("AC= serve") and "qwen-draft-nvfp4" in calls[0] and '"moe_backend":"marlin"' in calls[0])
+        self.assertTrue(calls[1].startswith("AC=expandable_segments:True serve") and "qwen-draft-nvfp4" in calls[1])
+
+    def test_the_vision_points(self):
+        stub = STUB + "MODEL[i208]=$STUB_DIR/k208; MODEL[m208]=$STUB_DIR/k208\n"
+        rc, log, _ = self.run_script(POINTS="i208 i256 m208", stub=stub, files={"k208/config.json": "{}"})
+        self.assertEqual(rc, 0, log)
+        for p in ("i208", "i256", "m208"):
+            line = log.split(f"STUB launch {p} ")[1].splitlines()[0]
+            self.assertNotIn("--language-model-only", line)
+            self.assertIn('--limit-mm-per-prompt {"image":1,"video":0}', line)
+        self.assertIn("qwen-draft-nvfp4", log.split("STUB launch m208 ")[1].splitlines()[0])
+        self.assertTrue(log.split("STUB launch i256 ")[1].splitlines()[0].endswith("pypath=none"))
+        self.assertIn('draft={"method":"mtp","num_speculative_tokens":3}', log.split("STUB launch i256 ")[1].splitlines()[0])
+
+    def test_the_vision_points_with_the_two_cuts(self):
+        stub = STUB + "MODEL[t208]=$STUB_DIR/k208; MODEL[u208]=$STUB_DIR/k208\n"
+        rc, log, _ = self.run_script(POINTS="t208 t256 u208", stub=stub, files={"k208/config.json": "{}"})
+        self.assertEqual(rc, 0, log)
+        for p in ("t208", "t256", "u208"):
+            line = log.split(f"STUB launch {p} ")[1].splitlines()[0]
+            self.assertIn('--limit-mm-per-prompt {"image":1,"video":0} --mm-processor-cache-gb 0 --mm-processor-kwargs {"max_pixels":3686400}', line)
+            self.assertNotIn("--language-model-only", line)
+        self.assertIn("Qwen3.6-35B-A3B-NVFP4-Fast", log.split("STUB launch t256 ")[1].splitlines()[0])
+
+    def test_the_server_of_a_patch_point_gets_the_patch_on_its_python_path(self):
+        fake = "#!/usr/bin/env bash\necho \"PP=${PYTHONPATH:-}\" >> $STUB_DIR/calls.log\nexit 1\n"
+        # the real launch(): the stub without its launch()
+        stub = STUB[:STUB.index("N=0\n")] + STUB[STUB.index("tests() {"):] + \
+            "QURL=http://127.0.0.1:9; QV=$STUB_DIR; MODEL[g208]=$STUB_DIR/k208; MODEL[p208]=$STUB_DIR/k208\n"
+        rc, log, d = self.run_script(POINTS="g208 p208", stub=stub, files={"vllm": fake, "k208/config.json": "{}"})
+        self.assertEqual(rc, 1, log)                                                      # two failed boots: restore
+        self.assertEqual((d / "calls.log").read_text().splitlines(), [f"PP={HERE}/qwen_mtp_patch", "PP="])
+
+    def test_the_extra_environment_reaches_the_server(self):
+        fake = "#!/usr/bin/env bash\necho \"AC=${PYTORCH_CUDA_ALLOC_CONF:-}\" >> $STUB_DIR/calls.log\nexit 1\n"
+        stub = STUB[:STUB.index("N=0\n")] + STUB[STUB.index("tests() {"):] + "QURL=http://127.0.0.1:9; QV=$STUB_DIR\n"
+        rc, log, d = self.run_script(POINTS="o0 o3", stub=stub, files={"vllm": fake})
+        self.assertEqual(rc, 1, log)
+        self.assertEqual((d / "calls.log").read_text().splitlines(), ["AC=", "AC=expandable_segments:True"])
+
+    def test_failed_boots_skip_the_point_and_two_in_a_row_restore(self):
+        rc, log, _ = self.run_script(STUB_FAIL="f2")
+        self.assertEqual(rc, 0, log)
+        self.assertIn("ERROR: qwen-f2 did not boot", log)
+        self.assertNotIn("STUB tests f2", log)
+        self.assertIn("STUB tests f3", log)
+        rc, log, _ = self.run_script(STUB_FAIL="f1 f2")
+        self.assertEqual(rc, 1)
+        self.assertIn("two failed boots in a row: restore", log)
+        self.assertNotIn("STUB launch f3", log)
+        self.assertIn("STUB restore", log)
+
+    def test_the_process_check_matches_a_server_only(self):
+        pat = subprocess.run(["bash", "-c", f"source <(grep '^QPAT=' {HERE / 'scripts/qwen_fit.sh'}); echo \"$QPAT\""],
+                             capture_output=True, text=True).stdout.strip()
+        import re
+        real = "/home/u/venvs/vllm033/bin/python3 /home/u/venvs/vllm033/bin/vllm serve nvidia/Qwen3.8-27B-NVFP4 --port 8889"
+        self.assertTrue(re.search(pat, real))
+        for other in ['bash -c pgrep -f "vllm serve" | head', "tmux new -d -s x ./qwen_fit.sh", "grep vllm serve log",
+                      "/usr/bin/python3 -m vllm.entrypoints.cli.main serve /models/tp1"]:
+            self.assertFalse(re.search(pat, other), other)
+
+    def test_a_past_boot_deadline_ends_before_any_server_action(self):
+        rc, log, _ = self.run_script(boot_by=-1)
+        self.assertEqual(rc, 1)
+        self.assertIn("no boot", log)
+        self.assertNotIn("STUB stop_main", log)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -18,12 +18,12 @@ The routed experts hold 77% of its weights, so a prune of the experts is the mai
 The method is the method of the DeepSeek prune ([PRUNE.md](PRUNE.md)): record the experts that the traffic uses,
 rank them, remove the cold ones, and gate the cut against the full model. Three parts are simpler for Qwen:
 
-- Each expert is a set of plain tensors, so [qwen_prune.py](qwen_prune.py) copies the kept ones with no new
+- Each expert is a set of plain tensors, so [qwen_prune.py](tools/qwen_prune.py) copies the kept ones with no new
   quantization.
 - vLLM 0.33 returns the routed experts with a flag, so the capture needs no server patch.
 - One expert count for all layers needs no loader patch.
 
-**The data** ([qwen_data.py](qwen_data.py), §3): 99 segments, 2.44M tokens, from the owner's Claude Code transcripts,
+**The data** ([qwen_data.py](tools/qwen_data.py), §3): 99 segments, 2.44M tokens, from the owner's Claude Code transcripts,
 the bot's recorded sessions and the owner's repositories. The data stays local and out of git, because the
 transcripts can hold secrets. The held-out set is whole sessions and one repository that the calibration never sees.
 
@@ -53,7 +53,7 @@ Qwen loses about twice as much as DeepSeek. Its experts are small (1.69 MiB each
 ## 4. The decision: K 208, with a cost on G1
 
 G1 measures how far a pruned model moves from the full model. It does not measure whether the owner sees a loss. So
-two more tests ran on K 208 (§7.5, §7.6, [qwen_facts.py](qwen_facts.py)):
+two more tests ran on K 208 (§7.5, §7.6, [qwen_facts.py](tools/qwen_facts.py)):
 
 - **80 rare facts of SimpleQA, with no search.** K 208 answers 10 right and 46 wrong. The full model answers 15 right
   and 43 wrong. Both differences are inside the noise of 80 questions, but the right answers fall by a third. Rare
@@ -63,7 +63,7 @@ two more tests ran on K 208 (§7.5, §7.6, [qwen_facts.py](qwen_facts.py)):
 
 The owner chose K 208 on 2026-11-14. Two more changes then gave more margin with no change to the output:
 
-- **NVFP4 draft experts** ([qwen_draft_quant.py](qwen_draft_quant.py), §7.7 to §7.9). The 256 experts of the MTP draft
+- **NVFP4 draft experts** ([qwen_draft_quant.py](tools/qwen_draft_quant.py), §7.7 to §7.9). The 256 experts of the MTP draft
   go from BF16 to NVFP4. The target model checks every draft token, so its output does not change. The peak falls by
   1.09 GiB to 25.42 GiB, with the same speed (101.8 tok/s) and acceptance (2.31 tokens per step).
 - **A patch for vLLM 0.33** ([qwen_mtp_patch/](qwen_mtp_patch/sitecustomize.py), §7.1). Without it, vLLM builds the
@@ -71,8 +71,8 @@ The owner chose K 208 on 2026-11-14. Two more changes then gave more margin with
 
 ## 5. Both servers at once (§8.1 to §8.3)
 
-[pair_run.sh](pair_run.sh) boots Qwen beside the running DeepSeek, with no stop of DeepSeek, and runs load tests.
-[pair_watch.sh](pair_watch.sh) checks the memory every second. Below 2 GiB available, it stops Qwen, and never
+[pair_run.sh](scripts/pair_run.sh) boots Qwen beside the running DeepSeek, with no stop of DeepSeek, and runs load tests.
+[pair_watch.sh](scripts/pair_watch.sh) checks the memory every second. Below 2 GiB available, it stops Qwen, and never
 DeepSeek.
 
 | Test (text only, 2026-11-14) | Lowest available | Result |
@@ -87,13 +87,13 @@ DeepSeek.
   because of the swap, and the watch is the guard against a hard reset.
 - **The two models share the memory bandwidth.** Each model alone keeps its speed. When both decode at once, each runs
   at about half speed. A router that sends one request at a time keeps the full speed.
-- **The DeepSeek context cap is not used.** [cap_switch.sh](cap_switch.sh) cuts the DeepSeek context to 160k for
+- **The DeepSeek context cap is not used.** [cap_switch.sh](scripts/cap_switch.sh) cuts the DeepSeek context to 160k for
   about 0.35 GiB. That is too small a gain for the loss of the 256k context.
 
 ## 6. Vision (§8.4 to §8.9)
 
 The rank counted text tokens only, so the experts that image tokens use were never counted. The vision tower itself
-is unchanged by the prune. [qwen_vision.py](qwen_vision.py) renders screenshots of code, charts, UI screens and
+is unchanged by the prune. [qwen_vision.py](tools/qwen_vision.py) renders screenshots of code, charts, UI screens and
 diagrams with known answers. DeepSeek grades each answer.
 
 - **Quality:** K 208 answers 51 of 51 questions, as the full model does: 36 normal questions and 15 hard ones (dense

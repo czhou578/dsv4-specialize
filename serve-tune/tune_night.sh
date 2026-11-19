@@ -18,8 +18,8 @@
 # smaller block size only.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/tune-night.log}
 RESTORE_TAG=tune
-TEST_COMPOSE="-f compose-mask.yml -f serve-tune/compose-tune.yml"
-source "$(cd "$(dirname "$0")/.." && pwd)/run_lib.sh"   # run_lib.sh is in the repo root
+TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml"
+source "$(cd "$(dirname "$0")/../scripts" && pwd)/run_lib.sh"
 
 POINTS=${POINTS:-t0 t3 t4}
 NOISE=0.042                        # the noise floor of the bot decode test
@@ -32,7 +32,7 @@ HEAD_OK=0 FAILS=0
 on() { [[ " $POINTS " == *" $1 "* ]]; }
 faster() { awk -v a="$1" -v b="$2" -v n="${3:-0}" 'BEGIN {exit !(b > 0 && a > b * (1 + n))}'; }   # a beats b by n
 rate() { $PY -c 'import json,sys; print(json.loads(sys.argv[1])["bot"]["rate"])' \
-  "$($PY $S/speed_result.py --results $R $1)" 2>/dev/null || echo 0; }
+  "$($PY $S/tools/speed_result.py --results $R $1)" 2>/dev/null || echo 0; }
 
 probe() {  # $1 label, $2 kind (probe|smoke), the rest: prefill_probe.py arguments; logs the summary line
   local label=$1 kind=$2 left=$(( RESTORE_S - $(now) )) rc n; shift 2
