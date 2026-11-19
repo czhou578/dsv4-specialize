@@ -65,9 +65,9 @@ def pair(tmp, watch_on, keep="0", env=None):
         (tmp / "watch_on").write_text("")
     (tmp / "mem.log").write_text(f"{int(time.time())} 29000\n")
     (tmp / "swap.log").write_text(f"{int(time.time())} 29000 1200 8100\n")
-    for d in ("qwen-k208", "qwen-draft-nvfp4", "results"):
+    for d in ("data/qwen-k208", "data/qwen-draft-nvfp4", "results"):
         (tmp / "s" / d).mkdir(parents=True, exist_ok=True)
-    for d in ("qwen-k208", "qwen-draft-nvfp4"):
+    for d in ("data/qwen-k208", "data/qwen-draft-nvfp4"):
         (tmp / "s" / d / "config.json").write_text("{}")
     env = {**os.environ, "PAIR_STUB": str(tmp / "stub.sh"), "STUB_DIR": str(tmp), "TAG": "test", "KEEP": keep, "PAIR_S": str(tmp / "s"),
            "LOG": str(tmp / "pair.log"), "MEM": str(tmp / "mem.log"), "PIDFILE": str(tmp / "q.pid"), "SWAPLOG": str(tmp / "swap.log"), **(env or {})}

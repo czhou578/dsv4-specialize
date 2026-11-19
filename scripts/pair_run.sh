@@ -35,7 +35,7 @@ KEEP=${KEEP:-1} SEQS=${SEQS:-1}
 KV_BYTES=${KV_BYTES:-1965377034}   # the pinned KV cache of Qwen: 1965377034 bytes hold 132,987 tokens (about 14.8 KB each)
 DS=http://127.0.0.1:8888 DSNAME=deepseek-v4-flash-0731-k160t5 QURL=http://127.0.0.1:8889 QNAME=second-model-fit
 QSNAP=$(ls -d $HOME/.cache/huggingface/hub/models--unsloth--Qwen3.6-35B-A3B-NVFP4-Fast/snapshots/*/ 2>/dev/null | head -1)
-DRAFT="{\"method\":\"mtp\",\"model\":\"$S/qwen-draft-nvfp4\",\"num_speculative_tokens\":3,\"moe_backend\":\"marlin\"}"
+DRAFT="{\"method\":\"mtp\",\"model\":\"$S/data/qwen-draft-nvfp4\",\"num_speculative_tokens\":3,\"moe_backend\":\"marlin\"}"
 
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 now() { date +%s; }
@@ -67,7 +67,7 @@ checks() {
   tmux has-session -t pair-watch 2>/dev/null || { log "ERROR: the memory watch (tmux pair-watch) is not running"; return 1; }
   [ "$d" -le 5 ] && [ "$h" -ge 5 ] && [ "$h" -lt 10 ] && { log "ERROR: the cron window (05:00 to 10:00 on weekdays)"; return 1; }
   [ "$(avail_mb)" -ge "$NEED_MB" ] || { log "ERROR: $(avail_mb) MB available, below $NEED_MB"; return 1; }
-  [ -f $S/qwen-k208/config.json ] && [ -f $S/qwen-draft-nvfp4/config.json ] || { log "ERROR: the K 208 or draft folder is missing"; return 1; }
+  [ -f $S/data/qwen-k208/config.json ] && [ -f $S/data/qwen-draft-nvfp4/config.json ] || { log "ERROR: the K 208 or draft folder is missing"; return 1; }
 }
 
 MM="--language-model-only"
@@ -75,7 +75,7 @@ MM="--language-model-only"
 boot() {
   local t0
   env PYTHONPATH=$S/qwen_mtp_patch HF_HUB_OFFLINE=1 VLLM_USE_FASTOKENS=0 CUTE_DSL_ARCH=sm_121a PATH=$QV:$PATH \
-    setsid "$QV/vllm" serve $S/qwen-k208 --host 127.0.0.1 --port 8889 --served-model-name $QNAME \
+    setsid "$QV/vllm" serve $S/data/qwen-k208 --host 127.0.0.1 --port 8889 --served-model-name $QNAME \
     --tensor-parallel-size 1 --gpu-memory-utilization 0.005 --kv-cache-memory-bytes $KV_BYTES --max-model-len 128000 \
     --max-num-seqs $SEQS --max-num-batched-tokens 2048 --kv-cache-dtype fp8_e4m3 --enable-chunked-prefill --async-scheduling \
     --enable-auto-tool-choice --generation-config auto --override-generation-config '{"presence_penalty":1.5}' --attention-backend flashinfer --moe-backend flashinfer_cutlass \
