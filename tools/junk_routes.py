@@ -49,7 +49,7 @@ from capture import EXPERTS, count, decode, post, read_sums, sums_delta
 S = Path(__file__).resolve().parent.parent
 PROMPTS = S / "results/junk-bisect/prompts.json"
 PILOT = S / "results/agent-eval/pilot"
-AGENT_EVAL = Path.home() / "Projects/dsv4-specialize-agent-eval/agent-eval"
+AGENT_EVAL = S / "agent-eval"
 TAIL = 256          # the rows before the probe position: the quote and the JSON around it
 LAYERS, TOP_K = 43, 6
 # The smoke prompt must run eagerly: a step of 24 tokens or fewer replays a CUDA graph (MAX_CUDAGRAPH_CAPTURE_SIZE of
