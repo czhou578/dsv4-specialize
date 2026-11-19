@@ -8,7 +8,7 @@
  "prompt": "The repository is in /work/repo. The function `answer` in repo/qwen_facts.py adds sampling settings to each request. Find where those settings are defined (the path and the line), and give the values of temperature, top_p and top_k.",
  "key": [
   "qwen_gate\\.py",
-  "(:|line )30\\b",
+  "(:|\\bline)\\W{0,3}30\\b",
   "0\\.6\\b",
   "0\\.95",
   "\\b20\\b"

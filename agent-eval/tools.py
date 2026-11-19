@@ -13,7 +13,7 @@ from pathlib import Path
 
 import sandbox
 
-STR, INT = {"type": "string"}, {"type": "integer"}
+STR, INT = {"type": "string"}, {"type": ["integer", "null"]}   # null for an optional field means absent
 
 
 def _fn(name, desc, props, required):
@@ -37,7 +37,7 @@ SCHEMAS = [
         "answer": STR,
         "evidence": {"type": "array", "items": {"type": "object", "properties": {
             "source": STR, "quote": STR, "line": INT}, "required": ["source", "quote"], "additionalProperties": False}},
-        "tests_passed": {"type": "boolean"}}, ["status", "answer", "evidence"]),
+        "tests_passed": {"type": ["boolean", "null"]}}, ["status", "answer", "evidence"]),
 ]
 NAMES = {s["function"]["name"] for s in SCHEMAS}
 SCHEMA = {s["function"]["name"]: s["function"]["parameters"] for s in SCHEMAS}
@@ -156,8 +156,8 @@ def call(ws: Path, pages: Pages, name: str, args: dict) -> tuple[str, dict]:
         if name == "search":
             return pages.search(args["query"]), {}
         if name == "fetch":
-            return pages.fetch(args["url"], args.get("start", 0)), {}
+            return pages.fetch(args["url"], args.get("start") or 0), {}
         fn = {"read_file": read_file, "grep": grep, "list_dir": list_dir, "write_file": write_file}[name]
-        return fn(ws, **args), {}
+        return fn(ws, **{k: v for k, v in args.items() if v is not None}), {}
     except (ToolError, OSError) as e:
         return f"error: {e}", {"error": str(e)}

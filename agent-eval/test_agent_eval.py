@@ -145,6 +145,9 @@ def test_point_resumes(env, monkeypatch):
     assert meta["mix"] == {"stub": 2} and meta["start"] <= meta["end"] and "lowest_available_mb" in meta
     ae.point("P", {"stub": 2}, 2, 0, ["L1", "L2"])   # every run has a row: no request
     assert len((out / "rows.jsonl").read_text().splitlines()) == 4
+    use(monkeypatch, [reply(REPORT)] * 2)
+    ae.point("P", {"stub": 2}, 1, 0, ["L1", "L2"], first_seed=5)
+    assert sorted(json.loads(x)["seed"] for x in (out / "rows.jsonl").read_text().splitlines()) == [0, 0, 1, 1, 5, 5]
 
 
 @needs_image
@@ -158,3 +161,29 @@ def test_hidden_check(env, monkeypatch):
     use(monkeypatch, [reply(tc("write_file", {"path": "src/a.py", "content": "fixed"})), done, done])
     assert run(env)["result"] == "pass"
     assert run(env)["result"] == "wrong"   # a new workspace: the fix is gone
+
+
+def test_call_stats():
+    turns = [{"calls": [{"name": "run", "arguments": '{"command": "true"}'}] * 3},
+             {"calls": [{"name": "grep", "arguments": "{}"}]}, {"calls": []}]
+    assert ae.call_stats(turns) == {"max_calls_turn": 3, "repeat_calls": 2}
+    assert ae.call_stats([]) == {"max_calls_turn": 0, "repeat_calls": 0}
+
+
+def test_rescore(env, monkeypatch):
+    use(monkeypatch, [reply(REPORT)] * 2)
+    out = ae.point("P", {"stub": 1}, 1, 0, ["L1", "L2"])
+    row = json.loads((out / "rows.jsonl").read_text().splitlines()[0])
+    task = json.loads((env / "tasks" / row["task"] / "task.json").read_text())
+    (env / "tasks" / row["task"] / "task.json").write_text(json.dumps(task | {"trap": not task["trap"]}))
+    assert ae.rescore("P") == 1   # the flipped task changes its result; the other does not
+    rows = [json.loads(x) for x in (out / "rows.jsonl").read_text().splitlines()]
+    assert rows[0]["result"] != row["result"] and rows[0]["max_calls_turn"] == 1
+
+
+def test_point_until(env, monkeypatch):
+    use(monkeypatch, [reply(REPORT)] * 2)
+    out = ae.point("U", {"stub": 1}, 1, 0, ["L1", "L2"], until=1.0)   # a deadline in the past: no run starts
+    assert not (out / "rows.jsonl").exists()
+    ae.point("U", {"stub": 1}, 1, 0, ["L1", "L2"])
+    assert len((out / "rows.jsonl").read_text().splitlines()) == 2

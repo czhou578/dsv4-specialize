@@ -19,6 +19,7 @@ import agent_eval as ae
 
 RESULTS = ("pass", "hallucination", "wrong", "stopped", "server_error")
 G1_POINTS, G2_POINTS, G4_MB = 3.0, 5.0, 3072
+BURST, LOOP = 16, 5   # a run with 16 calls or more in one turn, or 5 repeated calls or more: a sign of a decode loop
 
 
 def rows_of(name: str) -> list[dict]:
@@ -38,7 +39,9 @@ def summary(rows: list[dict]) -> dict:
             "events": {k: sum(x["events"][k] > 0 for x in rows) for k in ("H1", "H2", "H3", "H4")},
             "median_s": statistics.median(secs) if secs else None,
             "p90_s": secs[int(0.9 * (len(secs) - 1))] if secs else None,
-            "prompt_first": statistics.median([x["prompt_tokens_first"] or 0 for x in rows]) if rows else None}
+            "prompt_first": statistics.median([x["prompt_tokens_first"] or 0 for x in rows]) if rows else None,
+            "bursts": sum(x.get("max_calls_turn", 0) >= BURST for x in rows),
+            "loops": sum(x.get("repeat_calls", 0) >= LOOP for x in rows)}
 
 
 def per_task(rows: list[dict], result: str) -> dict[str, float]:
@@ -83,7 +86,7 @@ def table(name: str, ref: str | None = None) -> str:
     out.append(f"# Point {name}: mix {meta.get('mix')}, ctx {meta.get('ctx')}, seeds {meta.get('seeds')}; lowest "
                f"available {meta.get('lowest_available_mb')} MB, lowest swap-free {meta.get('lowest_swap_free_mb')} MB")
     out.append("\n| Model | Family | Runs | Pass | Halluc. | Wrong | Stopped | Server err. | H1 | H2 | H3 | H4 | "
-               "Median s | p90 s | Prompt tokens (first) |\n|" + "---|" * 15)
+               "Median s | p90 s | Prompt tokens (first) | Bursts | Loops |\n|" + "---|" * 17)
     for model in sorted({x["model"] for x in rows}):
         mrows = [x for x in rows if x["model"] == model]
         for fam in ["all"] + sorted({x["family"] for x in mrows}):
@@ -91,7 +94,7 @@ def table(name: str, ref: str | None = None) -> str:
             e = s["events"]
             out.append(f"| {model} | {fam} | {s['runs']} | {s['pass']:.1f}% | {s['hallucination']:.1f}% | "
                        f"{s['wrong']:.1f}% | {s['stopped']:.1f}% | {s['server_error']:.1f}% | {e['H1']} | {e['H2']} | "
-                       f"{e['H3']} | {e['H4']} | {s['median_s']:.0f} | {s['p90_s']:.0f} | {s['prompt_first']:.0f} |")
+                       f"{e['H3']} | {e['H4']} | {s['median_s']:.0f} | {s['p90_s']:.0f} | {s['prompt_first']:.0f} | {s['bursts']} | {s['loops']} |")
     if ref:
         rrows = rows_of(ref)
         out.append(f"\n## Against {ref}\n\n| Model | Halluc. diff (95% CI) | Pass diff (95% CI) | G1 | G2 | G3 | G4 |"

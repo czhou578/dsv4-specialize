@@ -9,7 +9,7 @@
  "key": [
   "EXPERTS",
   "\\b216\\b",
-  "(:|line )43\\b",
+  "(:|\\bline)\\W{0,3}43\\b",
   "\\b(count|capture_one|run)\\b"
  ],
  "reference": {
