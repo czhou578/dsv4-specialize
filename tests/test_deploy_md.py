@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent   # the repo root
 CONFIG = """custom_providers:
   - name: Local (127.0.0.1:8888)
     models:

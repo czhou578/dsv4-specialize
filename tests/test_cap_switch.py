@@ -5,7 +5,7 @@ import os
 import subprocess
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent   # the repo root
 HERMES = """model: x
 compression:
   enabled: true
