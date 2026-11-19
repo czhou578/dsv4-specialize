@@ -34,9 +34,13 @@ TASKS = Path(os.environ.get("AGENT_EVAL_TASKS", AE / "tasks"))
 DATA = Path(os.environ.get("AGENT_EVAL_DATA", S / "results/agent-eval/data"))
 OUT = Path(os.environ.get("AGENT_EVAL_OUT", S / "results/agent-eval"))
 MEM = Path(os.environ.get("AGENT_EVAL_MEM", S / "results/pair-mem.log"))
-MODELS = {   # url, served name, max_tokens per turn (Qwen: the cap of the gateway), time limit per run in s
+MODELS = {   # url, served name, max_tokens per turn (Qwen: the cap of the gateway), time limit per run in s, extra body
     "qwen": ("http://127.0.0.1:8889", "second-model-fit", 8192, 1200),
-    "deepseek": ("http://127.0.0.1:8888", "deepseek-v4-flash-0731-k160t5", 32000, 3600),
+    "deepseek": ("http://127.0.0.1:8888", "deepseek-v4-flash-0731-k160t5", 32000, 3600),   # the server default: max
+    # The same server at reasoning_effort high: the template leaves out the prefix of max, which asks the model to
+    # "write out your entire deliberation process" (vllm/tokenizers/deepseek_v4_encoding.py, REASONING_EFFORT_MAX).
+    "deepseek-high": ("http://127.0.0.1:8888", "deepseek-v4-flash-0731-k160t5", 32000, 3600,
+                      {"chat_template_kwargs": {"reasoning_effort": "high"}}),
 }
 MAX_TURNS, MAX_NUDGES = 25, 3
 SYSTEM = """You are a careful software and research agent. You work in the folder /work, which holds the files of \
@@ -99,8 +103,9 @@ def padding(tokens: int) -> list[dict]:
 
 
 def chat(model: str, messages: list, seed: int, timeout: int = 1800) -> dict:
-    url, name, max_tokens, _ = MODELS[model]
-    body = {"model": name, "messages": messages, "tools": tools.SCHEMAS, "max_tokens": max_tokens, "seed": seed}
+    url, name, max_tokens, _, *extra = MODELS[model]
+    body = {"model": name, "messages": messages, "tools": tools.SCHEMAS, "max_tokens": max_tokens, "seed": seed,
+            **(extra[0] if extra else {})}
     req = urllib.request.Request(f"{url}/v1/chat/completions", json.dumps(body).encode(),
                                  {"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:

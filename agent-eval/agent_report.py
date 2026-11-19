@@ -99,14 +99,16 @@ def table(name: str, ref: str | None = None) -> str:
         rrows = rows_of(ref)
         out.append(f"\n## Against {ref}\n\n| Model | Halluc. diff (95% CI) | Pass diff (95% CI) | G1 | G2 | G3 | G4 |"
                    "\n|---|---|---|---|---|---|---|")
-        for model in sorted({x["model"] for x in rows} & {x["model"] for x in rrows}):
-            new, old = [x for x in rows if x["model"] == model], [x for x in rrows if x["model"] == model]
+        a, b = {x["model"] for x in rows}, {x["model"] for x in rrows}
+        pairs = [(m, m) for m in sorted(a & b)] or ([(a.pop(), b.pop())] if len(a) == len(b) == 1 else [])
+        for model, ref_model in pairs:   # one model each, other names: deepseek-high against deepseek
+            new, old = [x for x in rows if x["model"] == model], [x for x in rrows if x["model"] == ref_model]
             h, p = diff(new, old, "hallucination"), diff(new, old, "pass")
             g3 = sum(x["result"] == "server_error" for x in new) == 0
             low = meta.get("lowest_available_mb")
             g4 = low is not None and low >= G4_MB and watch_stops(meta.get("start", 0), meta.get("end", 0)) == 0
             ok = lambda b: "pass" if b else "FAIL"  # noqa: E731
-            out.append(f"| {model} | {h[0]:+.1f} ({h[1]:+.1f} to {h[2]:+.1f}) | {p[0]:+.1f} ({p[1]:+.1f} to "
+            out.append(f"| {model if model == ref_model else f'{model} vs {ref_model}'} | {h[0]:+.1f} ({h[1]:+.1f} to {h[2]:+.1f}) | {p[0]:+.1f} ({p[1]:+.1f} to "
                        f"{p[2]:+.1f}) | {ok(h[0] <= G1_POINTS)} | {ok(p[0] >= -G2_POINTS)} | {ok(g3)} | {ok(g4)} |")
     return "\n".join(out)
 
