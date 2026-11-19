@@ -12,7 +12,7 @@
 # CAUTION: this stops the bot's model server for about 2 h 30 min. Start it only with the user's go, pause the Hermes
 # cron jobs first, and do not start it during another test:
 #   tmux new -d -s loader "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... \
-#     ~/Projects/dsv4-specialize/loader_window.sh"
+#     ~/Projects/dsv4-specialize/scripts/loader_window.sh"
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/loader-window.log}
 RESTORE_TAG=loader
 TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml -f compose/compose-perlayer.yml"

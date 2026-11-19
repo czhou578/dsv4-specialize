@@ -51,7 +51,7 @@ def cap(tmp, boots, logs=""):
     (tmp / "calls").write_text("")
     env = {**os.environ, "CAP_STUB": str(tmp / "stub.sh"), "STUB_DIR": str(tmp), "SERVER": str(server),
            "HERMES": str(tmp / "hermes.yaml"), "LOG": str(tmp / "cap.log"), "PIDFILE": str(tmp / "none.pid")}
-    proc = subprocess.run(["bash", str(HERE / "cap_switch.sh")], env=env, capture_output=True, text=True, timeout=120)
+    proc = subprocess.run(["bash", str(HERE / "scripts/cap_switch.sh")], env=env, capture_output=True, text=True, timeout=120)
     return proc.returncode, (tmp / "cap.log").read_text(), (tmp / "calls").read_text().splitlines()
 
 

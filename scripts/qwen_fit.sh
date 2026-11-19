@@ -56,7 +56,7 @@
 # a short, larger peak (--load-format fastsafetensors); the report gives it as load_peak.
 # CAUTION: this stops the bot's model server for about 45 min. Start it only with the user's go, not 05:00-10:00 on
 # weekdays while the cron jobs are active, and not during another test:
-#   tmux new -d -s qwen-fit "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/qwen_fit.sh"
+#   tmux new -d -s qwen-fit "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/scripts/qwen_fit.sh"
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/qwen-fit.log}
 RESTORE_TAG=qwen-fit
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"

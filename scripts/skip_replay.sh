@@ -15,7 +15,7 @@
 # CAUTION: this stops the bot's model server for about 90 min per point, plus 10 min for the restore. Start it only
 # with the user's go, pause the Hermes cron jobs first, and do not start it during another test:
 #   tmux new -d -s replay "S1_SET=F24 HEAL_FILE=... START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... \
-#     ~/Projects/dsv4-specialize/skip_replay.sh"
+#     ~/Projects/dsv4-specialize/scripts/skip_replay.sh"
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/skip-replay.log}
 RESTORE_TAG=skip-replay
 TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml -f compose/compose-perlayer.yml -f compose/compose-skip.yml"

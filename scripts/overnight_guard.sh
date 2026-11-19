@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Overnight guard: make sure the main server serves on port 8888 before the 05:00 cron jobs.
 # It does not depend on Claude Code. Start it in its own tmux session before the overnight run:
-#   tmux new -d -s guard ~/Projects/dsv4-specialize/overnight_guard.sh
+#   tmux new -d -s guard ~/Projects/dsv4-specialize/scripts/overnight_guard.sh
 # At GUARD_AT (default 04:15) and again at RECHECK_AT (default 04:35):
 #   - main server healthy: do nothing;
 #   - main container running but not healthy (it boots): wait up to 20 min for /health;
@@ -17,7 +17,7 @@ MAIN_URL=${MAIN_URL:-http://127.0.0.1:8888}
 SERVER=/home/colin-spark/Projects/DeepSeek-v4-Flash-One-DGX-Spark
 MAIN_COMPOSE=${MAIN_COMPOSE:-$SERVER/compose-code226t5.yml}
 MAIN_CONTAINER=${MAIN_CONTAINER:-deepseek-v4-flash-code226t5-deepseek-v4-flash-1}
-LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/overnight_guard.log}
+LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/overnight-guard.log}
 STOP_PROJECTS=${STOP_PROJECTS:-dsv4-mask}   # deploy_md.sh adds the project of the new server
 
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }

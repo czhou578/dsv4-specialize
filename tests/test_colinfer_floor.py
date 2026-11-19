@@ -84,7 +84,7 @@ class WindowTest(unittest.TestCase):
             (d / f).write_text("")
         full = {**os.environ, "COLINFER_STUB": str(d / "stub.sh"), "STUB_DIR": str(d), "LOG": str(d / "window.log"), "C": str(d / "colinfer"),
                 "STUB_SNAP": json.dumps(SNAP)[1:-1], "START_AFTER": t(-1), "BOOT_BY": t(boot_by), "RESTORE_AT": t(240), **env}
-        proc = subprocess.run(["bash", str(HERE / "colinfer_floor.sh")], env=full, capture_output=True, text=True, timeout=120)
+        proc = subprocess.run(["bash", str(HERE / "scripts/colinfer_floor.sh")], env=full, capture_output=True, text=True, timeout=120)
         calls = (d / "calls.log").read_text() if (d / "calls.log").exists() else ""
         return proc.returncode, (d / "window.log").read_text(), calls, d
 
@@ -132,7 +132,7 @@ class WindowTest(unittest.TestCase):
         self.assertNotIn("STUB stop_main", log)
 
     def test_the_process_check_matches_a_server_only(self):
-        pat = subprocess.run(["bash", "-c", f"source <(grep '^CPAT=' {HERE / 'colinfer_floor.sh'}); echo \"$CPAT\""],
+        pat = subprocess.run(["bash", "-c", f"source <(grep '^CPAT=' {HERE / 'scripts/colinfer_floor.sh'}); echo \"$CPAT\""],
                              capture_output=True, text=True).stdout.strip()
         v = "/home/u/Projects/colin-inference-engine/.venv/bin/python"
         for real in (f"{v} -m engine.server --host 127.0.0.1 --port 8002 --slots 1", f"{v} -m engine.server"):

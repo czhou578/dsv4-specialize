@@ -3,7 +3,7 @@
 # data/tp1-k160t5) on port 8890 at GPU_MEMORY_UTILIZATION 0.73 and 128k context (compose-mem073.yml). It records the
 # boot lines, the free host memory at idle and during one bot decode run, then restores the live server.
 # CAUTION: this stops the bot's model server. Start it only with the user's go:
-#   tmux new -d -s mem-boot "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/mem_boot.sh"
+#   tmux new -d -s mem-boot "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/scripts/mem_boot.sh"
 # - a boot that is not healthy in 15 min: down, record, go on; two failed boots in a row: restore;
 # - free memory every 30 s during each client run; below 1 GiB, stop the client;
 # - deadlines: no boot with a replay after BOOT_BY, no speed test after SPEED_BY, and every client stops

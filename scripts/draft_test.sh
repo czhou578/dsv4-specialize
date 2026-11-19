@@ -4,7 +4,7 @@
 # change the output, so speed and acceptance are the only measures. Label: prune5b-k160 (the stock draft's files are
 # speed-*-prune5-k160.*).
 # CAUTION: this stops the bot's model server. Start it only with the user's go:
-#   tmux new -d -s draft "DRAFT_DIR=... START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/draft_test.sh"
+#   tmux new -d -s draft "DRAFT_DIR=... START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/scripts/draft_test.sh"
 # - a boot that is not healthy in 15 min: down, record, go on; two failed boots in a row: restore;
 # - free memory every 30 s during each client run; below 1 GiB, stop the client;
 # - deadlines: no boot with a replay after BOOT_BY, no speed test after SPEED_BY, and every client stops

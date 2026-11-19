@@ -50,7 +50,7 @@ class ReviewTest(unittest.TestCase):
                 "REVIEW_STUB": str(d / "stub.sh"), "STUB_DIR": str(d), "LOG": str(d / "w.log"), "CRON_OK": "1",
                 "START_AFTER": t(minutes[0]), "BOOT_BY": t(minutes[1]), "SPEED_BY": t(minutes[1]),
                 "RESTORE_AT": t(minutes[2]), **env}
-        proc = subprocess.run(["bash", str(HERE / "review_code226.sh")], env=full, capture_output=True, text=True,
+        proc = subprocess.run(["bash", str(HERE / "scripts/review_code226.sh")], env=full, capture_output=True, text=True,
                               timeout=120)
         return proc.returncode, (d / "w.log").read_text()
 

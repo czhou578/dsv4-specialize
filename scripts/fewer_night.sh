@@ -3,7 +3,7 @@
 # and Phase D (§8, the speed tests of the chosen point and of the live model), then the restore of the live server.
 # All boots use tp1-botmask-k160 (K 160 at top-k 6). The safety rules and the shared functions are in run_lib.sh.
 # CAUTION: this stops the bot's model server. Start it only with the user's go:
-#   tmux new -d -s fewer "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... LIVE_BY=... ~/Projects/dsv4-specialize/fewer_night.sh"
+#   tmux new -d -s fewer "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... LIVE_BY=... ~/Projects/dsv4-specialize/scripts/fewer_night.sh"
 # - PHASES (default "A C D") and POINTS (default "c1 c2 c3 c4 c5 c0") select the work.
 # - C1 boots first among the replay points: if its smoke request fails (the -1 ids in the FusedMoE glue), restore
 #   and stop.

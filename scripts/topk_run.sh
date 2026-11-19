@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The top-k test boots of PLAN_OVERNIGHT_TOPK.md §5, then the restore of the main server (§6).
 # Start it in its own tmux session after the folders of §4 pass the self-check:
-#   tmux new -d -s topk-run ~/Projects/dsv4-specialize/topk_run.sh
+#   tmux new -d -s topk-run ~/Projects/dsv4-specialize/scripts/topk_run.sh
 # The safety rules and the shared functions are in run_lib.sh. Set the four deadlines in the environment.
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/topk-run.log}
 RESTORE_TAG=topk

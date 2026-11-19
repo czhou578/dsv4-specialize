@@ -11,7 +11,7 @@
 # junk_routes.py: the coding capture of plans/PLAN_CODE_RANK.md §4, into OUT/capture-code.jsonl.
 # CAUTION: this stops both model servers for about 45 min. Start it only with the user's go, in tmux, with the
 # deadlines (SPEED_BY is not used; it defaults to BOOT_BY):
-#   tmux new -d -s junkcap "START_AFTER=... BOOT_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/junk_capture.sh"
+#   tmux new -d -s junkcap "START_AFTER=... BOOT_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/scripts/junk_capture.sh"
 D=$(cd "$(dirname "$0")" && pwd)
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/junk-capture.log}
 RESTORE_TAG=junkcap
@@ -106,7 +106,7 @@ start_qwen() {
   sleep 300
   local i                                  # the drift after a restore: wait up to 15 more min for pair_run.sh's NEED_MB
   for i in $(seq 1 30); do [ "$(avail_mb)" -ge "${NEED_MB:-28600}" ] && break; sleep 30; done
-  (cd $S && TAG=junkcap SEQS=$QWEN_SEQS KV_BYTES=$QWEN_KV_BYTES TESTS=idle KEEP=1 ./pair_run.sh) >> "$LOG" 2>&1
+  (cd $S && TAG=junkcap SEQS=$QWEN_SEQS KV_BYTES=$QWEN_KV_BYTES TESTS=idle KEEP=1 ./scripts/pair_run.sh) >> "$LOG" 2>&1
   qwen_up && log "Qwen up again" || log "ERROR: Qwen did not start; see logs/pair-junkcap.log"
 }
 

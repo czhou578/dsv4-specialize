@@ -3,7 +3,7 @@
 # (Model Runner V1, no draft, --enable-return-routed-experts, the weights patch), the capture of the rank data, the
 # three rank files, then the restore of the live server.
 # CAUTION: this stops the bot's model server. Start it only with the user's go:
-#   tmux new -d -s capture "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/capture_run.sh"
+#   tmux new -d -s capture "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/scripts/capture_run.sh"
 # (SPEED_BY is unused here; run_lib.sh needs it set.)
 # - a boot that is not healthy in 15 min: down, record, go on; two failed boots in a row: restore;
 # - free memory every 30 s during each client run; below 1 GiB, stop the client;

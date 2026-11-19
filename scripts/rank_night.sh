@@ -7,7 +7,7 @@
 # §6.2 ran POINTS=wmask5q:144 LOG=logs/rank-night2.log (the 40 k floor). The folders must exist (rank_masks.sh).
 # The safety rules and the shared functions are in run_lib.sh.
 # CAUTION: this stops the bot's model server. Start it only with the user's go:
-#   tmux new -d -s rank-night "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/rank_night.sh"
+#   tmux new -d -s rank-night "START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/scripts/rank_night.sh"
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/rank-night.log}
 RESTORE_TAG=rank
 source "$(cd "$(dirname "$0")" && pwd)/run_lib.sh"

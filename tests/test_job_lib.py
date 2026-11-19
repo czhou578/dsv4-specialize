@@ -36,7 +36,7 @@ class JobLibTests(unittest.TestCase):
         return proc.returncode, records
 
     def test_wrap_in_tmux(self):
-        body = (f'source {HERE}/job_lib.sh\njob_wrap --log "{self.tmp}/demo.log" -- "$@"\n'
+        body = (f'source {HERE}/scripts/job_lib.sh\njob_wrap --log "{self.tmp}/demo.log" -- "$@"\n'
                 f'job_say set --phase working\nprintf "%s|" "$@" > {self.out}\nexit 3\n')
         code, records = self.run_script(body)
         self.assertEqual((code, len(records), self.out.read_text()), (3, 1, "a b|c|"))
@@ -47,7 +47,7 @@ class JobLibTests(unittest.TestCase):
         self.assertEqual(sorted(r["name"] for r in records), ["demo", "my demo"])
 
     def test_no_wrap(self):
-        body = f'source {HERE}/job_lib.sh\njob_wrap -- "$@"\njob_say step 1\nprintf "%s|" "$@" > {self.out}\n'
+        body = f'source {HERE}/scripts/job_lib.sh\njob_wrap -- "$@"\njob_say step 1\nprintf "%s|" "$@" > {self.out}\n'
         for kwargs in ({"tmux": False}, {"JOB_WRAP": "0"}, {"path": "/usr/bin:/bin"}):
             code, records = self.run_script(body, **kwargs)
             self.assertEqual((code, records, self.out.read_text()), (0, [], "a b|c|"), kwargs)
@@ -57,7 +57,7 @@ class JobLibTests(unittest.TestCase):
         env = {"LOG": str(self.tmp / "night.log"), "RESTORE_TAG": "t", "START_AFTER": f"@{now + 3600}",
                "BOOT_BY": f"@{now + 5400}", "SPEED_BY": f"@{now + 5400}", "RESTORE_AT": f"@{now + 7200}",
                "JOB_STEPS": "4"}
-        body = (f'source {HERE}/run_lib.sh\ncp "$MACHINE_DASH_JOB" {self.out}\njob_phase "boot a-k1"\n'
+        body = (f'source {HERE}/scripts/run_lib.sh\ncp "$MACHINE_DASH_JOB" {self.out}\njob_phase "boot a-k1"\n'
                 'point() { return 0; }\nrun_point a 1 replay\njob_phase "replay b-k2"\n')
         code, records = self.run_script(body, **env)
         waiting = json.loads(self.out.read_text())

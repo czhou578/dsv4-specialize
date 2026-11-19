@@ -8,7 +8,7 @@
 #      again. The judge skips the rows that are already in its file, so a complete call ends in seconds;
 #   4. the report, in results/review-report.txt and in this log.
 # It only sends requests to the live server: it never stops or starts a server.
-#   tmux new -d -s finish ~/Projects/dsv4-specialize/review_finish.sh
+#   tmux new -d -s finish ~/Projects/dsv4-specialize/scripts/review_finish.sh
 set -u
 S=/home/colin-spark/Projects/dsv4-specialize
 W=/home/colin-spark/Projects/stock-research-model-eval
@@ -18,7 +18,7 @@ LOG=${LOG:-$S/logs/review-finish.log}
 LABELS=${LABELS:-md-1 md-2}
 LIVE=${LIVE:-live-1 live-2}
 SEED=${SEED:-13}
-WINDOW=${WINDOW:-$S/review_window.sh}   # the script to wait for
+WINDOW=${WINDOW:-$S/scripts/review_window.sh}   # the script to wait for
 RETRY_S=${RETRY_S:-300}
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 done_n() { ls /home/colin-spark/.hermes-e2e/$1/runs/*/done.json 2>/dev/null | wc -l; }

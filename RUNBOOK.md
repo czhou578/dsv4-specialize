@@ -21,11 +21,11 @@ The rules come from `PLAN_OVERNIGHT_MASK_GRID.md` §2. `run_lib.sh` applies them
 Start a script in its own tmux session, with its deadlines:
 
 ```bash
-tmux new -d -s prune-boot "START_AFTER='2026-11-06 19:05' BOOT_BY='2026-11-06 20:05' SPEED_BY='2026-11-06 20:20' RESTORE_AT='2026-11-06 21:35' ./prune_boot.sh"
+tmux new -d -s prune-boot "START_AFTER='2026-11-06 19:05' BOOT_BY='2026-11-06 20:05' SPEED_BY='2026-11-06 20:20' RESTORE_AT='2026-11-06 21:35' ./scripts/prune_boot.sh"
 ```
 
 In a tmux session, the script shows on the machine-dash page (`http://127.0.0.1:8470`, the `job` command of
-`~/Projects/machine-dash`). [job_lib.sh](job_lib.sh) runs the script under `job run`, so the page shows these items:
+`~/Projects/machine-dash`). [job_lib.sh](scripts/job_lib.sh) runs the script under `job run`, so the page shows these items:
 
 - The state: waiting until `START_AFTER`, running, stalled, done, failed or died.
 - The work that runs now: `boot`, `replay`, `speed` or `restore`, with the label of the point.
@@ -41,7 +41,7 @@ The live folder `data/tp1-k160t5` came from these steps. The rank file is `resul
 
 1. Build the bot-rank mask: `python tools/mask_checkpoint.py --keep 160 --rank <rank file> --out tp1-botmask-k160`.
 2. Build the top-k copy: `python tools/topk_checkpoint.py --source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160`.
-3. Build the pruned folder: `SRC=tp1-botmask5-k160 OUT=tp1-prune5-k160 ./prune_run.sh`. It takes about 11 minutes
+3. Build the pruned folder: `SRC=tp1-botmask5-k160 OUT=tp1-prune5-k160 ./scripts/prune_run.sh`. It takes about 11 minutes
    and writes about 73 GB.
 
 Steps 1 and 2 take about a minute each and write about 12 GB each.

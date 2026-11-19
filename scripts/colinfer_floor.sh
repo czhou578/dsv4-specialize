@@ -14,12 +14,12 @@
 # sampled every 2 s. The report (results/colinfer-floor.json, and the log) gives each snapshot in GB.
 # CAUTION: this stops the bot's model server for about 20 min. Start it only with the user's go, not 05:00-10:00 on
 # weekdays while the cron jobs are active, and not during another test:
-#   tmux new -d -s colinfer-floor "START_AFTER=... BOOT_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/colinfer_floor.sh"
+#   tmux new -d -s colinfer-floor "START_AFTER=... BOOT_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/scripts/colinfer_floor.sh"
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/colinfer-floor.log}
 RESTORE_TAG=colinfer-floor
 SPEED_BY=${SPEED_BY:-${RESTORE_AT:-}}   # run_lib.sh needs it; this window runs no speed test
-HERE=$(cd "$(dirname "$0")" && pwd)
-source "$HERE/run_lib.sh"
+HERE=$(cd "$(dirname "$0")/.." && pwd)   # the repo root of this checkout
+source "$HERE/scripts/run_lib.sh"
 
 POINTS=${POINTS:-f1 f2 f3 f4}
 C=${C:-$HOME/Projects/colin-inference-engine}   # the colinfer checkout; its venv has the engine as an editable install

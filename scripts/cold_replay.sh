@@ -18,7 +18,7 @@
 # free memory, and the smaller pin adds 0.75 GiB.
 # CAUTION: this stops the bot's model server for about 44 min per point, plus 10 min for the restore. Start it only
 # with the user's go, not 05:00-10:00 on weekdays unless the cron jobs are paused, and not during another test:
-#   tmux new -d -s cold "POINTS='r0 s20 s15 r0-2 s20-2 s15-2' START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/cold_replay.sh"
+#   tmux new -d -s cold "POINTS='r0 s20 s15 r0-2 s20-2 s15-2' START_AFTER=... BOOT_BY=... SPEED_BY=... RESTORE_AT=... ~/Projects/dsv4-specialize/scripts/cold_replay.sh"
 LOG=${LOG:-/home/colin-spark/Projects/dsv4-specialize/logs/cold-replay.log}
 RESTORE_TAG=cold
 TEST_COMPOSE="-f compose/compose-mask.yml -f serve-tune/compose-tune.yml"

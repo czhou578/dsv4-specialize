@@ -2,7 +2,7 @@
 # Build the pruned folder in a root container (PLAN_PHYSICAL_PRUNE.md §4). The main server stays up.
 # The 43 expert files of data/tp1 are root:600, so only root can read them.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."   # the repo root
 SRC=${SRC:-tp1-botmask5-k160}
 OUT=${OUT:-tp1-prune5-k160}
 IMAGE=$(sed -n 's/^ *image: //p' compose/compose-mask.yml)
